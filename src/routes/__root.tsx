@@ -17,6 +17,26 @@ const ogImage = host
   ? `https://og.grok.me/v1/card.png?host=${encodeURIComponent(host)}&title=${encodeURIComponent(APP_NAME)}`
   : undefined;
 
+/**
+ * Critical layout CSS inlined so the shell still works if a stale service worker
+ * serves HTML without the hashed stylesheet (Safari symptom: left-stacked text,
+ * bare Delete buttons, no card chrome).
+ */
+const CRITICAL_CSS = `
+html{color-scheme:dark;max-width:100%;overflow-x:hidden}
+body{margin:0;min-height:100dvh;max-width:100%;overflow-x:hidden;background:#0c0f12;color:#e8eaed;font-family:system-ui,-apple-system,sans-serif;line-height:1.5;-webkit-font-smoothing:antialiased}
+*,*::before,*::after{box-sizing:border-box}
+.aqi-shell{width:100%;max-width:64rem;margin:0 auto;padding:1.5rem 1rem 4rem;display:flex;flex-direction:column;gap:1.5rem;min-width:0}
+.aqi-grid{display:grid;gap:.75rem;grid-template-columns:1fr;min-width:0;width:100%}
+@media(min-width:640px){.aqi-grid{grid-template-columns:1fr 1fr}}
+@media(min-width:1024px){.aqi-grid{grid-template-columns:1fr 1fr 1fr}}
+.aqi-card{position:relative;width:100%;min-width:0;max-width:100%;overflow:hidden;border-radius:1.5rem}
+.aqi-card-surface{position:relative;z-index:1;display:flex;width:100%;min-width:0;flex-direction:column;gap:.75rem;padding:1.25rem;text-align:left;border:1px solid #27303a;border-radius:1.5rem;background:#14191f;user-select:none}
+.aqi-card-delete{position:absolute;inset:0 0 0 auto;z-index:0;display:flex;width:88px;align-items:stretch}
+.aqi-card-delete button{display:flex;width:100%;flex-direction:column;align-items:center;justify-content:center;gap:.25rem;border:0;background:#e23d3d;color:#fff;cursor:pointer;font:inherit}
+.aqi-add-tile{display:flex;width:100%;min-height:148px;flex-direction:column;align-items:center;justify-content:center;gap:.5rem;padding:1.25rem;border:1px dashed #27303a;border-radius:1.5rem;background:rgba(20,25,31,.4);color:#8b949e;font:inherit;cursor:pointer}
+`;
+
 export const Route = createRootRoute({
   head: () => ({
     meta: [
@@ -33,10 +53,12 @@ export const Route = createRootRoute({
       },
       { name: "theme-color", content: "#0c0f12" },
       { name: "color-scheme", content: "dark" },
-      // iOS home screen / standalone
       { name: "mobile-web-app-capable", content: "yes" },
       { name: "apple-mobile-web-app-capable", content: "yes" },
-      { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
+      {
+        name: "apple-mobile-web-app-status-bar-style",
+        content: "black-translucent",
+      },
       { name: "apple-mobile-web-app-title", content: APP_SHORT },
       { name: "application-name", content: APP_SHORT },
       { name: "format-detection", content: "telephone=no" },
@@ -54,14 +76,82 @@ export const Route = createRootRoute({
       { rel: "manifest", href: "/manifest.webmanifest" },
       { rel: "icon", href: "/icon-192.png", sizes: "192x192", type: "image/png" },
       { rel: "icon", href: "/icon-512.png", sizes: "512x512", type: "image/png" },
-      // Primary iOS home-screen icon (180×180)
-      { rel: "apple-touch-icon", href: "/apple-touch-icon.png", sizes: "180x180" },
-      { rel: "apple-touch-icon", href: "/apple-touch-icon-167.png", sizes: "167x167" },
-      { rel: "apple-touch-icon", href: "/apple-touch-icon-152.png", sizes: "152x152" },
+      {
+        rel: "apple-touch-icon",
+        href: "/apple-touch-icon.png",
+        sizes: "180x180",
+      },
+      {
+        rel: "apple-touch-icon",
+        href: "/apple-touch-icon-167.png",
+        sizes: "167x167",
+      },
+      {
+        rel: "apple-touch-icon",
+        href: "/apple-touch-icon-152.png",
+        sizes: "152x152",
+      },
     ],
+    styles: [{ children: CRITICAL_CSS }],
   }),
   component: RootDocument,
 });
+
+function resetDocumentChrome() {
+  const html = document.documentElement;
+  const body = document.body;
+  const top = body.style.top;
+  body.style.position = "";
+  body.style.top = "";
+  body.style.left = "";
+  body.style.right = "";
+  body.style.width = "";
+  body.style.overflow = "";
+  body.style.touchAction = "";
+  body.style.userSelect = "";
+  body.style.overscrollBehavior = "";
+  html.style.overflow = "";
+  html.style.overscrollBehavior = "";
+  window.scrollTo(0, 0);
+  if (top) {
+    // ignore previous fixed offset — always start at top after recovery
+  }
+}
+
+async function nukeServiceWorkersAndCaches() {
+  try {
+    if ("serviceWorker" in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map((r) => r.unregister()));
+    }
+  } catch {
+    /* ignore */
+  }
+  try {
+    if ("caches" in window) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((k) => caches.delete(k)));
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * Detect unstyled shell (Tailwind utilities not applied) and force a clean load.
+ * Keyed so we only auto-recover once per session.
+ */
+function stylesAreBroken(): boolean {
+  const probe = document.createElement("div");
+  probe.className = "flex bg-surface";
+  probe.style.position = "absolute";
+  probe.style.visibility = "hidden";
+  document.body.appendChild(probe);
+  const cs = getComputedStyle(probe);
+  const broken = cs.display !== "flex";
+  probe.remove();
+  return broken;
+}
 
 function RootDocument() {
   const [queryClient] = useState(
@@ -78,16 +168,63 @@ function RootDocument() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (!("serviceWorker" in navigator)) return;
-    navigator.serviceWorker.register("/sw.js").catch(() => {
-      /* preview may block SW; ignore */
-    });
+
+    resetDocumentChrome();
+
+    // Install cleanup SW (unregisters itself + clears caches), then stop using SW.
+    const run = async () => {
+      try {
+        if ("serviceWorker" in navigator) {
+          // Register cleanup worker so existing controllers tear down.
+          await navigator.serviceWorker
+            .register("/sw.js", { updateViaCache: "none" })
+            .catch(() => null);
+          // Also proactively unregister any controllers after a beat.
+          window.setTimeout(() => {
+            void nukeServiceWorkersAndCaches();
+          }, 2500);
+        }
+      } catch {
+        /* ignore */
+      }
+
+      // If the hashed stylesheet never applied, hard-recover once.
+      window.setTimeout(() => {
+        try {
+          if (!stylesAreBroken()) return;
+          const key = "aether-style-recover-v1";
+          if (sessionStorage.getItem(key) === "1") return;
+          sessionStorage.setItem(key, "1");
+          void nukeServiceWorkersAndCaches().then(() => {
+            const url = new URL(window.location.href);
+            url.searchParams.set("_recovered", String(Date.now()));
+            window.location.replace(url.toString());
+          });
+        } catch {
+          /* ignore */
+        }
+      }, 400);
+    };
+
+    void run();
+
+    const onMessage = (event: MessageEvent) => {
+      if (event.data?.type === "AETHER_SW_CLEARED") {
+        window.location.reload();
+      }
+    };
+    navigator.serviceWorker?.addEventListener?.("message", onMessage);
+    return () => {
+      navigator.serviceWorker?.removeEventListener?.("message", onMessage);
+    };
   }, []);
 
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
         <HeadContent />
+        {/* Duplicate critical CSS in body-adjacent head slot for older SW shells */}
+        <style dangerouslySetInnerHTML={{ __html: CRITICAL_CSS }} />
       </head>
       <body className="max-w-[100vw] overflow-x-hidden bg-bg text-fg antialiased">
         <CreatedWithGrokBanner />

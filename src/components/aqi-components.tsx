@@ -329,7 +329,7 @@ export function AirQualityApp() {
   }, [locations, queries]);
 
   return (
-    <div className="mx-auto flex w-full max-w-5xl min-w-0 flex-col gap-6 overflow-x-hidden px-4 pb-[max(4rem,env(safe-area-inset-bottom))] pt-[max(1.5rem,env(safe-area-inset-top))] sm:px-6">
+    <div className="aqi-shell mx-auto flex w-full max-w-5xl min-w-0 flex-col gap-6 overflow-x-hidden px-4 pb-[max(4rem,env(safe-area-inset-bottom))] pt-[max(1.5rem,env(safe-area-inset-top))] sm:px-6">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div className="space-y-1">
           <div className="flex items-center gap-2 text-muted">
@@ -376,7 +376,7 @@ export function AirQualityApp() {
       ) : (
         <section
           className={cn(
-            "grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-3",
+            "aqi-grid grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-3",
             draggingId && "touch-none select-none",
           )}
         >
@@ -405,7 +405,7 @@ export function AirQualityApp() {
             <button
               type="button"
               onClick={() => setAddOpen(true)}
-              className="flex min-h-[148px] w-full flex-col items-center justify-center gap-2 rounded-[var(--radius-xl)] border border-dashed border-border bg-surface/40 p-5 text-sm text-muted transition-colors hover:border-border-strong hover:text-fg"
+              className="aqi-add-tile flex min-h-[148px] w-full flex-col items-center justify-center gap-2 rounded-[var(--radius-xl)] border border-dashed border-border bg-surface/40 p-5 text-sm text-muted transition-colors hover:border-border-strong hover:text-fg"
             >
               <Plus className="size-5" />
               <span>Add location</span>
@@ -784,7 +784,7 @@ function LocationCard({
     <div
       data-location-id={location.id}
       className={cn(
-        "relative w-full min-w-0 max-w-full overflow-hidden rounded-[var(--radius-xl)] transition-[transform,box-shadow,opacity,border-color] duration-200 ease-out",
+        "aqi-card relative w-full min-w-0 max-w-full overflow-hidden rounded-[var(--radius-xl)] transition-[transform,box-shadow,opacity,border-color] duration-200 ease-out",
         expanded && "sm:col-span-2 lg:col-span-3",
         // Slot left behind while the floating ghost follows the finger
         isReorderSource &&
@@ -794,7 +794,7 @@ function LocationCard({
       )}
     >
       <div
-        className="absolute inset-y-0 right-0 z-0 flex w-[88px] items-stretch"
+        className="aqi-card-delete absolute inset-y-0 right-0 z-0 flex w-[88px] items-stretch"
         aria-hidden={offset === 0}
       >
         <button
@@ -835,7 +835,7 @@ function LocationCard({
           handleCardActivate();
         }}
         className={cn(
-          "relative z-[1] flex w-full min-w-0 flex-col gap-3 border border-border bg-surface p-5 text-left",
+          "aqi-card-surface relative z-[1] flex w-full min-w-0 flex-col gap-3 border border-border bg-surface p-5 text-left",
           "rounded-[var(--radius-xl)] select-none hover:border-border-strong",
           expanded && "border-border-strong ring-1 ring-ring/30",
           aqiRingClass(meta.token),
