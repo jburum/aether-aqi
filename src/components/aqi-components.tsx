@@ -1,4 +1,12 @@
-import { useMemo, useState, useEffect, useCallback, useId, useRef } from "react";
+import {
+  useMemo,
+  useState,
+  useEffect,
+  useCallback,
+  useId,
+  useRef,
+  type CSSProperties,
+} from "react";
 import {
   Area,
   AreaChart,
@@ -51,8 +59,12 @@ type ForecastMode = "hour" | "day";
 
 const SWIPE_ACTION_W = 88;
 const SWIPE_OPEN_THRESHOLD = 48;
+/** Touch: hold still this long, then drag to reorder. */
 const LONG_PRESS_MS = 380;
+/** Movement beyond this cancels a touch long-press (or starts mouse reorder). */
 const LONG_PRESS_MOVE_PX = 14;
+/** Mouse/pen: start reorder after this much non-swipe movement (no long-press). */
+const MOUSE_REORDER_MOVE_PX = 8;
 
 const AQI_CSS: Record<string, string> = {
   good: "var(--color-aqi-good)",
@@ -206,23 +218,29 @@ export function AirQualityApp() {
       setDraggingId(null);
     };
 
-    window.addEventListener("pointermove", onPointerMove, { passive: false });
+    // Capture phase so we still see moves when a card has setPointerCapture
+    window.addEventListener("pointermove", onPointerMove, {
+      passive: false,
+      capture: true,
+    });
     window.addEventListener("touchmove", onTouchMove, {
       passive: false,
       capture: true,
     });
-    window.addEventListener("pointerup", finish);
-    window.addEventListener("pointercancel", finish);
-    window.addEventListener("touchend", finish);
-    window.addEventListener("touchcancel", finish);
+    window.addEventListener("pointerup", finish, true);
+    window.addEventListener("pointercancel", finish, true);
+    window.addEventListener("mouseup", finish, true);
+    window.addEventListener("touchend", finish, true);
+    window.addEventListener("touchcancel", finish, true);
 
     return () => {
-      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointermove", onPointerMove, true);
       window.removeEventListener("touchmove", onTouchMove, true);
-      window.removeEventListener("pointerup", finish);
-      window.removeEventListener("pointercancel", finish);
-      window.removeEventListener("touchend", finish);
-      window.removeEventListener("touchcancel", finish);
+      window.removeEventListener("pointerup", finish, true);
+      window.removeEventListener("pointercancel", finish, true);
+      window.removeEventListener("mouseup", finish, true);
+      window.removeEventListener("touchend", finish, true);
+      window.removeEventListener("touchcancel", finish, true);
 
       html.style.overflow = prev.htmlOverflow;
       body.style.overflow = prev.bodyOverflow;
@@ -288,8 +306,9 @@ export function AirQualityApp() {
             Watchlist
           </h1>
           <p className="max-w-xl text-sm text-muted">
-            Live US AQI and forecasts for up to {MAX_LOCATIONS} places. Hold a
-            card to reorder · swipe left to delete. Saved on this device.
+            Live US AQI and forecasts for up to {MAX_LOCATIONS} places. Drag the
+            grip (or hold on phone) to reorder · swipe left to delete. Saved on
+            this device.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -473,6 +492,8 @@ function LocationCard({
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressFired = useRef(false);
   const reorderModeRef = useRef(false);
+  /** "mouse" | "pen" | "touch" — mouse/pen get immediate drag reorder. */
+  const pointerTypeRef = useRef<string>("touch");
 
   const spark = useMemo(() => {
     if (!data?.hourly) return [];
@@ -501,10 +522,38 @@ function LocationCard({
     }
   }, []);
 
+  const startReorder = useCallback(
+    (clientX: number, clientY: number) => {
+      clearLongPress();
+      longPressFired.current = true;
+      reorderModeRef.current = true;
+      swipingRef.current = false;
+      setIsSwipeDragging(false);
+      setOffsetBoth(0);
+      suppressClickRef.current = true;
+      movedRef.current = true;
+      axisLock.current = null;
+      onReorderStart({ x: clientX, y: clientY });
+    },
+    [clearLongPress, onReorderStart, setOffsetBoth],
+  );
+
   const beginSwipe = useCallback(
-    (clientX: number, clientY: number, target: EventTarget | null) => {
+    (
+      clientX: number,
+      clientY: number,
+      target: EventTarget | null,
+      pointerType = "touch",
+    ) => {
       if (reorderActive || reorderModeRef.current) return false;
       if ((target as HTMLElement | null)?.closest?.("[data-no-swipe]")) return false;
+      // Dedicated grip: start reorder immediately (desktop + mobile).
+      if ((target as HTMLElement | null)?.closest?.("[data-drag-handle]")) {
+        pointerTypeRef.current = pointerType;
+        startReorder(clientX, clientY);
+        return true;
+      }
+      pointerTypeRef.current = pointerType;
       swipingRef.current = true;
       movedRef.current = false;
       suppressClickRef.current = false;
@@ -515,21 +564,17 @@ function LocationCard({
       axisLock.current = null;
       setIsSwipeDragging(true);
       clearLongPress();
-      longPressTimer.current = setTimeout(() => {
-        // Only fire if user hasn't committed to swipe/scroll
-        if (axisLock.current === "h") return;
-        if (movedRef.current && axisLock.current) return;
-        longPressFired.current = true;
-        reorderModeRef.current = true;
-        swipingRef.current = false;
-        setIsSwipeDragging(false);
-        setOffsetBoth(0);
-        suppressClickRef.current = true;
-        onReorderStart({ x: startX.current, y: startY.current });
-      }, LONG_PRESS_MS);
+      // Touch keeps hold-to-reorder; mouse/pen reorder on drag (see moveSwipe).
+      if (pointerType === "touch") {
+        longPressTimer.current = setTimeout(() => {
+          if (axisLock.current === "h") return;
+          if (movedRef.current && axisLock.current) return;
+          startReorder(startX.current, startY.current);
+        }, LONG_PRESS_MS);
+      }
       return true;
     },
-    [clearLongPress, onReorderStart, reorderActive, setOffsetBoth],
+    [clearLongPress, reorderActive, startReorder],
   );
 
   const moveSwipe = useCallback(
@@ -540,20 +585,39 @@ function LocationCard({
       const dx = clientX - startX.current;
       const dy = clientY - startY.current;
       const dist = Math.hypot(dx, dy);
+      const isMouseLike =
+        pointerTypeRef.current === "mouse" || pointerTypeRef.current === "pen";
 
-      // Tiny jitter is OK during the hold; only cancel long-press after a real move
-      if (dist > LONG_PRESS_MOVE_PX && !longPressFired.current) {
-        clearLongPress();
+      if (!longPressFired.current) {
+        // Desktop: drag to reorder without a long-press (horizontal = swipe delete).
+        if (isMouseLike && dist >= MOUSE_REORDER_MOVE_PX) {
+          if (!axisLock.current) {
+            axisLock.current = Math.abs(dx) > Math.abs(dy) * 1.25 ? "h" : "v";
+          }
+          if (axisLock.current === "h") {
+            clearLongPress();
+          } else {
+            startReorder(clientX, clientY);
+            return true;
+          }
+        } else if (!isMouseLike && dist > LONG_PRESS_MOVE_PX) {
+          // Touch: real movement cancels the hold-to-reorder timer
+          clearLongPress();
+        }
       }
 
       if (!axisLock.current) {
         if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return false;
         axisLock.current = Math.abs(dx) > Math.abs(dy) ? "h" : "v";
         if (axisLock.current === "v") {
-          // Let the page scroll — cancel hold/swipe
-          clearLongPress();
-          swipingRef.current = false;
-          setIsSwipeDragging(false);
+          // Touch: let the page scroll — cancel hold/swipe
+          if (!isMouseLike) {
+            clearLongPress();
+            swipingRef.current = false;
+            setIsSwipeDragging(false);
+            return false;
+          }
+          // Mouse vertical already promoted to reorder above
           return false;
         }
         // Horizontal swipe cancels long-press reorder
@@ -566,7 +630,7 @@ function LocationCard({
       setOffsetBoth(next);
       return true;
     },
-    [clearLongPress, reorderActive, setOffsetBoth],
+    [clearLongPress, reorderActive, setOffsetBoth, startReorder],
   );
 
   const endSwipe = useCallback(() => {
@@ -604,7 +668,16 @@ function LocationCard({
 
     const onPointerDown = (e: PointerEvent) => {
       if (e.pointerType === "mouse" && e.button !== 0) return;
-      if (!beginSwipeRef.current(e.clientX, e.clientY, e.target)) return;
+      if (
+        !beginSwipeRef.current(
+          e.clientX,
+          e.clientY,
+          e.target,
+          e.pointerType || "touch",
+        )
+      ) {
+        return;
+      }
       try {
         el.setPointerCapture(e.pointerId);
       } catch {
@@ -622,34 +695,50 @@ function LocationCard({
         /* ignore */
       }
     };
-    const onTouchStart = (e: TouchEvent) => {
-      if (e.touches.length !== 1) return;
-      beginSwipeRef.current(e.touches[0].clientX, e.touches[0].clientY, e.target);
-    };
-    const onTouchMove = (e: TouchEvent) => {
-      if (e.touches.length !== 1) return;
-      if (moveSwipeRef.current(e.touches[0].clientX, e.touches[0].clientY)) e.preventDefault();
-    };
-    const onTouchEnd = () => endSwipeRef.current();
-
+    // Prefer Pointer Events only — avoids double-firing with touch on modern browsers.
+    // Touch fallback remains for environments without PointerEvent (rare).
     el.addEventListener("pointerdown", onPointerDown);
     el.addEventListener("pointermove", onPointerMove);
     el.addEventListener("pointerup", onPointerUp);
     el.addEventListener("pointercancel", onPointerUp);
-    el.addEventListener("touchstart", onTouchStart, { passive: true });
-    el.addEventListener("touchmove", onTouchMove, { passive: false });
-    el.addEventListener("touchend", onTouchEnd);
-    el.addEventListener("touchcancel", onTouchEnd);
+    if (!window.PointerEvent) {
+      const onTouchStart = (e: TouchEvent) => {
+        if (e.touches.length !== 1) return;
+        beginSwipeRef.current(
+          e.touches[0].clientX,
+          e.touches[0].clientY,
+          e.target,
+          "touch",
+        );
+      };
+      const onTouchMove = (e: TouchEvent) => {
+        if (e.touches.length !== 1) return;
+        if (moveSwipeRef.current(e.touches[0].clientX, e.touches[0].clientY)) {
+          e.preventDefault();
+        }
+      };
+      const onTouchEnd = () => endSwipeRef.current();
+      el.addEventListener("touchstart", onTouchStart, { passive: true });
+      el.addEventListener("touchmove", onTouchMove, { passive: false });
+      el.addEventListener("touchend", onTouchEnd);
+      el.addEventListener("touchcancel", onTouchEnd);
+      return () => {
+        el.removeEventListener("pointerdown", onPointerDown);
+        el.removeEventListener("pointermove", onPointerMove);
+        el.removeEventListener("pointerup", onPointerUp);
+        el.removeEventListener("pointercancel", onPointerUp);
+        el.removeEventListener("touchstart", onTouchStart);
+        el.removeEventListener("touchmove", onTouchMove);
+        el.removeEventListener("touchend", onTouchEnd);
+        el.removeEventListener("touchcancel", onTouchEnd);
+      };
+    }
     return () => {
       // Do not clearLongPress here — rebinding would cancel an in-progress hold.
       el.removeEventListener("pointerdown", onPointerDown);
       el.removeEventListener("pointermove", onPointerMove);
       el.removeEventListener("pointerup", onPointerUp);
       el.removeEventListener("pointercancel", onPointerUp);
-      el.removeEventListener("touchstart", onTouchStart);
-      el.removeEventListener("touchmove", onTouchMove);
-      el.removeEventListener("touchend", onTouchEnd);
-      el.removeEventListener("touchcancel", onTouchEnd);
     };
   }, []);
 
@@ -739,11 +828,15 @@ function LocationCard({
           expanded && "border-border-strong ring-1 ring-ring/30",
           aqiRingClass(meta.token),
           !isSwipeDragging && !isReorderSource && "transition-transform duration-200 ease-out",
+          isReorderSource && "cursor-grabbing",
         )}
+        draggable={false}
         style={{
           transform: `translate3d(${offset}px,0,0)`,
           touchAction: isReorderSource || reorderActive ? "none" : "pan-y",
-        }}
+          // Avoid browser image/text drag hijacking mouse reorder
+          WebkitUserDrag: "none",
+        } as CSSProperties}
       >
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
@@ -758,7 +851,18 @@ function LocationCard({
             ) : isError ? (
               <span className="text-xs text-aqi-unhealthy">Error</span>
             ) : null}
-            <GripVertical className="size-4 text-subtle/70" aria-hidden />
+            <span
+              data-drag-handle
+              title="Drag to reorder"
+              aria-label={`Drag to reorder ${location.name}`}
+              className={cn(
+                "inline-flex cursor-grab touch-none rounded p-1 text-subtle/70",
+                "hover:bg-surface-2 hover:text-fg active:cursor-grabbing",
+                isReorderSource && "cursor-grabbing text-fg",
+              )}
+            >
+              <GripVertical className="size-4" aria-hidden />
+            </span>
             <ChevronDown
               className={cn(
                 "size-4 text-subtle transition-transform duration-200",
