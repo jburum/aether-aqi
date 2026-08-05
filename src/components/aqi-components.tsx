@@ -63,8 +63,7 @@ const SWIPE_OPEN_THRESHOLD = 48;
 const LONG_PRESS_MS = 380;
 /** Movement beyond this cancels a touch long-press (or starts mouse reorder). */
 const LONG_PRESS_MOVE_PX = 14;
-/** Mouse/pen: start reorder after this much non-swipe movement (no long-press). */
-const MOUSE_REORDER_MOVE_PX = 8;
+
 
 const AQI_CSS: Record<string, string> = {
   good: "var(--color-aqi-good)",
@@ -121,27 +120,165 @@ export function AirQualityApp() {
   const overIdRef = useRef<string | null>(null);
   const [overId, setOverId] = useState<string | null>(null);
   const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null);
+  /** Live reorder session — window listeners attach synchronously (no useEffect race). */
+  const dragSessionRef = useRef<{
+    cleanup: () => void;
+  } | null>(null);
+  const reorderLocationsRef = useRef(reorderLocations);
+  reorderLocationsRef.current = reorderLocations;
   const qc = useQueryClient();
 
   draggingIdRef.current = draggingId;
 
-  // Recover if a previous build left body position:fixed (clips header on iOS)
+  // Clear leftover body locks from an interrupted drag / older builds
   useEffect(() => {
+    const html = document.documentElement;
     const body = document.body;
-    if (body.style.position === "fixed") {
-      const top = body.style.top;
-      body.style.position = "";
-      body.style.top = "";
-      body.style.left = "";
-      body.style.right = "";
-      body.style.width = "";
-      body.style.overflow = "";
-      body.style.touchAction = "";
-      document.documentElement.style.overflow = "";
-      const y = top ? Math.abs(parseInt(top, 10) || 0) : 0;
+    const top = body.style.top;
+    body.style.position = "";
+    body.style.top = "";
+    body.style.left = "";
+    body.style.right = "";
+    body.style.width = "";
+    body.style.overflow = "";
+    body.style.touchAction = "";
+    body.style.userSelect = "";
+    body.style.overscrollBehavior = "";
+    html.style.overflow = "";
+    html.style.overscrollBehavior = "";
+    if (top) {
+      const y = Math.abs(parseInt(top, 10) || 0);
       window.scrollTo(0, y);
     }
+    return () => {
+      dragSessionRef.current?.cleanup();
+      dragSessionRef.current = null;
+    };
   }, []);
+
+  /** Start reorder immediately in the pointerdown/move handler (listeners before next paint). */
+  const beginDragSession = useCallback(
+    (id: string, clientX: number, clientY: number) => {
+      // Replace any prior session
+      dragSessionRef.current?.cleanup();
+
+      selectLocation(null);
+      overIdRef.current = id;
+      draggingIdRef.current = id;
+      setOverId(id);
+      setDragPos({ x: clientX, y: clientY });
+      setDraggingId(id);
+      try {
+        navigator.vibrate?.(12);
+      } catch {
+        /* ignore */
+      }
+
+      const html = document.documentElement;
+      const body = document.body;
+      const prev = {
+        htmlOverflow: html.style.overflow,
+        bodyOverflow: body.style.overflow,
+        bodyTouch: body.style.touchAction,
+        bodyUserSelect: body.style.userSelect,
+        htmlOverscroll: html.style.overscrollBehavior,
+        bodyOverscroll: body.style.overscrollBehavior,
+      };
+      html.style.overflow = "hidden";
+      body.style.overflow = "hidden";
+      body.style.touchAction = "none";
+      body.style.userSelect = "none";
+      html.style.overscrollBehavior = "none";
+      body.style.overscrollBehavior = "none";
+
+      const hitTarget = (x: number, y: number) => {
+        const stack = document.elementsFromPoint(x, y);
+        for (const node of stack) {
+          const el = node as HTMLElement;
+          if (el.dataset?.dragGhost === "1") continue;
+          const host = el.closest?.("[data-location-id]") as HTMLElement | null;
+          if (!host || host.dataset.dragGhost === "1") continue;
+          const hid = host.dataset.locationId;
+          if (hid) return hid;
+        }
+        return null;
+      };
+
+      let lastSwapAt = 0;
+      let finished = false;
+
+      const onMove = (x: number, y: number) => {
+        if (finished) return;
+        setDragPos({ x, y });
+        const over = hitTarget(x, y);
+        if (!over) return;
+        if (over === overIdRef.current) return;
+        overIdRef.current = over;
+        setOverId(over);
+        const active = draggingIdRef.current;
+        if (!active || over === active) return;
+        const now = performance.now();
+        if (now - lastSwapAt < 80) return;
+        lastSwapAt = now;
+        reorderLocationsRef.current(active, over);
+      };
+
+      const onPointerMove = (e: PointerEvent) => {
+        if (e.cancelable) e.preventDefault();
+        onMove(e.clientX, e.clientY);
+      };
+      const onTouchMove = (e: TouchEvent) => {
+        if (e.cancelable) e.preventDefault();
+        const t = e.touches[0];
+        if (t) onMove(t.clientX, t.clientY);
+      };
+      const finish = () => {
+        if (finished) return;
+        finished = true;
+        window.removeEventListener("pointermove", onPointerMove, true);
+        window.removeEventListener("touchmove", onTouchMove, true);
+        window.removeEventListener("pointerup", finish, true);
+        window.removeEventListener("pointercancel", finish, true);
+        window.removeEventListener("mouseup", finish, true);
+        window.removeEventListener("touchend", finish, true);
+        window.removeEventListener("touchcancel", finish, true);
+        window.removeEventListener("keydown", onKey, true);
+        html.style.overflow = prev.htmlOverflow;
+        body.style.overflow = prev.bodyOverflow;
+        body.style.touchAction = prev.bodyTouch;
+        body.style.userSelect = prev.bodyUserSelect;
+        html.style.overscrollBehavior = prev.htmlOverscroll;
+        body.style.overscrollBehavior = prev.bodyOverscroll;
+        dragSessionRef.current = null;
+        overIdRef.current = null;
+        draggingIdRef.current = null;
+        setOverId(null);
+        setDragPos(null);
+        setDraggingId(null);
+      };
+      const onKey = (e: KeyboardEvent) => {
+        if (e.key === "Escape") finish();
+      };
+
+      window.addEventListener("pointermove", onPointerMove, {
+        passive: false,
+        capture: true,
+      });
+      window.addEventListener("touchmove", onTouchMove, {
+        passive: false,
+        capture: true,
+      });
+      window.addEventListener("pointerup", finish, true);
+      window.addEventListener("pointercancel", finish, true);
+      window.addEventListener("mouseup", finish, true);
+      window.addEventListener("touchend", finish, true);
+      window.addEventListener("touchcancel", finish, true);
+      window.addEventListener("keydown", onKey, true);
+
+      dragSessionRef.current = { cleanup: finish };
+    },
+    [selectLocation],
+  );
 
   const draggingLoc = draggingId
     ? locations.find((l) => l.id === draggingId)
@@ -149,107 +286,6 @@ export function AirQualityApp() {
   const draggingQueryIdx = draggingId
     ? locations.findIndex((l) => l.id === draggingId)
     : -1;
-
-  // Reorder: lock scroll without position:fixed (avoids iOS header clip),
-  // float a ghost under the finger, live-swap list slots.
-  useEffect(() => {
-    if (!draggingId) return;
-
-    const html = document.documentElement;
-    const body = document.body;
-    const prev = {
-      htmlOverflow: html.style.overflow,
-      bodyOverflow: body.style.overflow,
-      bodyTouch: body.style.touchAction,
-      bodyUserSelect: body.style.userSelect,
-      htmlOverscroll: html.style.overscrollBehavior,
-      bodyOverscroll: body.style.overscrollBehavior,
-    };
-    html.style.overflow = "hidden";
-    body.style.overflow = "hidden";
-    body.style.touchAction = "none";
-    body.style.userSelect = "none";
-    html.style.overscrollBehavior = "none";
-    body.style.overscrollBehavior = "none";
-
-    const hitTarget = (clientX: number, clientY: number) => {
-      const stack = document.elementsFromPoint(clientX, clientY);
-      for (const node of stack) {
-        const el = node as HTMLElement;
-        if (el.dataset?.dragGhost === "1") continue;
-        const host = el.closest?.("[data-location-id]") as HTMLElement | null;
-        if (!host || host.dataset.dragGhost === "1") continue;
-        const id = host.dataset.locationId;
-        if (id) return id;
-      }
-      return null;
-    };
-
-    let lastSwapAt = 0;
-    const onMove = (clientX: number, clientY: number) => {
-      setDragPos({ x: clientX, y: clientY });
-      const id = hitTarget(clientX, clientY);
-      if (!id) return;
-      if (id === overIdRef.current) return;
-      overIdRef.current = id;
-      setOverId(id);
-      const active = draggingIdRef.current;
-      if (!active || id === active) return;
-      const now = performance.now();
-      if (now - lastSwapAt < 100) return;
-      lastSwapAt = now;
-      reorderLocations(active, id);
-    };
-
-    const onPointerMove = (e: PointerEvent) => {
-      if (e.cancelable) e.preventDefault();
-      onMove(e.clientX, e.clientY);
-    };
-    const onTouchMove = (e: TouchEvent) => {
-      if (e.cancelable) e.preventDefault();
-      const t = e.touches[0];
-      if (t) onMove(t.clientX, t.clientY);
-    };
-
-    const finish = () => {
-      overIdRef.current = null;
-      setOverId(null);
-      setDragPos(null);
-      setDraggingId(null);
-    };
-
-    // Capture phase so we still see moves when a card has setPointerCapture
-    window.addEventListener("pointermove", onPointerMove, {
-      passive: false,
-      capture: true,
-    });
-    window.addEventListener("touchmove", onTouchMove, {
-      passive: false,
-      capture: true,
-    });
-    window.addEventListener("pointerup", finish, true);
-    window.addEventListener("pointercancel", finish, true);
-    window.addEventListener("mouseup", finish, true);
-    window.addEventListener("touchend", finish, true);
-    window.addEventListener("touchcancel", finish, true);
-
-    return () => {
-      window.removeEventListener("pointermove", onPointerMove, true);
-      window.removeEventListener("touchmove", onTouchMove, true);
-      window.removeEventListener("pointerup", finish, true);
-      window.removeEventListener("pointercancel", finish, true);
-      window.removeEventListener("mouseup", finish, true);
-      window.removeEventListener("touchend", finish, true);
-      window.removeEventListener("touchcancel", finish, true);
-
-      html.style.overflow = prev.htmlOverflow;
-      body.style.overflow = prev.bodyOverflow;
-      body.style.touchAction = prev.bodyTouch;
-      body.style.userSelect = prev.bodyUserSelect;
-      html.style.overscrollBehavior = prev.htmlOverscroll;
-      body.style.overscrollBehavior = prev.bodyOverscroll;
-    };
-  }, [draggingId, reorderLocations]);
 
 
   const queries = useQueries({
@@ -307,8 +343,7 @@ export function AirQualityApp() {
           </h1>
           <p className="max-w-xl text-sm text-muted">
             Live US AQI and forecasts for up to {MAX_LOCATIONS} places. Drag the
-            grip (or hold on phone) to reorder · swipe left to delete. Saved on
-            this device.
+            ⋮⋮ grip to reorder · swipe left to delete. Saved on this device.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -362,16 +397,7 @@ export function AirQualityApp() {
               }
               onDelete={() => removeLocation(loc.id)}
               onReorderStart={(origin) => {
-                selectLocation(null);
-                overIdRef.current = loc.id;
-                setOverId(loc.id);
-                setDragPos(origin);
-                setDraggingId(loc.id);
-                try {
-                  navigator.vibrate?.(12);
-                } catch {
-                  /* ignore */
-                }
+                beginDragSession(loc.id, origin.x, origin.y);
               }}
             />
           ))}
@@ -379,10 +405,10 @@ export function AirQualityApp() {
             <button
               type="button"
               onClick={() => setAddOpen(true)}
-              className="flex min-h-[148px] flex-col items-center justify-center gap-2 rounded-[var(--radius-xl)] border border-dashed border-border bg-surface/40 p-5 text-sm text-muted transition-colors hover:border-border-strong hover:text-fg"
+              className="flex min-h-[148px] w-full flex-col items-center justify-center gap-2 rounded-[var(--radius-xl)] border border-dashed border-border bg-surface/40 p-5 text-sm text-muted transition-colors hover:border-border-strong hover:text-fg"
             >
               <Plus className="size-5" />
-              Add location
+              <span>Add location</span>
               <span className="text-xs text-subtle">
                 {locations.length}/{MAX_LOCATIONS} used
               </span>
@@ -547,7 +573,7 @@ function LocationCard({
     ) => {
       if (reorderActive || reorderModeRef.current) return false;
       if ((target as HTMLElement | null)?.closest?.("[data-no-swipe]")) return false;
-      // Dedicated grip: start reorder immediately (desktop + mobile).
+      // Grip handle: start reorder immediately (desktop primary path).
       if ((target as HTMLElement | null)?.closest?.("[data-drag-handle]")) {
         pointerTypeRef.current = pointerType;
         startReorder(clientX, clientY);
@@ -564,7 +590,7 @@ function LocationCard({
       axisLock.current = null;
       setIsSwipeDragging(true);
       clearLongPress();
-      // Touch keeps hold-to-reorder; mouse/pen reorder on drag (see moveSwipe).
+      // Touch: hold still to reorder. Mouse: use the grip (avoids layout fights).
       if (pointerType === "touch") {
         longPressTimer.current = setTimeout(() => {
           if (axisLock.current === "h") return;
@@ -585,39 +611,24 @@ function LocationCard({
       const dx = clientX - startX.current;
       const dy = clientY - startY.current;
       const dist = Math.hypot(dx, dy);
-      const isMouseLike =
-        pointerTypeRef.current === "mouse" || pointerTypeRef.current === "pen";
 
-      if (!longPressFired.current) {
-        // Desktop: drag to reorder without a long-press (horizontal = swipe delete).
-        if (isMouseLike && dist >= MOUSE_REORDER_MOVE_PX) {
-          if (!axisLock.current) {
-            axisLock.current = Math.abs(dx) > Math.abs(dy) * 1.25 ? "h" : "v";
-          }
-          if (axisLock.current === "h") {
-            clearLongPress();
-          } else {
-            startReorder(clientX, clientY);
-            return true;
-          }
-        } else if (!isMouseLike && dist > LONG_PRESS_MOVE_PX) {
-          // Touch: real movement cancels the hold-to-reorder timer
-          clearLongPress();
-        }
+      // Touch: real movement cancels the hold-to-reorder timer
+      if (
+        pointerTypeRef.current === "touch" &&
+        dist > LONG_PRESS_MOVE_PX &&
+        !longPressFired.current
+      ) {
+        clearLongPress();
       }
 
       if (!axisLock.current) {
         if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return false;
         axisLock.current = Math.abs(dx) > Math.abs(dy) ? "h" : "v";
         if (axisLock.current === "v") {
-          // Touch: let the page scroll — cancel hold/swipe
-          if (!isMouseLike) {
-            clearLongPress();
-            swipingRef.current = false;
-            setIsSwipeDragging(false);
-            return false;
-          }
-          // Mouse vertical already promoted to reorder above
+          // Vertical = page scroll (or ignore on mouse)
+          clearLongPress();
+          swipingRef.current = false;
+          setIsSwipeDragging(false);
           return false;
         }
         // Horizontal swipe cancels long-press reorder
@@ -630,7 +641,7 @@ function LocationCard({
       setOffsetBoth(next);
       return true;
     },
-    [clearLongPress, reorderActive, setOffsetBoth, startReorder],
+    [clearLongPress, reorderActive, setOffsetBoth],
   );
 
   const endSwipe = useCallback(() => {
@@ -773,7 +784,7 @@ function LocationCard({
     <div
       data-location-id={location.id}
       className={cn(
-        "relative min-w-0 max-w-full overflow-hidden rounded-[var(--radius-xl)] transition-[transform,box-shadow,opacity,border-color] duration-200 ease-out",
+        "relative w-full min-w-0 max-w-full overflow-hidden rounded-[var(--radius-xl)] transition-[transform,box-shadow,opacity,border-color] duration-200 ease-out",
         expanded && "sm:col-span-2 lg:col-span-3",
         // Slot left behind while the floating ghost follows the finger
         isReorderSource &&
@@ -783,7 +794,7 @@ function LocationCard({
       )}
     >
       <div
-        className="absolute inset-y-0 right-0 flex w-[88px] items-stretch"
+        className="absolute inset-y-0 right-0 z-0 flex w-[88px] items-stretch"
         aria-hidden={offset === 0}
       >
         <button
@@ -820,10 +831,11 @@ function LocationCard({
         }}
         onClick={(e) => {
           if ((e.target as HTMLElement).closest("[data-no-swipe]")) return;
+          if ((e.target as HTMLElement).closest("[data-drag-handle]")) return;
           handleCardActivate();
         }}
         className={cn(
-          "relative z-[1] flex flex-col gap-3 border border-border bg-surface p-5 text-left",
+          "relative z-[1] flex w-full min-w-0 flex-col gap-3 border border-border bg-surface p-5 text-left",
           "rounded-[var(--radius-xl)] select-none hover:border-border-strong",
           expanded && "border-border-strong ring-1 ring-ring/30",
           aqiRingClass(meta.token),
@@ -832,9 +844,8 @@ function LocationCard({
         )}
         draggable={false}
         style={{
-          transform: `translate3d(${offset}px,0,0)`,
+          transform: `translate3d(${Number.isFinite(offset) ? offset : 0}px,0,0)`,
           touchAction: isReorderSource || reorderActive ? "none" : "pan-y",
-          // Avoid browser image/text drag hijacking mouse reorder
           WebkitUserDrag: "none",
         } as CSSProperties}
       >
