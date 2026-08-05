@@ -15,23 +15,10 @@ Last updated: 2026-08-05
 | Stage | Role |
 | --- | --- |
 | **Grok Build** | Develop and verify (live preview). Not production. |
-| **GitHub** | Source of truth (`jburum/aether-aqi`, public). Docs live under `docs/`. Release assets (`clean-aether.tgz`) bootstrap full installs when file-tree deploy payloads are too large. |
-| **Vercel** | Production. Project `aether-aqi` → [https://aether-aqi.vercel.app](https://aether-aqi.vercel.app). |
+| **GitHub** | Source of truth (`jburum/aether-aqi`). Docs under `docs/`. Release `clean-aether.tgz` for Vercel bootstrap when needed. |
+| **Vercel** | Production → [https://aether-aqi.vercel.app](https://aether-aqi.vercel.app). |
 
-### Current production deploy method
-
-1. Verify app in Grok Build (`typecheck`, browser smoke).
-2. Commit + push full source (including `docs/`) to `main`.
-3. Publish a **GitHub Release** with `clean-aether.tgz` (app source, no `node_modules`).
-4. Vercel **installCommand** curls that tarball, extracts, runs `npm install`; **buildCommand** is `npm run build`.
-
-Ideal later: native Vercel ↔ GitHub integration so every push auto-deploys without a release bootstrap.
-
-### What is *not* in the pipeline
-
-- End-user devices never talk to Grok Build or GitHub for AQI.
-- Browser → **Open-Meteo** (+ geocoding) for readings/forecasts.
-- Browser **localStorage** for the watchlist.
+Ideal later: native Vercel ↔ GitHub auto-deploy on push.
 
 ---
 
@@ -41,67 +28,59 @@ Ideal later: native Vercel ↔ GitHub integration so every push auto-deploys wit
 
 | Data | Where | Cross-device? |
 | --- | --- | --- |
-| Watchlist (name, lat/lon, `alertAt`) | `localStorage` via Zustand `persist` key `aether-locations-v1` | **No** |
-| Expanded/selected card id | Same store | No |
-| Live AQI cache | React Query (memory) | No |
-| Optional SW cache | Cache API | No |
-| “Already alerted this hour” | `sessionStorage` | No |
+| Watchlist (name, lat/lon, `alertAt`) | `localStorage` key `aether-locations-v1` | **No** |
+| Selected card id | Same store | No |
+| Live AQI cache | React Query | No |
+| SW cache | Cache API (`aqi-watchlist-v3`) | No |
 
-There is **no cloud watchlist sync**. Phone and desktop lists are independent.
-
-Optional **Sign in** (better-auth) is shell-level only; it does not own the location list.
+No cloud watchlist sync. Optional Sign in does not own the location list.
 
 ### Third-party APIs
 
 | Data | Provider |
 | --- | --- |
-| Live + hourly US AQI, pollutants | [Open-Meteo Air Quality](https://open-meteo.com/en/docs/air-quality-api) (CAMS) |
+| US AQI + pollutants | Open-Meteo Air Quality (CAMS) |
 | Place search | Open-Meteo Geocoding |
-| Reverse geocode | BigDataCloud free client endpoint |
+| Reverse geocode | BigDataCloud |
 
-Modeled AQI is **not** a regulatory monitor (AirNow). Cross-check during wildfire smoke.
+Modeled AQI ≠ AirNow regulatory monitors.
+
+---
+
+## PWA / iOS Home Screen
+
+| Piece | Path / value |
+| --- | --- |
+| Web app manifest | `public/manifest.webmanifest` (`display: standalone`, icons, theme `#0c0f12`) |
+| Service worker | `public/sw.js` |
+| Android / general icons | `icon-192.png`, `icon-512.png` |
+| iOS home icons | `apple-touch-icon.png` (180), `-167`, `-152` |
+| Meta | `apple-mobile-web-app-capable`, `apple-mobile-web-app-title`, `mobile-web-app-capable`, `theme-color` |
+
+**User install (iPhone):** open production URL in **Safari** → Share → **Add to Home Screen**. Must use Safari (not in-app browsers) for reliable install.
 
 ---
 
 ## Stack
 
-- React 19, TanStack Start / Router / Query, Tailwind v4, Radix/shadcn, Recharts, Lucide
-- Zustand + `persist` for locations
-- PWA: `public/manifest.webmanifest` + `public/sw.js`
+- React 19, TanStack Start/Router/Query, Tailwind v4, Recharts, Lucide, Zustand
 - Vite 8; Nitro Vercel preset on production build only
-- Optional better-auth + PGlite/Postgres migrations (not required for core watchlist)
 
-### Key source files
+### Key files
 
 | Path | Responsibility |
 | --- | --- |
-| `src/components/aqi-components.tsx` | Cards, swipe delete, expand, hour/day charts, day drill-down |
-| `src/lib/locations-store.ts` | Locations store + localStorage |
-| `src/lib/open-meteo.ts` | AQ + geocoding clients |
-| `src/lib/aqi.ts` | US AQI bands / labels / advice |
-| `public/manifest.webmanifest` | Install metadata |
-| `public/sw.js` | Light offline / API cache |
-| `docs/` | Product + architecture docs (in git) |
-| `startup.sh` | Revive Grok preview dev server |
-
----
-
-## Runtime product behavior
-
-1. Load locations from `localStorage` (seeded defaults on first visit).
-2. Fetch AQI per location (React Query; refetch ~15 min).
-3. **Tap card** → expand: pollutants + forecast.
-4. **By hour** → full-window area chart. **By day** → bar chart of daily **average** AQI; tap day → hourly for that day.
-5. **Swipe left** → Delete (Phase 1). Alert-threshold swipe is Phase 2.
-6. Add place via search or geolocation (max 5).
+| `src/components/aqi-components.tsx` | Cards, swipe, expand, charts |
+| `src/lib/locations-store.ts` | localStorage watchlist |
+| `src/lib/open-meteo.ts` | AQ + geocoding |
+| `public/*icon*` | Home screen / PWA icons |
+| `docs/` | Product + architecture (in git) |
 
 ---
 
 ## Deploy checklist
 
-1. App works in Grok preview; console clean.
-2. `npm run typecheck` + `npm run build` pass.
-3. Docs updated (`CHANGELOG` + product/architecture as needed).
-4. Push to GitHub `main` (docs included).
-5. Release tarball updated if Vercel install still curls a release asset.
-6. Vercel production READY; public URL shows current UI.
+1. Preview + `typecheck` / `build` OK.
+2. Docs updated.
+3. Push `main` (+ release tarball if install still curls GitHub release).
+4. Vercel production READY; icons load on production URL.

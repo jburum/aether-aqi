@@ -1,5 +1,11 @@
-const CACHE = "aqi-watchlist-v2";
-const PRECACHE = ["/", "/manifest.webmanifest", "/icon-192.png", "/icon-512.png"];
+const CACHE = "aqi-watchlist-v3";
+const PRECACHE = [
+  "/",
+  "/manifest.webmanifest",
+  "/icon-192.png",
+  "/icon-512.png",
+  "/apple-touch-icon.png",
+];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(

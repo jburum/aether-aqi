@@ -11,6 +11,7 @@ import { CreatedWithGrokBanner } from "@/components/created-with-grok-banner";
 import appCss from "../styles.css?url";
 
 const APP_NAME = "Air Quality Watchlist";
+const APP_SHORT = "Air Quality";
 const host = import.meta.env.VITE_PUBLIC_HOSTNAME;
 const ogImage = host
   ? `https://og.grok.me/v1/card.png?host=${encodeURIComponent(host)}&title=${encodeURIComponent(APP_NAME)}`
@@ -31,14 +32,20 @@ export const Route = createRootRoute({
           "Track and forecast US Air Quality Index for up to 5 locations. Installable PWA with hourly and daily forecasts.",
       },
       { name: "theme-color", content: "#0c0f12" },
+      { name: "color-scheme", content: "dark" },
+      // iOS home screen / standalone
+      { name: "mobile-web-app-capable", content: "yes" },
       { name: "apple-mobile-web-app-capable", content: "yes" },
       { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
-      { name: "apple-mobile-web-app-title", content: "Air Quality" },
+      { name: "apple-mobile-web-app-title", content: APP_SHORT },
+      { name: "application-name", content: APP_SHORT },
+      { name: "format-detection", content: "telephone=no" },
       ...(ogImage
         ? [
             { property: "og:image", content: ogImage },
             { property: "og:image:width", content: "1200" },
             { property: "og:image:height", content: "630" },
+            { property: "og:title", content: APP_NAME },
           ]
         : []),
     ],
@@ -46,7 +53,11 @@ export const Route = createRootRoute({
       { rel: "stylesheet", href: appCss },
       { rel: "manifest", href: "/manifest.webmanifest" },
       { rel: "icon", href: "/icon-192.png", sizes: "192x192", type: "image/png" },
-      { rel: "apple-touch-icon", href: "/icon-192.png" },
+      { rel: "icon", href: "/icon-512.png", sizes: "512x512", type: "image/png" },
+      // Primary iOS home-screen icon (180×180)
+      { rel: "apple-touch-icon", href: "/apple-touch-icon.png", sizes: "180x180" },
+      { rel: "apple-touch-icon", href: "/apple-touch-icon-167.png", sizes: "167x167" },
+      { rel: "apple-touch-icon", href: "/apple-touch-icon-152.png", sizes: "152x152" },
     ],
   }),
   component: RootDocument,

@@ -2,6 +2,14 @@
 
 Newest first.
 
+## 2026-08-05 — iOS Home Screen PWA + AQI chart icon
+
+### Product
+
+- Proper **Add to Home Screen** support for iPhone (standalone meta, apple-touch-icons 180/167/152, manifest icons).
+- New app icon: dark tile, bold AQI number **42**, green line-chart / AQI label.
+- SW cache bumped to `aqi-watchlist-v3` (includes new icons).
+
 ## 2026-08-05 — Docs in git, push, production redeploy (v1.1.0)
 
 ### Docs / ops
@@ -24,7 +32,6 @@ Newest first.
 - Removed “Aether” from UI, title, PWA short name, SW cache id.
 - Swipe left → **Delete**.
 - Tap card → expand with pollutants + forecast (hour / day).
-- Detail panel folded into expanded card.
 
 ### Docs
 
@@ -38,5 +45,4 @@ Newest first.
 ## 2026-08-05 — Initial AQI PWA + first Vercel production
 
 - Multi-location US AQI PWA (Open-Meteo).
-- Zustand + localStorage; max 5; default places.
 - GitHub `jburum/aether-aqi` + Vercel `aether-aqi` → https://aether-aqi.vercel.app
