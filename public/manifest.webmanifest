@@ -1,0 +1,24 @@
+{
+  "name": "Aether — Air Quality",
+  "short_name": "Aether",
+  "description": "Track and forecast air quality for up to 5 locations you care about.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0c0f12",
+  "theme_color": "#0c0f12",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
