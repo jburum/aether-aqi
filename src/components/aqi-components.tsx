@@ -24,6 +24,7 @@ import {
   Loader2,
   ChevronDown,
   ChevronLeft,
+  GripVertical,
 } from "lucide-react";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { format, parseISO } from "date-fns";
@@ -50,6 +51,8 @@ type ForecastMode = "hour" | "day";
 
 const SWIPE_ACTION_W = 88;
 const SWIPE_OPEN_THRESHOLD = 48;
+const LONG_PRESS_MS = 380;
+const LONG_PRESS_MOVE_PX = 14;
 
 const AQI_CSS: Record<string, string> = {
   good: "var(--color-aqi-good)",
@@ -98,9 +101,138 @@ export function AirQualityApp() {
   const selectedId = useLocationsStore((s) => s.selectedId);
   const selectLocation = useLocationsStore((s) => s.selectLocation);
   const removeLocation = useLocationsStore((s) => s.removeLocation);
+  const reorderLocations = useLocationsStore((s) => s.reorderLocations);
   const canAdd = useLocationsStore((s) => s.canAdd);
   const [addOpen, setAddOpen] = useState(false);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const draggingIdRef = useRef<string | null>(null);
+  const overIdRef = useRef<string | null>(null);
+  const [overId, setOverId] = useState<string | null>(null);
+  const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null);
   const qc = useQueryClient();
+
+  draggingIdRef.current = draggingId;
+
+  // Recover if a previous build left body position:fixed (clips header on iOS)
+  useEffect(() => {
+    const body = document.body;
+    if (body.style.position === "fixed") {
+      const top = body.style.top;
+      body.style.position = "";
+      body.style.top = "";
+      body.style.left = "";
+      body.style.right = "";
+      body.style.width = "";
+      body.style.overflow = "";
+      body.style.touchAction = "";
+      document.documentElement.style.overflow = "";
+      const y = top ? Math.abs(parseInt(top, 10) || 0) : 0;
+      window.scrollTo(0, y);
+    }
+  }, []);
+
+  const draggingLoc = draggingId
+    ? locations.find((l) => l.id === draggingId)
+    : undefined;
+  const draggingQueryIdx = draggingId
+    ? locations.findIndex((l) => l.id === draggingId)
+    : -1;
+
+  // Reorder: lock scroll without position:fixed (avoids iOS header clip),
+  // float a ghost under the finger, live-swap list slots.
+  useEffect(() => {
+    if (!draggingId) return;
+
+    const html = document.documentElement;
+    const body = document.body;
+    const prev = {
+      htmlOverflow: html.style.overflow,
+      bodyOverflow: body.style.overflow,
+      bodyTouch: body.style.touchAction,
+      bodyUserSelect: body.style.userSelect,
+      htmlOverscroll: html.style.overscrollBehavior,
+      bodyOverscroll: body.style.overscrollBehavior,
+    };
+    html.style.overflow = "hidden";
+    body.style.overflow = "hidden";
+    body.style.touchAction = "none";
+    body.style.userSelect = "none";
+    html.style.overscrollBehavior = "none";
+    body.style.overscrollBehavior = "none";
+
+    const hitTarget = (clientX: number, clientY: number) => {
+      const stack = document.elementsFromPoint(clientX, clientY);
+      for (const node of stack) {
+        const el = node as HTMLElement;
+        if (el.dataset?.dragGhost === "1") continue;
+        const host = el.closest?.("[data-location-id]") as HTMLElement | null;
+        if (!host || host.dataset.dragGhost === "1") continue;
+        const id = host.dataset.locationId;
+        if (id) return id;
+      }
+      return null;
+    };
+
+    let lastSwapAt = 0;
+    const onMove = (clientX: number, clientY: number) => {
+      setDragPos({ x: clientX, y: clientY });
+      const id = hitTarget(clientX, clientY);
+      if (!id) return;
+      if (id === overIdRef.current) return;
+      overIdRef.current = id;
+      setOverId(id);
+      const active = draggingIdRef.current;
+      if (!active || id === active) return;
+      const now = performance.now();
+      if (now - lastSwapAt < 100) return;
+      lastSwapAt = now;
+      reorderLocations(active, id);
+    };
+
+    const onPointerMove = (e: PointerEvent) => {
+      if (e.cancelable) e.preventDefault();
+      onMove(e.clientX, e.clientY);
+    };
+    const onTouchMove = (e: TouchEvent) => {
+      if (e.cancelable) e.preventDefault();
+      const t = e.touches[0];
+      if (t) onMove(t.clientX, t.clientY);
+    };
+
+    const finish = () => {
+      overIdRef.current = null;
+      setOverId(null);
+      setDragPos(null);
+      setDraggingId(null);
+    };
+
+    window.addEventListener("pointermove", onPointerMove, { passive: false });
+    window.addEventListener("touchmove", onTouchMove, {
+      passive: false,
+      capture: true,
+    });
+    window.addEventListener("pointerup", finish);
+    window.addEventListener("pointercancel", finish);
+    window.addEventListener("touchend", finish);
+    window.addEventListener("touchcancel", finish);
+
+    return () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("touchmove", onTouchMove, true);
+      window.removeEventListener("pointerup", finish);
+      window.removeEventListener("pointercancel", finish);
+      window.removeEventListener("touchend", finish);
+      window.removeEventListener("touchcancel", finish);
+
+      html.style.overflow = prev.htmlOverflow;
+      body.style.overflow = prev.bodyOverflow;
+      body.style.touchAction = prev.bodyTouch;
+      body.style.userSelect = prev.bodyUserSelect;
+      html.style.overscrollBehavior = prev.htmlOverscroll;
+      body.style.overscrollBehavior = prev.bodyOverscroll;
+    };
+  }, [draggingId, reorderLocations]);
+
 
   const queries = useQueries({
     queries: locations.map((loc) => ({
@@ -143,7 +275,7 @@ export function AirQualityApp() {
   }, [locations, queries]);
 
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 pb-16 pt-6 sm:px-6">
+    <div className="mx-auto flex w-full max-w-5xl min-w-0 flex-col gap-6 overflow-x-hidden px-4 pb-[max(4rem,env(safe-area-inset-bottom))] pt-[max(1.5rem,env(safe-area-inset-top))] sm:px-6">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div className="space-y-1">
           <div className="flex items-center gap-2 text-muted">
@@ -156,8 +288,8 @@ export function AirQualityApp() {
             Watchlist
           </h1>
           <p className="max-w-xl text-sm text-muted">
-            Live US AQI and forecasts for up to {MAX_LOCATIONS} places. Data from
-            Open-Meteo (CAMS). Saved on this device.
+            Live US AQI and forecasts for up to {MAX_LOCATIONS} places. Hold a
+            card to reorder · swipe left to delete. Saved on this device.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -188,7 +320,12 @@ export function AirQualityApp() {
       {locations.length === 0 ? (
         <EmptyState onAdd={() => setAddOpen(true)} />
       ) : (
-        <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <section
+          className={cn(
+            "grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-3",
+            draggingId && "touch-none select-none",
+          )}
+        >
           {locations.map((loc, i) => (
             <LocationCard
               key={loc.id}
@@ -197,11 +334,26 @@ export function AirQualityApp() {
               isLoading={queries[i]?.isLoading}
               isError={queries[i]?.isError}
               isFetching={queries[i]?.isFetching}
-              expanded={selectedId === loc.id}
+              expanded={selectedId === loc.id && !draggingId}
+              isReorderSource={draggingId === loc.id}
+              isReorderTarget={overId === loc.id && draggingId !== loc.id}
+              reorderActive={!!draggingId}
               onToggle={() =>
                 selectLocation(selectedId === loc.id ? null : loc.id)
               }
               onDelete={() => removeLocation(loc.id)}
+              onReorderStart={(origin) => {
+                selectLocation(null);
+                overIdRef.current = loc.id;
+                setOverId(loc.id);
+                setDragPos(origin);
+                setDraggingId(loc.id);
+                try {
+                  navigator.vibrate?.(12);
+                } catch {
+                  /* ignore */
+                }
+              }}
             />
           ))}
           {canAdd() && (
@@ -218,6 +370,38 @@ export function AirQualityApp() {
             </button>
           )}
         </section>
+      )}
+
+      
+      {/* Floating drag ghost — follows finger so reorder motion is obvious */}
+      {draggingId && dragPos && draggingLoc && (
+        <div
+          data-drag-ghost="1"
+          data-location-id={draggingLoc.id}
+          className="pointer-events-none fixed z-[200] w-[min(22rem,calc(100vw-2rem))] max-w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2"
+          style={{
+            left: dragPos.x,
+            top: dragPos.y,
+            transition: "none",
+          }}
+        >
+          <div className="scale-[1.04] rounded-[var(--radius-xl)] border border-border-strong bg-surface p-4 shadow-2xl shadow-black/50 ring-2 ring-accent/40">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium leading-snug">
+                  {draggingLoc.name}
+                </p>
+                <p className="mt-0.5 text-[11px] text-subtle">Release to drop</p>
+              </div>
+              <GripVertical className="size-4 shrink-0 text-subtle" aria-hidden />
+            </div>
+            <p className="mt-2 text-3xl font-semibold tabular tracking-tight">
+              {formatAqi(
+                queries[draggingQueryIdx]?.data?.current.us_aqi ?? null,
+              )}
+            </p>
+          </div>
+        </div>
       )}
 
       {addOpen && <AddLocationModal onClose={() => setAddOpen(false)} />}
@@ -251,8 +435,12 @@ function LocationCard({
   isError,
   isFetching,
   expanded,
+  isReorderSource,
+  isReorderTarget,
+  reorderActive,
   onToggle,
   onDelete,
+  onReorderStart,
 }: {
   location: TrackedLocation;
   data?: AqiData;
@@ -260,17 +448,21 @@ function LocationCard({
   isError?: boolean;
   isFetching?: boolean;
   expanded: boolean;
+  isReorderSource?: boolean;
+  isReorderTarget?: boolean;
+  reorderActive?: boolean;
   onToggle: () => void;
   onDelete: () => void;
+  onReorderStart: (origin: { x: number; y: number }) => void;
 }) {
   const aqi = data?.current.us_aqi ?? null;
   const meta = getAqiMeta(aqi);
   const [offset, setOffset] = useState(0);
-  const [isDragging, setIsDragging] = useState(false);
+  const [isSwipeDragging, setIsSwipeDragging] = useState(false);
   const [forecastMode, setForecastMode] = useState<ForecastMode>("hour");
   const surfaceRef = useRef<HTMLDivElement>(null);
 
-  const draggingRef = useRef(false);
+  const swipingRef = useRef(false);
   const startX = useRef(0);
   const startY = useRef(0);
   const startOffset = useRef(0);
@@ -278,6 +470,9 @@ function LocationCard({
   const axisLock = useRef<"h" | "v" | null>(null);
   const movedRef = useRef(false);
   const suppressClickRef = useRef(false);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressFired = useRef(false);
+  const reorderModeRef = useRef(false);
 
   const spark = useMemo(() => {
     if (!data?.hourly) return [];
@@ -299,35 +494,70 @@ function LocationCard({
 
   const closeSwipe = useCallback(() => setOffsetBoth(0), [setOffsetBoth]);
 
-  const beginDrag = useCallback(
+  const clearLongPress = useCallback(() => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  }, []);
+
+  const beginSwipe = useCallback(
     (clientX: number, clientY: number, target: EventTarget | null) => {
+      if (reorderActive || reorderModeRef.current) return false;
       if ((target as HTMLElement | null)?.closest?.("[data-no-swipe]")) return false;
-      draggingRef.current = true;
+      swipingRef.current = true;
       movedRef.current = false;
       suppressClickRef.current = false;
+      longPressFired.current = false;
       startX.current = clientX;
       startY.current = clientY;
       startOffset.current = offsetRef.current;
       axisLock.current = null;
-      setIsDragging(true);
+      setIsSwipeDragging(true);
+      clearLongPress();
+      longPressTimer.current = setTimeout(() => {
+        // Only fire if user hasn't committed to swipe/scroll
+        if (axisLock.current === "h") return;
+        if (movedRef.current && axisLock.current) return;
+        longPressFired.current = true;
+        reorderModeRef.current = true;
+        swipingRef.current = false;
+        setIsSwipeDragging(false);
+        setOffsetBoth(0);
+        suppressClickRef.current = true;
+        onReorderStart({ x: startX.current, y: startY.current });
+      }, LONG_PRESS_MS);
       return true;
     },
-    [],
+    [clearLongPress, onReorderStart, reorderActive, setOffsetBoth],
   );
 
-  const moveDrag = useCallback(
+  const moveSwipe = useCallback(
     (clientX: number, clientY: number) => {
-      if (!draggingRef.current) return false;
+      // Always claim the gesture while reordering so callers can preventDefault
+      if (reorderModeRef.current || reorderActive) return true;
+      if (!swipingRef.current) return false;
       const dx = clientX - startX.current;
       const dy = clientY - startY.current;
+      const dist = Math.hypot(dx, dy);
+
+      // Tiny jitter is OK during the hold; only cancel long-press after a real move
+      if (dist > LONG_PRESS_MOVE_PX && !longPressFired.current) {
+        clearLongPress();
+      }
+
       if (!axisLock.current) {
-        if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return false;
+        if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return false;
         axisLock.current = Math.abs(dx) > Math.abs(dy) ? "h" : "v";
         if (axisLock.current === "v") {
-          draggingRef.current = false;
-          setIsDragging(false);
+          // Let the page scroll — cancel hold/swipe
+          clearLongPress();
+          swipingRef.current = false;
+          setIsSwipeDragging(false);
           return false;
         }
+        // Horizontal swipe cancels long-press reorder
+        clearLongPress();
       }
       if (axisLock.current !== "h") return false;
       movedRef.current = true;
@@ -336,13 +566,21 @@ function LocationCard({
       setOffsetBoth(next);
       return true;
     },
-    [setOffsetBoth],
+    [clearLongPress, reorderActive, setOffsetBoth],
   );
 
-  const endDrag = useCallback(() => {
-    if (!draggingRef.current && !isDragging) return;
-    draggingRef.current = false;
-    setIsDragging(false);
+  const endSwipe = useCallback(() => {
+    clearLongPress();
+    if (reorderModeRef.current || longPressFired.current) {
+      // Parent window listeners own finish; keep flags until reorderActive clears
+      swipingRef.current = false;
+      setIsSwipeDragging(false);
+      axisLock.current = null;
+      return;
+    }
+    if (!swipingRef.current) return;
+    swipingRef.current = false;
+    setIsSwipeDragging(false);
     if (axisLock.current === "v") {
       axisLock.current = null;
       return;
@@ -350,7 +588,15 @@ function LocationCard({
     const shouldOpen = offsetRef.current < -SWIPE_OPEN_THRESHOLD;
     setOffsetBoth(shouldOpen ? -SWIPE_ACTION_W : 0);
     axisLock.current = null;
-  }, [isDragging, setOffsetBoth]);
+  }, [clearLongPress, setOffsetBoth]);
+
+  // Keep latest gesture fns in refs so the listener effect never rebinds mid-press
+  const beginSwipeRef = useRef(beginSwipe);
+  const moveSwipeRef = useRef(moveSwipe);
+  const endSwipeRef = useRef(endSwipe);
+  beginSwipeRef.current = beginSwipe;
+  moveSwipeRef.current = moveSwipe;
+  endSwipeRef.current = endSwipe;
 
   useEffect(() => {
     const el = surfaceRef.current;
@@ -358,7 +604,7 @@ function LocationCard({
 
     const onPointerDown = (e: PointerEvent) => {
       if (e.pointerType === "mouse" && e.button !== 0) return;
-      if (!beginDrag(e.clientX, e.clientY, e.target)) return;
+      if (!beginSwipeRef.current(e.clientX, e.clientY, e.target)) return;
       try {
         el.setPointerCapture(e.pointerId);
       } catch {
@@ -366,10 +612,10 @@ function LocationCard({
       }
     };
     const onPointerMove = (e: PointerEvent) => {
-      if (moveDrag(e.clientX, e.clientY)) e.preventDefault();
+      if (moveSwipeRef.current(e.clientX, e.clientY)) e.preventDefault();
     };
     const onPointerUp = (e: PointerEvent) => {
-      endDrag();
+      endSwipeRef.current();
       try {
         el.releasePointerCapture(e.pointerId);
       } catch {
@@ -378,13 +624,13 @@ function LocationCard({
     };
     const onTouchStart = (e: TouchEvent) => {
       if (e.touches.length !== 1) return;
-      beginDrag(e.touches[0].clientX, e.touches[0].clientY, e.target);
+      beginSwipeRef.current(e.touches[0].clientX, e.touches[0].clientY, e.target);
     };
     const onTouchMove = (e: TouchEvent) => {
       if (e.touches.length !== 1) return;
-      if (moveDrag(e.touches[0].clientX, e.touches[0].clientY)) e.preventDefault();
+      if (moveSwipeRef.current(e.touches[0].clientX, e.touches[0].clientY)) e.preventDefault();
     };
-    const onTouchEnd = () => endDrag();
+    const onTouchEnd = () => endSwipeRef.current();
 
     el.addEventListener("pointerdown", onPointerDown);
     el.addEventListener("pointermove", onPointerMove);
@@ -395,6 +641,7 @@ function LocationCard({
     el.addEventListener("touchend", onTouchEnd);
     el.addEventListener("touchcancel", onTouchEnd);
     return () => {
+      // Do not clearLongPress here — rebinding would cancel an in-progress hold.
       el.removeEventListener("pointerdown", onPointerDown);
       el.removeEventListener("pointermove", onPointerMove);
       el.removeEventListener("pointerup", onPointerUp);
@@ -404,9 +651,22 @@ function LocationCard({
       el.removeEventListener("touchend", onTouchEnd);
       el.removeEventListener("touchcancel", onTouchEnd);
     };
-  }, [beginDrag, moveDrag, endDrag]);
+  }, []);
+
+  // Sync when parent ends reorder
+  useEffect(() => {
+    if (!reorderActive) {
+      reorderModeRef.current = false;
+    }
+  }, [reorderActive]);
 
   function handleCardActivate() {
+    if (longPressFired.current || reorderActive || isReorderSource) {
+      longPressFired.current = false;
+      suppressClickRef.current = false;
+      movedRef.current = false;
+      return;
+    }
     if (suppressClickRef.current || movedRef.current) {
       if (offsetRef.current < 0) closeSwipe();
       suppressClickRef.current = false;
@@ -422,9 +682,15 @@ function LocationCard({
 
   return (
     <div
+      data-location-id={location.id}
       className={cn(
-        "relative overflow-hidden rounded-[var(--radius-xl)]",
+        "relative min-w-0 max-w-full overflow-hidden rounded-[var(--radius-xl)] transition-[transform,box-shadow,opacity,border-color] duration-200 ease-out",
         expanded && "sm:col-span-2 lg:col-span-3",
+        // Slot left behind while the floating ghost follows the finger
+        isReorderSource &&
+          "z-10 scale-[0.98] border-2 border-dashed border-border-strong opacity-40",
+        isReorderTarget && "z-10 scale-[1.02] ring-2 ring-accent",
+        reorderActive && !isReorderSource && !isReorderTarget && "opacity-80",
       )}
     >
       <div
@@ -472,9 +738,12 @@ function LocationCard({
           "rounded-[var(--radius-xl)] select-none hover:border-border-strong",
           expanded && "border-border-strong ring-1 ring-ring/30",
           aqiRingClass(meta.token),
-          !isDragging && "transition-transform duration-200 ease-out",
+          !isSwipeDragging && !isReorderSource && "transition-transform duration-200 ease-out",
         )}
-        style={{ transform: `translate3d(${offset}px,0,0)`, touchAction: "pan-y" }}
+        style={{
+          transform: `translate3d(${offset}px,0,0)`,
+          touchAction: isReorderSource || reorderActive ? "none" : "pan-y",
+        }}
       >
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
@@ -489,6 +758,7 @@ function LocationCard({
             ) : isError ? (
               <span className="text-xs text-aqi-unhealthy">Error</span>
             ) : null}
+            <GripVertical className="size-4 text-subtle/70" aria-hidden />
             <ChevronDown
               className={cn(
                 "size-4 text-subtle transition-transform duration-200",
@@ -961,7 +1231,13 @@ function AddLocationModal({ onClose }: { onClose: () => void }) {
       if (e.key === "Escape") onClose();
     }
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    // Lock background scroll while sheet is open (no position:fixed body)
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+    };
   }, [onClose]);
 
   function pick(place: GeoResult) {
@@ -969,16 +1245,21 @@ function AddLocationModal({ onClose }: { onClose: () => void }) {
       setError(`You already track ${MAX_LOCATIONS} places. Remove one first.`);
       return;
     }
-    const ok = addLocation({
+    const id = addLocation({
       name: placeLabel(place),
       latitude: place.latitude,
       longitude: place.longitude,
     });
-    if (!ok) {
+    if (!id) {
       setError("That place is already on your list (or list is full).");
       return;
     }
     onClose();
+    requestAnimationFrame(() => {
+      document
+        .querySelector(`[data-location-id="${id}"]`)
+        ?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
   }
 
   async function useMyLocation() {
@@ -993,9 +1274,16 @@ function AddLocationModal({ onClose }: { onClose: () => void }) {
         try {
           const { latitude, longitude } = pos.coords;
           const name = await reverseGeocode(latitude, longitude);
-          const ok = addLocation({ name, latitude, longitude });
-          if (!ok) setError("Could not add — already tracked or list full.");
-          else onClose();
+          const id = addLocation({ name, latitude, longitude });
+          if (!id) setError("Could not add — already tracked or list full.");
+          else {
+            onClose();
+            requestAnimationFrame(() => {
+              document
+                .querySelector(`[data-location-id="${id}"]`)
+                ?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+            });
+          }
         } catch {
           setError("Could not resolve your location name.");
         } finally {
@@ -1012,51 +1300,71 @@ function AddLocationModal({ onClose }: { onClose: () => void }) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4"
+      className="fixed inset-0 z-50 flex items-end justify-center overflow-x-hidden overscroll-none bg-black/70 sm:items-center sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby={titleId}
       onClick={onClose}
     >
       <div
-        className="flex max-h-[90dvh] w-full max-w-md flex-col rounded-t-[var(--radius-xl)] border border-border bg-surface shadow-2xl sm:rounded-[var(--radius-xl)]"
+        className="flex w-full max-w-full flex-col overflow-hidden rounded-t-[var(--radius-xl)] border border-border bg-surface shadow-2xl sm:max-w-md sm:rounded-[var(--radius-xl)]"
+        style={{
+          maxHeight: "min(92dvh, 100%)",
+          paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))",
+        }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b border-border px-4 py-3">
-          <h2 id={titleId} className="text-base font-semibold">
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-4 py-3">
+          <h2 id={titleId} className="min-w-0 truncate text-base font-semibold">
             Add location
           </h2>
-          <Button type="button" variant="ghost" size="icon" onClick={onClose} aria-label="Close">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="shrink-0"
+            onClick={onClose}
+            aria-label="Close"
+          >
             <X className="size-4" />
           </Button>
         </div>
 
-        <div className="space-y-3 p-4">
-          <div className="relative">
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overflow-x-hidden p-4">
+          <div className="relative w-full min-w-0">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-subtle" />
             <Input
               autoFocus
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Search city or place…"
-              className="pl-10"
+              className="w-full min-w-0 pl-10 text-base"
+              enterKeyHint="search"
+              autoCapitalize="words"
+              autoCorrect="off"
             />
           </div>
 
           <Button
             type="button"
             variant="secondary"
-            className="w-full"
+            className="w-full min-w-0"
             onClick={() => void useMyLocation()}
             disabled={locating || !canAdd()}
           >
-            {locating ? <Loader2 className="size-4 animate-spin" /> : <Navigation className="size-4" />}
-            Use my current location
+            {locating ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Navigation className="size-4" />
+            )}
+            <span className="truncate">Use my current location</span>
           </Button>
 
-          {error && <p className="text-sm text-aqi-unhealthy">{error}</p>}
+          {error && (
+            <p className="break-words text-sm text-aqi-unhealthy">{error}</p>
+          )}
 
-          <div className="max-h-64 overflow-y-auto rounded-[var(--radius-lg)] border border-border">
+          <div className="max-h-[min(16rem,40dvh)] w-full min-w-0 overflow-y-auto overflow-x-hidden rounded-[var(--radius-lg)] border border-border">
             {searching && (
               <div className="flex items-center gap-2 px-3 py-4 text-sm text-muted">
                 <Loader2 className="size-4 animate-spin" /> Searching…
@@ -1070,20 +1378,24 @@ function AddLocationModal({ onClose }: { onClose: () => void }) {
                 <button
                   key={`${r.id}-${r.latitude}`}
                   type="button"
-                  className="flex w-full items-start gap-2 border-b border-border px-3 py-3 text-left text-sm last:border-0 hover:bg-surface-2"
+                  className="flex w-full min-w-0 items-start gap-2 border-b border-border px-3 py-3 text-left text-sm last:border-0 hover:bg-surface-2"
                   onClick={() => pick(r)}
                 >
                   <MapPin className="mt-0.5 size-4 shrink-0 text-subtle" />
-                  <span>
+                  <span className="min-w-0 break-words">
                     <span className="font-medium">{placeLabel(r)}</span>
                     {r.country_code && (
-                      <span className="mt-0.5 block text-xs text-subtle">{r.country_code}</span>
+                      <span className="mt-0.5 block text-xs text-subtle">
+                        {r.country_code}
+                      </span>
                     )}
                   </span>
                 </button>
               ))}
             {q.trim().length < 2 && !searching && (
-              <p className="px-3 py-4 text-sm text-muted">Type at least 2 characters to search.</p>
+              <p className="px-3 py-4 text-sm text-muted">
+                Type at least 2 characters to search.
+              </p>
             )}
           </div>
         </div>

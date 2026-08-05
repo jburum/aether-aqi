@@ -29,7 +29,7 @@ export const Route = createRootRoute({
       {
         name: "description",
         content:
-          "Track and forecast US Air Quality Index for up to 5 locations. Installable PWA with hourly and daily forecasts.",
+          "Track and forecast US Air Quality Index for up to 15 locations. Installable PWA with hourly and daily forecasts.",
       },
       { name: "theme-color", content: "#0c0f12" },
       { name: "color-scheme", content: "dark" },
@@ -89,11 +89,11 @@ function RootDocument() {
       <head>
         <HeadContent />
       </head>
-      <body className="bg-bg text-fg antialiased">
+      <body className="max-w-[100vw] overflow-x-hidden bg-bg text-fg antialiased">
         <CreatedWithGrokBanner />
         <AuthProvider>
           <QueryClientProvider client={queryClient}>
-            <div className="min-h-[calc(100dvh-var(--grok-banner-h,0px))] pt-[var(--grok-banner-h,0px)]">
+            <div className="min-h-[calc(100dvh-var(--grok-banner-h,0px))] max-w-[100vw] overflow-x-hidden pt-[var(--grok-banner-h,0px)]">
               <Outlet />
             </div>
           </QueryClientProvider>

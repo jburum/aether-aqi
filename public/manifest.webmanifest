@@ -1,7 +1,7 @@
 {
   "name": "Air Quality Watchlist",
   "short_name": "Air Quality",
-  "description": "Track and forecast air quality for up to 5 locations you care about.",
+  "description": "Track and forecast air quality for up to 15 locations you care about.",
   "id": "/",
   "start_url": "/",
   "scope": "/",

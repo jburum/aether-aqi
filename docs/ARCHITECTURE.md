@@ -1,6 +1,6 @@
 # Architecture
 
-Last updated: 2026-08-05
+Last updated: 2026-08-05 · **v1.3.0**
 
 ## Pipeline: Grok Build → Git → Vercel
 
@@ -15,8 +15,10 @@ Last updated: 2026-08-05
 | Stage | Role |
 | --- | --- |
 | **Grok Build** | Develop and verify (live preview). Not production. |
-| **GitHub** | Source of truth (`jburum/aether-aqi`). Docs under `docs/`. Release `clean-aether.tgz` for Vercel bootstrap when needed. |
+| **GitHub** | Source of truth (`jburum/aether-aqi`). Docs under `docs/`. Release `clean-aether.tgz` for Vercel bootstrap. |
 | **Vercel** | Production → [https://aether-aqi.vercel.app](https://aether-aqi.vercel.app). |
+
+**Current bootstrap:** Vercel `installCommand` curls the latest release tarball (e.g. `v1.3.0/clean-aether.tgz`), extracts, then `npm install` + `npm run build`.
 
 Ideal later: native Vercel ↔ GitHub auto-deploy on push.
 
@@ -28,12 +30,14 @@ Ideal later: native Vercel ↔ GitHub auto-deploy on push.
 
 | Data | Where | Cross-device? |
 | --- | --- | --- |
-| Watchlist (name, lat/lon, `alertAt`) | `localStorage` key `aether-locations-v1` | **No** |
+| Watchlist (name, lat/lon, `alertAt`, **order**) | `localStorage` key `aether-locations-v1` | **No** |
 | Selected card id | Same store | No |
 | Live AQI cache | React Query | No |
 | SW cache | Cache API (`aqi-watchlist-v3`) | No |
 
-No cloud watchlist sync. Optional Sign in does not own the location list.
+- Max **15** locations (`MAX_LOCATIONS` in `src/lib/locations-store.ts`).
+- Array order in the store **is** display order (drag-to-reorder updates it).
+- No cloud watchlist sync.
 
 ### Third-party APIs
 
@@ -61,6 +65,17 @@ Modeled AQI ≠ AirNow regulatory monitors.
 
 ---
 
+## Interaction notes (mobile)
+
+| Concern | Approach |
+| --- | --- |
+| Reorder | Long-press → floating ghost under finger; non-passive `touchmove` + overflow lock; live list swap |
+| Swipe delete | Axis-locked horizontal pan; vertical scroll still works |
+| Add sheet | Full-width bottom sheet; body `overflow: hidden` while open; no `position: fixed` body (avoids iOS header clip) |
+| Focus zoom | Inputs `font-size: 16px`; shell `overflow-x: hidden` |
+
+---
+
 ## Stack
 
 - React 19, TanStack Start/Router/Query, Tailwind v4, Recharts, Lucide, Zustand
@@ -70,8 +85,8 @@ Modeled AQI ≠ AirNow regulatory monitors.
 
 | Path | Responsibility |
 | --- | --- |
-| `src/components/aqi-components.tsx` | Cards, swipe, expand, charts |
-| `src/lib/locations-store.ts` | localStorage watchlist |
+| `src/components/aqi-components.tsx` | Cards, swipe, reorder ghost, expand, charts, add sheet |
+| `src/lib/locations-store.ts` | localStorage watchlist + reorder (max 15) |
 | `src/lib/open-meteo.ts` | AQ + geocoding |
 | `public/*icon*` | Home screen / PWA icons |
 | `docs/` | Product + architecture (in git) |
@@ -81,6 +96,8 @@ Modeled AQI ≠ AirNow regulatory monitors.
 ## Deploy checklist
 
 1. Preview + `typecheck` / `build` OK.
-2. Docs updated.
-3. Push `main` (+ release tarball if install still curls GitHub release).
-4. Vercel production READY; icons load on production URL.
+2. Docs updated (`CHANGELOG`, `PRODUCT`, `ARCHITECTURE` as needed).
+3. Push `main`.
+4. Create GitHub release + `clean-aether.tgz` asset (if using release bootstrap).
+5. Vercel production deploy with `installCommand` curling that release.
+6. Confirm production: Watchlist UI, icons, add sheet full-width, reorder.

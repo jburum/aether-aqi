@@ -2,7 +2,39 @@
 
 Newest first.
 
-## 2026-08-05 — iOS Home Screen PWA + AQI chart icon
+## 2026-08-05 — v1.3.0 (docs + ship)
+
+### Product
+
+- Watchlist capacity **5 → 15**.
+- Long-press reorder with **floating drag ghost**, live list swap, scroll lock (no body `position: fixed`).
+- Add-location **full-width** mobile sheet; no horizontal bleed when keyboard opens.
+- Inputs at **16px** to stop iOS focus-zoom pan.
+- Adding a place no longer auto-expands (header stays on-screen).
+
+### Docs / ops
+
+- Docs refreshed for v1.3.0 (PRODUCT, ARCHITECTURE, README).
+- GitHub release **v1.3.0** + Vercel production redeploy.
+
+## 2026-08-05 — 15 locations + add-sheet overflow fix
+
+### Product
+
+- Watchlist capacity raised from **5 → 15** places.
+- Add-location sheet is full-width on phones, clamps to the viewport, and no longer lets the page slide sideways (iOS keyboard/focus zoom + overflow).
+- Inputs use 16px text to prevent Safari focus-zoom pan.
+
+## 2026-08-05 — Long-press reorder location cards
+
+### Product
+
+- **Hold** a location card (~0.4s), then **drag** onto another card to reorder the watchlist.
+- Order persists in `localStorage` with the rest of the list.
+- Grip icon affordance on cards; subtitle hints “Hold to reorder · swipe left to delete”.
+- Floating ghost + placeholder slot so motion is obvious.
+
+## 2026-08-05 — iOS Home Screen PWA + AQI chart icon (v1.2.0)
 
 ### Product
 

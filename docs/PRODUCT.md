@@ -1,10 +1,10 @@
 # Product
 
-Last updated: 2026-08-05
+Last updated: 2026-08-05 · **v1.3.0**
 
 ## One-liner
 
-Personal **air quality watchlist** PWA: up to five places, live US AQI, hour/day forecasts, device-local save. Installable to the **iPhone Home Screen**.
+Personal **air quality watchlist** PWA: up to **15** places, live US AQI, hour/day forecasts, device-local save. Installable to the **iPhone Home Screen**.
 
 ## Core UX
 
@@ -15,9 +15,10 @@ Personal **air quality watchlist** PWA: up to five places, live US AQI, hour/day
 | **By hour** | Area chart of hourly US AQI |
 | **By day** | Bar chart of daily average US AQI; tap day → hourly for that day |
 | Swipe left | Reveals **Delete** |
-| Add place | Search or current location; max 5 |
+| **Hold + drag** card | Floating ghost follows finger; list live-swaps; order persisted |
+| Add place | Full-width mobile sheet; search or current location; **max 15** |
 | Refresh | Refetch all AQI queries |
-| **Install (iPhone)** | Safari → Share → **Add to Home Screen** → opens standalone with app icon |
+| **Install (iPhone)** | Safari → Share → **Add to Home Screen** → standalone with app icon |
 
 ### Branding & icon
 
@@ -29,18 +30,21 @@ Personal **air quality watchlist** PWA: up to five places, live US AQI, hour/day
 
 - On-device only (see [ARCHITECTURE.md](./ARCHITECTURE.md)).
 - Daily values = average of Open-Meteo hourly US AQI per calendar day.
+- Adding a place does **not** auto-expand the new card (keeps the header on-screen).
 
 ## Roadmap
 
 ### Phase 1 (shipped)
 
-- [x] Multi-location watchlist (max 5)
+- [x] Multi-location watchlist (**max 15**)
 - [x] Live US AQI + pollutants
 - [x] Hourly + day bar + day→hourly drill-down
 - [x] PWA + iOS Home Screen install (meta, manifest, apple-touch-icon)
 - [x] Custom AQI chart app icon
 - [x] Device-local persistence
 - [x] Swipe delete, expand cards
+- [x] Long-press drag reorder with drag ghost + scroll lock
+- [x] Mobile add sheet without horizontal bleed / focus-zoom pan
 - [x] Docs in git
 
 ### Phase 2 (planned)
@@ -57,7 +61,9 @@ Personal **air quality watchlist** PWA: up to five places, live US AQI, hour/day
 
 ## Accessibility / mobile
 
-- Usable at ~390px.
+- Usable at ~390px; `overflow-x: hidden` on shell to prevent sideways bleed.
 - Swipe locks horizontal only so scroll still works.
 - Forecast controls use `data-no-swipe`.
-- Safe-area friendly viewport (`viewport-fit=cover`) for notched iPhones.
+- Inputs are **16px** so iOS does not zoom/pan on focus.
+- Safe-area padding (`viewport-fit=cover`) for notched iPhones.
+- Add sheet is full-width bottom sheet on phones; locks background scroll while open.

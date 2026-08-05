@@ -35,20 +35,32 @@
 @layer base {
   * {
     border-color: var(--color-border);
+    box-sizing: border-box;
   }
 
   html {
     color-scheme: dark;
+    overflow-x: hidden;
+    max-width: 100%;
   }
 
   body {
     margin: 0;
     min-height: 100dvh;
+    max-width: 100%;
+    overflow-x: hidden;
     background: var(--color-bg);
     color: var(--color-fg);
     font-family: var(--font-sans);
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
+  }
+
+  /* Prevent iOS focus-zoom (requires ≥16px) which pans content off-screen */
+  input,
+  textarea,
+  select {
+    font-size: 16px;
   }
 
   button:not(:disabled),
@@ -90,56 +102,46 @@
   }
 
   .bg-aqi-good {
-    background: color-mix(in oklab, var(--color-aqi-good) 18%, transparent);
+    background-color: var(--color-aqi-good);
   }
   .bg-aqi-moderate {
-    background: color-mix(in oklab, var(--color-aqi-moderate) 16%, transparent);
+    background-color: var(--color-aqi-moderate);
   }
   .bg-aqi-usg {
-    background: color-mix(in oklab, var(--color-aqi-usg) 16%, transparent);
+    background-color: var(--color-aqi-usg);
   }
   .bg-aqi-unhealthy {
-    background: color-mix(in oklab, var(--color-aqi-unhealthy) 16%, transparent);
+    background-color: var(--color-aqi-unhealthy);
   }
   .bg-aqi-very {
-    background: color-mix(in oklab, var(--color-aqi-very) 16%, transparent);
+    background-color: var(--color-aqi-very);
   }
   .bg-aqi-hazardous {
-    background: color-mix(in oklab, var(--color-aqi-hazardous) 22%, transparent);
+    background-color: var(--color-aqi-hazardous);
   }
   .bg-aqi-unknown {
-    background: color-mix(in oklab, var(--color-aqi-unknown) 14%, transparent);
+    background-color: var(--color-aqi-unknown);
   }
 
   .ring-aqi-good {
-    box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-aqi-good) 45%, transparent);
+    --tw-ring-color: color-mix(in srgb, var(--color-aqi-good) 35%, transparent);
   }
   .ring-aqi-moderate {
-    box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-aqi-moderate) 45%, transparent);
+    --tw-ring-color: color-mix(in srgb, var(--color-aqi-moderate) 35%, transparent);
   }
   .ring-aqi-usg {
-    box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-aqi-usg) 45%, transparent);
+    --tw-ring-color: color-mix(in srgb, var(--color-aqi-usg) 35%, transparent);
   }
   .ring-aqi-unhealthy {
-    box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-aqi-unhealthy) 45%, transparent);
+    --tw-ring-color: color-mix(in srgb, var(--color-aqi-unhealthy) 35%, transparent);
   }
   .ring-aqi-very {
-    box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-aqi-very) 45%, transparent);
+    --tw-ring-color: color-mix(in srgb, var(--color-aqi-very) 35%, transparent);
   }
   .ring-aqi-hazardous {
-    box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-aqi-hazardous) 45%, transparent);
+    --tw-ring-color: color-mix(in srgb, var(--color-aqi-hazardous) 35%, transparent);
   }
   .ring-aqi-unknown {
-    box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-aqi-unknown) 35%, transparent);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+    --tw-ring-color: color-mix(in srgb, var(--color-aqi-unknown) 35%, transparent);
   }
 }

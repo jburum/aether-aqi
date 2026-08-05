@@ -13,7 +13,7 @@ export interface TrackedLocation {
   alertAt: number | null;
 }
 
-const MAX_LOCATIONS = 5;
+const MAX_LOCATIONS = 15;
 
 const DEFAULTS: TrackedLocation[] = [
   {
@@ -49,12 +49,15 @@ const DEFAULTS: TrackedLocation[] = [
 interface LocationsState {
   locations: TrackedLocation[];
   selectedId: string | null;
+  /** Returns new location id, or null if not added. Does not auto-expand. */
   addLocation: (
     loc: Omit<TrackedLocation, "id" | "alertAt"> & { alertAt?: number | null },
-  ) => boolean;
+  ) => string | null;
   removeLocation: (id: string) => void;
   updateLocation: (id: string, patch: Partial<TrackedLocation>) => void;
   selectLocation: (id: string | null) => void;
+  /** Move `activeId` so it sits at the index currently held by `overId`. */
+  reorderLocations: (activeId: string, overId: string) => void;
   canAdd: () => boolean;
 }
 
@@ -65,6 +68,7 @@ function uid() {
 /**
  * Device-local watchlist. Persists to localStorage under a stable key so
  * existing installs keep their lists. Not synced across devices/browsers.
+ * Order of `locations` is the display order (drag-to-reorder).
  */
 export const useLocationsStore = create<LocationsState>()(
   persist(
@@ -75,13 +79,13 @@ export const useLocationsStore = create<LocationsState>()(
       canAdd: () => get().locations.length < MAX_LOCATIONS,
       addLocation: (loc) => {
         const { locations } = get();
-        if (locations.length >= MAX_LOCATIONS) return false;
+        if (locations.length >= MAX_LOCATIONS) return null;
         const exists = locations.some(
           (l) =>
             Math.abs(l.latitude - loc.latitude) < 0.02 &&
             Math.abs(l.longitude - loc.longitude) < 0.02,
         );
-        if (exists) return false;
+        if (exists) return null;
         const next: TrackedLocation = {
           id: uid(),
           name: loc.name,
@@ -89,8 +93,10 @@ export const useLocationsStore = create<LocationsState>()(
           longitude: loc.longitude,
           alertAt: loc.alertAt ?? 100,
         };
-        set({ locations: [...locations, next], selectedId: next.id });
-        return true;
+        // Keep selectedId unchanged so the list doesn't jump/expand and
+        // push the header off-screen on mobile after adding.
+        set({ locations: [...locations, next] });
+        return next.id;
       },
       removeLocation: (id) => {
         const locations = get().locations.filter((l) => l.id !== id);
@@ -104,6 +110,16 @@ export const useLocationsStore = create<LocationsState>()(
         });
       },
       selectLocation: (id) => set({ selectedId: id }),
+      reorderLocations: (activeId, overId) => {
+        if (activeId === overId) return;
+        const list = [...get().locations];
+        const from = list.findIndex((l) => l.id === activeId);
+        const to = list.findIndex((l) => l.id === overId);
+        if (from < 0 || to < 0) return;
+        const [item] = list.splice(from, 1);
+        list.splice(to, 0, item);
+        set({ locations: list });
+      },
     }),
     {
       // Keep key stable — renaming would drop users' saved locations.
