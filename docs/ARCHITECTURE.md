@@ -2,25 +2,33 @@
 
 Last updated: 2026-08-05 · **v1.3.0**
 
-## Pipeline: Grok Build → Git → Vercel
+## Pipeline: Local / Grok Build → Git → Vercel
 
 ```text
-┌─────────────────────┐     git push + release     ┌──────────────┐     install/build     ┌─────────────┐
-│  Grok Build sandbox │ ─────────────────────────► │    GitHub    │ ────────────────────► │   Vercel    │
-│  edit + live preview│     jburum/aether-aqi      │  main +      │   production host     │ aether-aqi  │
-│                     │                            │  release tgz │                       │             │
-└─────────────────────┘                            └──────────────┘                       └─────────────┘
+┌─────────────────────┐     git push main          ┌──────────────┐     auto install/build ┌─────────────┐
+│  Local (Projects/AQI)│ ─────────────────────────► │    GitHub    │ ─────────────────────► │   Vercel    │
+│  or Grok Build preview│    jburum/aether-aqi      │  production  │   Git-linked project   │ aether-aqi  │
+│                     │                            │  branch main │                        │             │
+└─────────────────────┘                            └──────────────┘                        └─────────────┘
 ```
 
 | Stage | Role |
 | --- | --- |
-| **Grok Build** | Develop and verify (live preview). Not production. |
-| **GitHub** | Source of truth (`jburum/aether-aqi`). Docs under `docs/`. Release `clean-aether.tgz` for Vercel bootstrap. |
-| **Vercel** | Production → [https://aether-aqi.vercel.app](https://aether-aqi.vercel.app). |
+| **Local / Grok Build** | Develop and verify (preview). Local clone: `~/Projects/AQI`. |
+| **GitHub** | Source of truth (`jburum/aether-aqi`). Docs under `docs/`. Tags/releases optional for history. |
+| **Vercel** | Production → [https://aether-aqi.vercel.app](https://aether-aqi.vercel.app). Project `aether-aqi` is **Git-linked** to this repo. |
 
-**Current bootstrap:** Vercel `installCommand` curls the latest release tarball (e.g. `v1.3.0/clean-aether.tgz`), extracts, then `npm install` + `npm run build`.
+**Current deploy path (as of 2026-08-05):** Native Vercel ↔ GitHub integration. Production branch is **`main`**. On push to `main`, Vercel runs default `npm install` + `npm run build` (Nitro `vercel` preset). No custom `installCommand`.
 
-Ideal later: native Vercel ↔ GitHub auto-deploy on push.
+**CLI alternatives:**
+
+```bash
+cd ~/Projects/AQI
+vercel link --project aether-aqi --scope jburums-projects --yes   # once
+vercel deploy --prod --yes                                        # manual prod deploy
+```
+
+**Historical note:** Early Grok Build publishes used a release-tarball bootstrap (`installCommand` curled `clean-aether.tgz` from GitHub Releases). That path is **retired**; keep release tags for changelog only if useful.
 
 ---
 
@@ -97,7 +105,7 @@ Modeled AQI ≠ AirNow regulatory monitors.
 
 1. Preview + `typecheck` / `build` OK.
 2. Docs updated (`CHANGELOG`, `PRODUCT`, `ARCHITECTURE` as needed).
-3. Push `main`.
-4. Create GitHub release + `clean-aether.tgz` asset (if using release bootstrap).
-5. Vercel production deploy with `installCommand` curling that release.
-6. Confirm production: Watchlist UI, icons, add sheet full-width, reorder.
+3. Commit and **push `main`** → Vercel auto-deploys production.
+4. Optional: `vercel deploy --prod` from `~/Projects/AQI` for a CLI ship without waiting on Git.
+5. Optional: GitHub release/tag for version history (not required for deploy).
+6. Confirm production: Watchlist UI (15 locations), icons, add sheet full-width, reorder.

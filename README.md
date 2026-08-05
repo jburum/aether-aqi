@@ -40,12 +40,14 @@ npm run build
 
 ## Deploy path
 
-**Grok Build → GitHub → Vercel**
+**Local / Grok Build → GitHub (`main`) → Vercel**
 
-1. Develop in Grok Build (preview).
-2. Commit docs + code to `main` on this repo.
-3. Tag a release with `clean-aether.tgz` for Vercel bootstrap installs.
-4. Deploy production project **aether-aqi**.
+1. Develop locally (`~/Projects/AQI`) or in Grok Build preview.
+2. Commit docs + code and **push `main`**.
+3. Vercel project **aether-aqi** is Git-linked → auto production deploy.
+4. Live: [https://aether-aqi.vercel.app](https://aether-aqi.vercel.app).
+
+Manual CLI: `vercel deploy --prod` from the repo root.
 
 Details: [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md).
 

@@ -2,6 +2,15 @@
 
 Newest first.
 
+## 2026-08-05 — Deploy path: native Git → Vercel
+
+### Ops
+
+- Linked Vercel project `aether-aqi` to GitHub `jburum/aether-aqi` (production branch `main`).
+- Retired release-tarball `installCommand` bootstrap; builds from the git tree.
+- Production redeploy of **v1.3.0** from local clone (`~/Projects/AQI`).
+- Docs updated for auto-deploy on push to `main`.
+
 ## 2026-08-05 — v1.3.0 (docs + ship)
 
 ### Product
