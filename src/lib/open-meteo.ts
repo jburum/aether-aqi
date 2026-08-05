@@ -55,17 +55,37 @@ function primaryPollutant(c: AirQualityCurrent): string {
   return best;
 }
 
+async function fetchJson<T>(url: string, label: string, ms = 12_000): Promise<T> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  try {
+    const res = await fetch(url, {
+      signal: ctrl.signal,
+      headers: { Accept: "application/json" },
+    });
+    if (!res.ok) throw new Error(`${label} failed (${res.status})`);
+    return (await res.json()) as T;
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error(`${label} timed out`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function searchPlaces(query: string): Promise<GeoResult[]> {
   const q = query.trim();
   if (q.length < 2) return [];
-  const url = new URL("https://geocoding-api.open-meteo.com/v1/search");
+  // Same-origin proxy (see /api/geocode) — more reliable in Safari than direct third-party fetch
+  const url = new URL("/api/geocode", typeof window !== "undefined" ? window.location.origin : "http://local");
   url.searchParams.set("name", q);
-  url.searchParams.set("count", "8");
-  url.searchParams.set("language", "en");
-  url.searchParams.set("format", "json");
-  const res = await fetch(url.toString());
-  if (!res.ok) throw new Error("Place search failed");
-  const data = (await res.json()) as { results?: GeoResult[] };
+  const data = await fetchJson<{ results?: GeoResult[]; error?: string }>(
+    url.pathname + url.search,
+    "Place search",
+  );
+  if (data.error) throw new Error(data.error);
   return data.results ?? [];
 }
 
@@ -90,21 +110,25 @@ export async function reverseGeocode(lat: number, lon: number): Promise<string> 
   }
 }
 
-export async function fetchAirQuality(lat: number, lon: number): Promise<AirQualityPayload & { mainPollutant: string }> {
-  const url = new URL("https://air-quality-api.open-meteo.com/v1/air-quality");
-  url.searchParams.set("latitude", String(lat));
-  url.searchParams.set("longitude", String(lon));
-  url.searchParams.set(
-    "current",
-    "us_aqi,pm2_5,pm10,ozone,carbon_monoxide,nitrogen_dioxide,sulphur_dioxide",
+export async function fetchAirQuality(
+  lat: number,
+  lon: number,
+): Promise<AirQualityPayload & { mainPollutant: string }> {
+  // Same-origin proxy (see /api/aqi) — Safari often blocks or stalls direct
+  // calls to third-party weather APIs; proxy keeps the request first-party.
+  const url = new URL(
+    "/api/aqi",
+    typeof window !== "undefined" ? window.location.origin : "http://local",
   );
-  url.searchParams.set("hourly", "us_aqi,pm2_5,ozone");
-  url.searchParams.set("forecast_days", "4");
-  url.searchParams.set("timezone", "auto");
+  url.searchParams.set("lat", String(lat));
+  url.searchParams.set("lon", String(lon));
 
-  const res = await fetch(url.toString());
-  if (!res.ok) throw new Error("Air quality fetch failed");
-  const data = (await res.json()) as AirQualityPayload;
+  const data = await fetchJson<AirQualityPayload & { error?: string }>(
+    url.pathname + url.search,
+    "Air quality",
+  );
+  if (data.error) throw new Error(data.error);
+  if (!data.current) throw new Error("Air quality response missing current data");
   return { ...data, mainPollutant: primaryPollutant(data.current) };
 }
 

@@ -294,13 +294,19 @@ export function AirQualityApp() {
       queryFn: () => fetchAirQuality(loc.latitude, loc.longitude),
       staleTime: 5 * 60 * 1000,
       refetchInterval: 15 * 60 * 1000,
+      retry: 2,
+      retryDelay: (n: number) => Math.min(1000 * 2 ** n, 8000),
+      // Don't leave cards spinning forever if the tab is backgrounded mid-flight
+      networkMode: "always" as const,
     })),
   });
 
   const refreshing = queries.some((q) => q.isFetching);
+  const anyError = queries.some((q) => q.isError);
 
   const refreshAll = useCallback(() => {
     void qc.invalidateQueries({ queryKey: ["aqi"] });
+    void qc.refetchQueries({ queryKey: ["aqi"] });
   }, [qc]);
 
   useEffect(() => {
@@ -352,12 +358,16 @@ export function AirQualityApp() {
             variant="secondary"
             size="sm"
             onClick={refreshAll}
-            disabled={refreshing}
             aria-label="Refresh all locations"
           >
             <RefreshCw className={cn("size-4", refreshing && "animate-spin")} />
             Refresh
           </Button>
+          {anyError && !refreshing && (
+            <span className="text-xs text-aqi-unhealthy">
+              Some readings failed — tap Refresh
+            </span>
+          )}
           <Button
             type="button"
             size="sm"
@@ -858,9 +868,9 @@ function LocationCard({
           </div>
           <div className="flex shrink-0 items-center gap-2">
             {isLoading || isFetching ? (
-              <Loader2 className="size-4 animate-spin text-subtle" />
+              <Loader2 className="size-4 animate-spin text-subtle" aria-label="Loading AQI" />
             ) : isError ? (
-              <span className="text-xs text-aqi-unhealthy">Error</span>
+              <span className="text-xs font-medium text-aqi-unhealthy">Failed</span>
             ) : null}
             <span
               data-drag-handle
