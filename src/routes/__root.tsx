@@ -26,7 +26,26 @@ const CRITICAL_CSS = `
 html{color-scheme:dark;max-width:100%;overflow-x:hidden}
 body{margin:0;min-height:100dvh;max-width:100%;overflow-x:hidden;background:#0c0f12;color:#e8eaed;font-family:system-ui,-apple-system,sans-serif;line-height:1.5;-webkit-font-smoothing:antialiased}
 *,*::before,*::after{box-sizing:border-box}
-.aqi-shell{width:100%;max-width:64rem;margin:0 auto;padding:1.5rem 1rem 4rem;display:flex;flex-direction:column;gap:1.5rem;min-width:0}
+/* Safe-area padding so content clears Dynamic Island / home indicator */
+.aqi-app-frame{
+  min-height:calc(100dvh - var(--grok-banner-h, 0px));
+  max-width:100vw;
+  overflow-x:hidden;
+  padding-top:var(--grok-banner-h, 0px);
+}
+.aqi-shell{
+  width:100%;
+  max-width:64rem;
+  margin:0 auto;
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+  gap:1.5rem;
+  padding-top:max(1.25rem, env(safe-area-inset-top, 0px));
+  padding-right:max(1rem, env(safe-area-inset-right, 0px));
+  padding-bottom:max(4rem, env(safe-area-inset-bottom, 0px));
+  padding-left:max(1rem, env(safe-area-inset-left, 0px));
+}
 .aqi-grid{display:grid;gap:.75rem;grid-template-columns:1fr;min-width:0;width:100%}
 @media(min-width:640px){.aqi-grid{grid-template-columns:1fr 1fr}}
 @media(min-width:1024px){.aqi-grid{grid-template-columns:1fr 1fr 1fr}}
@@ -230,7 +249,7 @@ function RootDocument() {
         <CreatedWithGrokBanner />
         <AuthProvider>
           <QueryClientProvider client={queryClient}>
-            <div className="min-h-[calc(100dvh-var(--grok-banner-h,0px))] max-w-[100vw] overflow-x-hidden pt-[var(--grok-banner-h,0px)]">
+            <div className="aqi-app-frame">
               <Outlet />
             </div>
           </QueryClientProvider>

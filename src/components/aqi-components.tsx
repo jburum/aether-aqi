@@ -336,7 +336,7 @@ export function AirQualityApp() {
   }, [locations, queries]);
 
   return (
-    <div className="aqi-shell mx-auto flex w-full max-w-5xl min-w-0 flex-col gap-6 overflow-x-hidden px-4 pb-[max(4rem,env(safe-area-inset-bottom))] pt-[max(1.5rem,env(safe-area-inset-top))] sm:px-6">
+    <div className="aqi-shell mx-auto flex w-full max-w-5xl min-w-0 flex-col gap-6 overflow-x-hidden px-4 sm:px-6">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div className="space-y-1">
           <div className="flex items-center gap-2 text-muted">
@@ -1028,8 +1028,9 @@ function buildHourly(data?: AqiData): HourlyPoint[] {
       if (aqi == null) return null;
       return {
         time: t,
-        label: format(parseISO(t), "EEE Ha"),
-        short: format(parseISO(t), "Ha"),
+        // 12-hour clock (avoid "Ha" which prints 24h hour + AM/PM → "14PM")
+        label: format(parseISO(t), "EEE h:mm a"),
+        short: format(parseISO(t), "h a"),
         aqi,
         day: format(parseISO(t), "yyyy-MM-dd"),
       };

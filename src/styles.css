@@ -56,6 +56,14 @@
     -webkit-font-smoothing: antialiased;
   }
 
+  /* Main app shell clears Dynamic Island / home indicator (viewport-fit=cover) */
+  .aqi-shell {
+    padding-top: max(1.25rem, env(safe-area-inset-top, 0px));
+    padding-right: max(1rem, env(safe-area-inset-right, 0px));
+    padding-bottom: max(4rem, env(safe-area-inset-bottom, 0px));
+    padding-left: max(1rem, env(safe-area-inset-left, 0px));
+  }
+
   /* Prevent iOS focus-zoom (requires ≥16px) which pans content off-screen */
   input,
   textarea,
