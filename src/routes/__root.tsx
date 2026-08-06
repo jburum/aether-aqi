@@ -26,25 +26,20 @@ const CRITICAL_CSS = `
 html{color-scheme:dark;max-width:100%;overflow-x:hidden;background:#0c0f12}
 body{margin:0;min-height:100dvh;max-width:100%;overflow-x:hidden;background:#0c0f12;color:#e8eaed;font-family:system-ui,-apple-system,sans-serif;line-height:1.5;-webkit-font-smoothing:antialiased}
 *,*::before,*::after{box-sizing:border-box}
-/*
- * Fixed paint under status bar / Dynamic Island (not in document flow — avoids
- * a large empty gap above the title). Shell padding clears the same inset.
- */
+/* Shared top inset — bar height and content padding must match */
+:root{--aqi-top-inset:env(safe-area-inset-top, 0px)}
 .aqi-status-bar{
   position:fixed;
   top:0;left:0;right:0;
   z-index:300;
   pointer-events:none;
   background:#0c0f12;
-  height:constant(safe-area-inset-top);
-  height:env(safe-area-inset-top, 0px);
+  height:var(--aqi-top-inset);
 }
 @media screen and (max-width: 768px){
-  .aqi-status-bar{
-    height:max(47px, env(safe-area-inset-top, 0px));
-  }
+  :root{--aqi-top-inset:max(47px, env(safe-area-inset-top, 0px))}
   .aqi-shell{
-    padding-top:max(0.75rem, calc(env(safe-area-inset-top, 47px) + 0.5rem));
+    padding-top:calc(var(--aqi-top-inset) + 8px);
     padding-right:max(1rem, env(safe-area-inset-right, 0px));
     padding-bottom:max(4rem, env(safe-area-inset-bottom, 0px));
     padding-left:max(1rem, env(safe-area-inset-left, 0px));
