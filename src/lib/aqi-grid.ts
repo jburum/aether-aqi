@@ -1,11 +1,22 @@
-/** Build a fixed-lattice lat/lon sample grid for regional AQI coloring. */
+/** Fixed global lattice for regional AQI — same cells on every device and zoom. */
 
 export type GridPoint = { latitude: number; longitude: number };
 
 /**
- * Snap-aligned lattice points inside a geographic bounding box.
- * Same lat/lon cells whenever a region is sampled → stable colors when panning.
- * Caps density so we stay within Open-Meteo multi-location limits.
+ * Global lattice step (degrees). MUST be constant — never depend on viewport size.
+ * Desktop and mobile must request the same lon/lat cells for the same geography.
+ */
+export const LATTICE_STEP_DEG = 2;
+
+/** Align a coordinate to the global lattice. */
+export function snapToLattice(n: number, step = LATTICE_STEP_DEG): number {
+  return roundCoord(Math.round(n / step) * step);
+}
+
+/**
+ * Lattice points inside a bbox on the global grid (step = LATTICE_STEP_DEG).
+ * Caps count for Open-Meteo; when capped, still stays on the same lattice
+ * (skips every k-th line) rather than changing step — keeps keys stable.
  */
 export function buildAqiGrid(
   west: number,
@@ -14,79 +25,58 @@ export function buildAqiGrid(
   north: number,
   opts?: { maxPoints?: number; step?: number },
 ): GridPoint[] {
-  const maxPoints = opts?.maxPoints ?? 100;
+  const maxPoints = opts?.maxPoints ?? 120;
+  const step = opts?.step ?? LATTICE_STEP_DEG;
+
   let w = west;
   let e = east;
   if (e < w) e += 360;
 
-  const latSpan = Math.max(0.01, north - south);
-  const lonSpan = Math.max(0.01, e - w);
-
-  // Fixed step from span so lattice positions stay on global grid lines
-  let step =
-    opts?.step ??
-    (lonSpan > 80 || latSpan > 50
-      ? 4
-      : lonSpan > 40 || latSpan > 25
-        ? 2.5
-        : lonSpan > 15 || latSpan > 10
-          ? 1.5
-          : 1);
-
-  // Grow step until under maxPoints
-  for (let guard = 0; guard < 12; guard++) {
-    const cols = Math.max(1, Math.floor(lonSpan / step) + 1);
-    const rows = Math.max(1, Math.floor(latSpan / step) + 1);
-    if (cols * rows <= maxPoints) break;
-    step *= 1.35;
-  }
-  // Snap step to a nice increment so keys align across requests
-  step = niceStep(step);
-
-  const points: GridPoint[] = [];
-  // Align to global lattice: multiples of step
   const lat0 = Math.ceil(south / step) * step;
   const lon0 = Math.ceil(w / step) * step;
 
+  // Collect full lattice first
+  const raw: GridPoint[] = [];
   for (let lat = lat0; lat <= north + 1e-9; lat += step) {
     for (let lon = lon0; lon <= e + 1e-9; lon += step) {
       let longitude = lon;
       if (longitude > 180) longitude -= 360;
       if (longitude < -180) longitude += 360;
-      points.push({
+      raw.push({
         latitude: roundCoord(lat),
         longitude: roundCoord(longitude),
       });
-      if (points.length >= maxPoints) return points;
     }
   }
 
-  // Guarantee a minimum scatter if bbox tiny
-  if (points.length < 4) {
-    const cols = 3;
-    const rows = 3;
-    for (let r = 0; r < rows; r++) {
-      const latitude = south + ((r + 0.5) / rows) * latSpan;
-      for (let c = 0; c < cols; c++) {
-        let longitude = w + ((c + 0.5) / cols) * lonSpan;
-        if (longitude > 180) longitude -= 360;
-        points.push({
-          latitude: roundCoord(latitude),
-          longitude: roundCoord(longitude),
+  if (raw.length === 0) {
+    // Tiny bbox: still emit lattice neighbors around center
+    const clat = snapToLattice((south + north) / 2, step);
+    const clon = snapToLattice((w + e) / 2, step);
+    for (let di = -1; di <= 1; di++) {
+      for (let dj = -1; dj <= 1; dj++) {
+        raw.push({
+          latitude: roundCoord(clat + di * step),
+          longitude: roundCoord(clon + dj * step),
         });
       }
     }
   }
-  return points;
-}
 
-/** Prefer steps that land on clean decimals for stable cache keys. */
-function niceStep(step: number): number {
-  const candidates = [0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10];
-  for (const c of candidates) {
-    if (c >= step * 0.9) return c;
+  if (raw.length <= maxPoints) return raw;
+
+  // Thin by stride but stay on the same lattice (never change step)
+  const stride = Math.ceil(Math.sqrt(raw.length / maxPoints));
+  const thinned: GridPoint[] = [];
+  const latLines = [...new Set(raw.map((p) => p.latitude))].sort((a, b) => a - b);
+  const lonLines = [...new Set(raw.map((p) => p.longitude))].sort((a, b) => a - b);
+  for (let i = 0; i < latLines.length; i += stride) {
+    for (let j = 0; j < lonLines.length; j += stride) {
+      thinned.push({ latitude: latLines[i], longitude: lonLines[j] });
+      if (thinned.length >= maxPoints) return thinned;
+    }
   }
-  return Math.ceil(step);
+  return thinned;
 }
 
 /** Round for cache keys / stable multi-location requests. */
@@ -128,4 +118,40 @@ export function gridToGeoJSON(samples: GridSample[]): AqiGridFeatureCollection {
         },
       })),
   };
+}
+
+/** Bounding box from watchlist locations + fixed pad (device-independent). */
+export function boundsFromLocations(
+  locs: Array<{ latitude: number; longitude: number }>,
+  padDeg = 12,
+): { west: number; south: number; east: number; north: number } | null {
+  if (!locs.length) return null;
+  let south = Infinity;
+  let north = -Infinity;
+  let west = Infinity;
+  let east = -Infinity;
+  for (const l of locs) {
+    south = Math.min(south, l.latitude);
+    north = Math.max(north, l.latitude);
+    west = Math.min(west, l.longitude);
+    east = Math.max(east, l.longitude);
+  }
+  // Minimum span so a single pin still gets a real field
+  const latPad = Math.max(padDeg, (north - south) * 0.35 + 6);
+  const lonPad = Math.max(padDeg, (east - west) * 0.35 + 6);
+  south = Math.max(-85, south - latPad);
+  north = Math.min(85, north + latPad);
+  west = west - lonPad;
+  east = east + lonPad;
+  if (east - west > 150) {
+    const mid = (west + east) / 2;
+    west = mid - 75;
+    east = mid + 75;
+  }
+  if (north - south > 75) {
+    const mid = (south + north) / 2;
+    south = mid - 37.5;
+    north = mid + 37.5;
+  }
+  return { west, south, east, north };
 }

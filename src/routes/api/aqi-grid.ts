@@ -36,8 +36,8 @@ export const Route = createFileRoute("/api/aqi-grid")({
         }
 
         const points = buildAqiGrid(west, south, east, north, {
-          // Denser fixed lattice → more accurate bilinear zones
-          maxPoints: lonSpan > 80 ? 64 : lonSpan > 40 ? 90 : 120,
+          // Always LATTICE_STEP_DEG (2°); thin by stride if needed — never change step
+          maxPoints: lonSpan > 80 ? 80 : lonSpan > 40 ? 100 : 140,
         });
         if (points.length === 0) {
           return Response.json({ samples: [] });
