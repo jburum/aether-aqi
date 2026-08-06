@@ -1,8 +1,7 @@
 /**
  * Continuous AQI color field from sparse samples (IDW → canvas → MapLibre raster).
- * Designed to stay smooth at continental zoom (no nearest-neighbor Voronoi blocks).
+ * Tuned so yellow/orange/red trouble spots punch through at continental zoom.
  */
-import { AQI_HEX } from "@/lib/aqi";
 import type { GridSample } from "@/lib/aqi-grid";
 
 export type FieldBounds = {
@@ -23,92 +22,106 @@ function hexToRgb(hex: string): [number, number, number] {
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 
+function lerpRgb(
+  a: [number, number, number],
+  b: [number, number, number],
+  t: number,
+): [number, number, number] {
+  const u = Math.max(0, Math.min(1, t));
+  return [
+    Math.round(a[0] + (b[0] - a[0]) * u),
+    Math.round(a[1] + (b[1] - a[1]) * u),
+    Math.round(a[2] + (b[2] - a[2]) * u),
+  ];
+}
+
 /**
- * Continuous AQI → RGB. Green stays muted; USG+ is pushed toward saturated
- * orange/red so trouble spots read clearly at continental zoom.
+ * Aggressive display ramp: good = dark quiet green; moderate = bright yellow;
+ * USG = hot orange; unhealthy+ = pure red / magenta.
  */
 export function aqiToRgb(aqi: number): [number, number, number] {
-  // Desaturated good / moderate; vivid unhealthy+
-  const stops: Array<[number, string]> = [
-    [0, "#2a6b45"], // muted good
-    [50, "#3a8f58"],
-    [75, "#a8920a"], // muted moderate
-    [100, "#c4a40c"],
-    [110, "#e07a1f"], // snap toward USG orange
-    [150, "#f06a12"],
-    [160, "#e23d3d"], // unhealthy red pops early
-    [200, "#ff2d2d"],
-    [250, "#c44dff"], // very
-    [300, "#9b5de5"],
-    [400, "#7f1d1d"],
-    [500, "#5c0a0a"],
-  ];
-  // Emphasize upper range: compress low AQI, stretch 100–200
-  const v = emphasizeAqi(Math.max(0, Math.min(500, aqi)));
-  let i = 0;
-  while (i < stops.length - 1 && v > stops[i + 1][0]) i += 1;
-  const [a0, c0] = stops[i];
-  const [a1, c1] = stops[Math.min(i + 1, stops.length - 1)];
-  const [r0, g0, b0] = hexToRgb(c0);
-  const [r1, g1, b1] = hexToRgb(c1);
-  if (a1 === a0) return [r0, g0, b0];
-  const t = (v - a0) / (a1 - a0);
-  return [
-    Math.round(r0 + (r1 - r0) * t),
-    Math.round(g0 + (g1 - g0) * t),
-    Math.round(b0 + (b1 - b0) * t),
-  ];
+  const v = Math.max(0, Math.min(500, aqi));
+  // Bright saturated anchors (not the muted theme greens)
+  const good: [number, number, number] = [22, 72, 48];
+  const moderate: [number, number, number] = [255, 214, 0]; // electric yellow
+  const usg: [number, number, number] = [255, 120, 0]; // hot orange
+  const unhealthy: [number, number, number] = [255, 40, 40]; // alert red
+  const very: [number, number, number] = [200, 40, 255];
+  const haz: [number, number, number] = [120, 0, 20];
+
+  if (v <= 50) return lerpRgb(good, [40, 100, 60], v / 50);
+  if (v <= 80) return lerpRgb([40, 100, 60], moderate, (v - 50) / 30);
+  if (v <= 100) return lerpRgb(moderate, [255, 180, 0], (v - 80) / 20);
+  if (v <= 130) return lerpRgb([255, 180, 0], usg, (v - 100) / 30);
+  if (v <= 150) return lerpRgb(usg, [255, 80, 20], (v - 130) / 20);
+  if (v <= 180) return lerpRgb([255, 80, 20], unhealthy, (v - 150) / 30);
+  if (v <= 250) return lerpRgb(unhealthy, very, (v - 180) / 70);
+  return lerpRgb(very, haz, Math.min(1, (v - 250) / 150));
 }
 
-/** Piecewise map so 100–200 (trouble) occupies more of the color ramp. */
-function emphasizeAqi(aqi: number): number {
-  if (aqi <= 50) return aqi * 0.7; // keep good subdued
-  if (aqi <= 100) return 35 + (aqi - 50) * 1.0;
-  if (aqi <= 150) return 85 + (aqi - 100) * 1.4; // accelerate into orange
-  if (aqi <= 200) return 155 + (aqi - 150) * 1.3; // strong red
-  return 220 + (aqi - 200) * 0.9;
-}
-
-/** Alpha: good air translucent, unhealthy more solid so reds punch through. */
-function aqiToAlpha(aqi: number, base = 130): number {
-  if (aqi <= 50) return Math.round(base * 0.55);
-  if (aqi <= 100) return Math.round(base * 0.75);
-  if (aqi <= 150) return Math.round(base * 0.95);
-  if (aqi <= 200) return Math.min(220, Math.round(base * 1.2));
-  return Math.min(235, Math.round(base * 1.3));
+/** Opacity ramps hard into yellow/red so trouble isn't translucent wash. */
+function aqiToAlpha(aqi: number): number {
+  if (aqi <= 50) return 70;
+  if (aqi <= 80) return 110;
+  if (aqi <= 100) return 160;
+  if (aqi <= 130) return 195;
+  if (aqi <= 150) return 215;
+  if (aqi <= 200) return 235;
+  return 245;
 }
 
 /**
- * IDW with lat-corrected distance. Lower power → smoother continental field.
- * No hard nearest-neighbor cutoff (that caused the checkerboard at US zoom).
+ * IDW + hotspot boost: if any nearby sample is elevated, pull the field
+ * toward that max so red zones don't average into green.
  */
-function idw(
+function sampleField(
   lon: number,
   lat: number,
   samples: Sample[],
   power: number,
   cosLat: number,
+  influenceDeg: number,
 ): number {
   let num = 0;
   let den = 0;
+  let maxNear = 0;
+  let maxW = 0;
+  const infl2 = influenceDeg * influenceDeg;
+
   for (const s of samples) {
     const dlon = (lon - s.lon) * cosLat;
     const dlat = lat - s.lat;
     const d2 = dlon * dlon + dlat * dlat;
     if (d2 < 1e-16) return s.aqi;
+
     const w = 1 / Math.pow(d2, power / 2);
     num += w * s.aqi;
     den += w;
+
+    if (d2 <= infl2 && s.aqi > maxNear) {
+      maxNear = s.aqi;
+      // closer high samples dominate more
+      maxW = Math.exp(-Math.sqrt(d2) / (influenceDeg * 0.45));
+    }
   }
-  return den > 0 ? num / den : 0;
+
+  const base = den > 0 ? num / den : 0;
+
+  // Boost toward local max when it's a real trouble spot
+  if (maxNear >= 90 && maxW > 0.05) {
+    const severity = Math.min(1, (maxNear - 80) / 100); // 0 at 80 → 1 at 180
+    const mix = Math.min(0.85, maxW * (0.55 + 0.45 * severity));
+    return base * (1 - mix) + maxNear * mix;
+  }
+  return base;
 }
 
-/** Choose canvas size from geographic span (more pixels when zoomed out). */
 export function fieldCanvasSize(bounds: FieldBounds): {
   width: number;
   height: number;
   power: number;
   blur: number;
+  influence: number;
 } {
   let { west, east, south, north } = bounds;
   if (east < west) east += 360;
@@ -117,27 +130,22 @@ export function fieldCanvasSize(bounds: FieldBounds): {
   const span = Math.max(lonSpan, latSpan);
 
   if (span > 50) {
-    // Full North America-ish
-    return { width: 480, height: 320, power: 1.35, blur: 3 };
+    return { width: 512, height: 340, power: 1.8, blur: 1, influence: 14 };
   }
   if (span > 20) {
-    return { width: 400, height: 280, power: 1.5, blur: 2 };
+    return { width: 420, height: 290, power: 1.9, blur: 1, influence: 8 };
   }
   if (span > 8) {
-    return { width: 360, height: 240, power: 1.7, blur: 2 };
+    return { width: 380, height: 260, power: 2.0, blur: 1, influence: 4 };
   }
-  return { width: 320, height: 220, power: 1.9, blur: 1 };
+  return { width: 340, height: 240, power: 2.15, blur: 1, influence: 2.5 };
 }
 
-/**
- * Rasterize samples into a PNG data URL covering the bounds.
- */
 export function renderAqiFieldDataUrl(
   samples: GridSample[],
   bounds: FieldBounds,
   width?: number,
   height?: number,
-  baseAlpha = 145,
 ): string | null {
   const pts: Sample[] = samples
     .filter((s) => s.us_aqi != null && Number.isFinite(s.us_aqi as number))
@@ -158,9 +166,6 @@ export function renderAqiFieldDataUrl(
   const auto = fieldCanvasSize(bounds);
   const w = width ?? auto.width;
   const h = height ?? auto.height;
-  // Slightly higher power keeps hot spots localized vs washing into green
-  const power = Math.min(2.1, auto.power + 0.25);
-  const blurR = Math.max(1, auto.blur - 0); // keep smooth but don't smear reds away
 
   const canvas =
     typeof document !== "undefined" ? document.createElement("canvas") : null;
@@ -178,24 +183,26 @@ export function renderAqiFieldDataUrl(
     for (let x = 0; x < w; x++) {
       let lon = west + ((x + 0.5) / w) * lonSpan;
       if (lon > 180) lon -= 360;
-      const aqi = idw(lon, lat, pts, power, cosLat);
+      const aqi = sampleField(
+        lon,
+        lat,
+        pts,
+        auto.power,
+        cosLat,
+        auto.influence,
+      );
       const i = (y * w + x) * 4;
       const [r, g, b] = aqiToRgb(aqi);
       data[i] = r;
       data[i + 1] = g;
       data[i + 2] = b;
-      // Per-pixel alpha: red zones denser/more opaque than good air
-      data[i + 3] = aqiToAlpha(aqi, baseAlpha);
+      data[i + 3] = aqiToAlpha(aqi);
     }
   }
 
-  // Multi-pass blur for continental smoothness (don't over-blur hot spots)
-  let buf: Uint8ClampedArray = data;
-  const passes = Math.max(1, blurR);
-  for (let p = 0; p < passes; p++) {
-    buf = boxBlur(buf, w, h, p === passes - 1 ? 1 : Math.min(2, blurR));
-  }
-  img.data.set(buf);
+  // Single light blur only — multi-pass was killing reds into olive
+  const blurred = boxBlur(data, w, h, auto.blur);
+  img.data.set(blurred);
   ctx.putImageData(img, 0, 0);
   return canvas.toDataURL("image/png");
 }
@@ -240,7 +247,6 @@ function boxBlur(
   return out;
 }
 
-/** NW, NE, SE, SW corners for MapLibre image source (lng/lat). */
 export function boundsToImageCoordinates(b: FieldBounds): [
   [number, number],
   [number, number],

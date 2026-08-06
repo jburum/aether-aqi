@@ -121,8 +121,8 @@ export function WatchlistMap() {
         type: "raster",
         source: FIELD_SOURCE,
         paint: {
-          // Slightly higher so orange/red trouble reads at NA zoom
-          "raster-opacity": 0.62,
+          // High enough that yellow/red hotspots read at NA zoom
+          "raster-opacity": 0.78,
           "raster-fade-duration": 0,
           "raster-resampling": "linear",
         },
