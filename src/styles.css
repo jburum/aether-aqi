@@ -135,6 +135,22 @@
 .aqi-map-canvas .maplibregl-ctrl-group button {
   width: 36px !important;
   height: 36px !important;
+  background-color: transparent !important;
+}
+
+/* White + / − on dark control chrome */
+.aqi-map-canvas .maplibregl-ctrl-group button .maplibregl-ctrl-icon {
+  filter: brightness(0) invert(1);
+  opacity: 0.95;
+}
+
+.aqi-map-canvas .maplibregl-ctrl-group button:hover .maplibregl-ctrl-icon,
+.aqi-map-canvas .maplibregl-ctrl-group button:focus .maplibregl-ctrl-icon {
+  opacity: 1;
+}
+
+.aqi-map-canvas .maplibregl-ctrl-group button + button {
+  border-top-color: var(--color-border) !important;
 }
 
 .aqi-map-marker {

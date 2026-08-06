@@ -37,14 +37,14 @@ function lerpRgb(
 }
 
 /**
- * Vivid EPA palette — yellow/orange/red start earlier and stay saturated
- * so moderate (e.g. LA 64) reads yellow, not green-tinted.
+ * EPA palette aligned to official bands:
+ * 0–50 green, 51–100 yellow, 101–150 orange, 151+ red…
+ * Good air (e.g. Newport 46) must stay green — no early yellow.
  */
 export function aqiToRgb(aqi: number): [number, number, number] {
   const v = Math.max(0, Math.min(500, aqi));
-  const good: [number, number, number] = [28, 115, 68];
-  const lightGreen: [number, number, number] = [120, 175, 50];
-  // Enter yellow early so ~55–70 is clearly yellow
+  const good: [number, number, number] = [34, 140, 78];
+  const goodHi: [number, number, number] = [70, 168, 72];
   const yellow: [number, number, number] = [255, 220, 0];
   const gold: [number, number, number] = [255, 185, 0];
   const orange: [number, number, number] = [255, 125, 0];
@@ -53,21 +53,22 @@ export function aqiToRgb(aqi: number): [number, number, number] {
   const purple: [number, number, number] = [175, 40, 220];
   const maroon: [number, number, number] = [100, 10, 20];
 
-  if (v <= 40) return lerpRgb(good, lightGreen, v / 40);
-  // 40–55: green → yellow (so 50+ already yellowing)
-  if (v <= 55) return lerpRgb(lightGreen, yellow, (v - 40) / 15);
-  if (v <= 80) return lerpRgb(yellow, gold, (v - 55) / 25);
-  if (v <= 100) return lerpRgb(gold, orange, (v - 80) / 20);
-  if (v <= 130) return lerpRgb(orange, deepOrange, (v - 100) / 30);
-  if (v <= 150) return lerpRgb(deepOrange, red, (v - 130) / 20);
-  if (v <= 200) return lerpRgb(red, [255, 20, 60], (v - 150) / 50);
-  if (v <= 300) return lerpRgb([255, 20, 60], purple, (v - 200) / 100);
+  // Solid green through the "Good" band (0–50)
+  if (v <= 50) return lerpRgb(good, goodHi, v / 50);
+  // Moderate → yellow/gold
+  if (v <= 75) return lerpRgb(goodHi, yellow, (v - 50) / 25);
+  if (v <= 100) return lerpRgb(yellow, gold, (v - 75) / 25);
+  // USG → orange
+  if (v <= 125) return lerpRgb(gold, orange, (v - 100) / 25);
+  if (v <= 150) return lerpRgb(orange, deepOrange, (v - 125) / 25);
+  // Unhealthy → red
+  if (v <= 200) return lerpRgb(deepOrange, red, (v - 150) / 50);
+  if (v <= 300) return lerpRgb(red, purple, (v - 200) / 100);
   return lerpRgb(purple, maroon, Math.min(1, (v - 300) / 200));
 }
 
 function aqiToAlpha(aqi: number): number {
-  // Stronger opacity on moderate+ so yellow/red dominate the basemap
-  if (aqi <= 45) return 120;
+  if (aqi <= 50) return 135;
   if (aqi <= 70) return 175;
   if (aqi <= 100) return 200;
   if (aqi <= 150) return 225;
@@ -76,27 +77,21 @@ function aqiToAlpha(aqi: number): number {
 }
 
 /**
- * Strong accent: pull moderate into clear yellow and unhealthy into red
- * after blur still leaves values a bit soft.
+ * Accent only moderate+ so yellow/red read clearly.
+ * Never push good air (≤50) into yellow — that made Newport 46 look gold.
  */
 function accentuate(aqi: number): number {
-  if (aqi <= 35) return aqi;
-  if (aqi <= 55) {
-    // Jump toward yellow threshold
-    const t = (aqi - 35) / 20;
-    return 35 + t * 30 + t * t * 8; // ~35 → ~73 at 55
-  }
+  if (aqi <= 50) return aqi; // keep Good band truthful
   if (aqi <= 100) {
-    const t = (aqi - 55) / 45;
-    // Push mid-moderate firmly into gold/orange-readable range
-    return 73 + t * 45 + t * (1 - t) * 18;
+    const t = (aqi - 50) / 50;
+    // Mild lift inside moderate only
+    return 50 + t * 50 + t * (1 - t) * 10;
   }
   if (aqi <= 150) {
     const t = (aqi - 100) / 50;
-    return 118 + t * 55 + t * (1 - t) * 14; // ~118 → ~187
+    return 100 + t * 50 + t * (1 - t) * 12;
   }
-  // Unhealthy+ get a firm red lift
-  return aqi + Math.min(35, 12 + (aqi - 150) * 0.12);
+  return aqi + Math.min(28, 10 + (aqi - 150) * 0.1);
 }
 
 /**
@@ -298,12 +293,13 @@ function sampleIdw(
 }
 
 /**
- * Soft peak preservation: for each elevated sample, raise nearby pixels
- * toward that sample's AQI with a smooth radial falloff.
- * Only lifts (never carves sectors) — after a light blur this becomes
- * clean yellow/red weather-map islands that match pin colors.
+ * Soft sample authority: pull field toward sample AQI with smooth falloff.
+ * - Elevated samples: lift (yellow/red islands)
+ * - Good pins (e.g. Newport 46): also pull *down* so green pins aren't
+ *   buried under yellow IDW from distant moderate neighbors
+ * `bidirectional` true = pins (trusted); false = grid peaks (lift only)
  */
-function preservePeaks(
+function applySampleInfluence(
   field: Float32Array,
   w: number,
   h: number,
@@ -311,14 +307,13 @@ function preservePeaks(
   lonSpan: number,
   latSpan: number,
   north: number,
-  peaks: Sample[],
+  samples: Sample[],
   cosLat: number,
+  bidirectional: boolean,
 ): void {
-  if (!peaks.length) return;
+  if (!samples.length) return;
 
-  for (const p of peaks) {
-    // Geographic radius (degrees): moderate gets a real island; red gets larger
-    // LA 64 → ~3.5°, 130 → ~6°, 154 → ~7°
+  for (const p of samples) {
     const R =
       p.aqi >= 150
         ? 7.5
@@ -326,11 +321,20 @@ function preservePeaks(
           ? 6.0
           : p.aqi >= 70
             ? 4.5
-            : 3.5;
+            : p.aqi >= 51
+              ? 3.5
+              : 4.0; // good pins still get a clear local green island
     const boost =
-      p.aqi >= 150 ? 0.95 : p.aqi >= 100 ? 0.9 : p.aqi >= 70 ? 0.88 : 0.85;
+      p.aqi >= 150
+        ? 0.95
+        : p.aqi >= 100
+          ? 0.9
+          : p.aqi >= 70
+            ? 0.88
+            : p.aqi >= 51
+              ? 0.85
+              : 0.92; // strong local match for good pins
 
-    // Pixel bounds for this peak (skip far pixels)
     const px = ((p.lon < west ? p.lon + 360 : p.lon) - west) / lonSpan;
     const py = (north - p.lat) / latSpan;
     const padX = (R / lonSpan) * 1.15;
@@ -349,15 +353,17 @@ function preservePeaks(
         const dlat = lat - p.lat;
         const d = Math.sqrt(dlon * dlon + dlat * dlat);
         if (d >= R) continue;
-        // Smoothstep falloff (C1 continuous — no hard edges)
         const t = 1 - d / R;
         const fall = t * t * (3 - 2 * t);
         const mix = fall * boost;
         const i = y * w + x;
         const cur = field[i];
-        // Only lift toward peak — preserves clean blend into green surroundings
-        const lifted = cur * (1 - mix) + p.aqi * mix;
-        if (lifted > cur) field[i] = lifted;
+        const blended = cur * (1 - mix) + p.aqi * mix;
+        if (bidirectional) {
+          field[i] = blended; // pins: match pin color both ways
+        } else if (blended > cur) {
+          field[i] = blended; // grid: only lift elevated
+        }
       }
     }
   }
@@ -426,23 +432,9 @@ export function renderAqiFieldDataUrl(
     }
   }
 
-  // 2) Soft peak preservation — pins always; grid samples that are moderate+
-  //    so regional yellow/red islands match pin numbers (e.g. LA 64 → yellow).
-  const peakCandidates: Sample[] = [];
-  const seen = new Set<string>();
-  const addPeak = (p: Sample, minAqi: number) => {
-    if (p.aqi < minAqi) return;
-    const k = `${p.lon.toFixed(2)},${p.lat.toFixed(2)}`;
-    if (seen.has(k)) return;
-    seen.add(k);
-    peakCandidates.push(p);
-  };
-  // Pins: preserve even light moderate (55+) so list places always match field
-  for (const p of pins) addPeak(p, 55);
-  // Grid: only elevated samples (avoid polka-dotting every mild reading)
-  for (const p of pts) addPeak(p, 65);
-
-  preservePeaks(
+  // 2) Pin authority (all pins, both directions) so Newport 46 → green island
+  //    and LA 64 / NW 154 match yellow/red. Then grid lift for elevated cells.
+  applySampleInfluence(
     field,
     w,
     h,
@@ -450,8 +442,31 @@ export function renderAqiFieldDataUrl(
     lonSpan,
     latSpan,
     north,
-    peakCandidates,
+    pins,
     cosLat,
+    true,
+  );
+
+  const elevatedGrid: Sample[] = [];
+  const seen = new Set(pins.map((p) => `${p.lon.toFixed(2)},${p.lat.toFixed(2)}`));
+  for (const p of pts) {
+    if (p.aqi < 65) continue;
+    const k = `${p.lon.toFixed(2)},${p.lat.toFixed(2)}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    elevatedGrid.push(p);
+  }
+  applySampleInfluence(
+    field,
+    w,
+    h,
+    west,
+    lonSpan,
+    latSpan,
+    north,
+    elevatedGrid,
+    cosLat,
+    false,
   );
 
   // 3) Moderate blur → soft zone edges without dissolving peaks into green
