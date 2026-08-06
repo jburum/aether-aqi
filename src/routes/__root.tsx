@@ -12,10 +12,14 @@ import appCss from "../styles.css?url";
 
 const APP_NAME = "Air Quality Watchlist";
 const APP_SHORT = "Air Quality";
-const host = import.meta.env.VITE_PUBLIC_HOSTNAME;
-const ogImage = host
-  ? `https://og.grok.me/v1/card.png?host=${encodeURIComponent(host)}&title=${encodeURIComponent(APP_NAME)}`
-  : undefined;
+const APP_DESCRIPTION =
+  "Track and forecast US Air Quality Index for the places you care about. Hourly & daily AQI — installable PWA.";
+/** Canonical site origin for absolute OG/Twitter image URLs (iMessage requires absolute). */
+const siteOrigin = import.meta.env.VITE_PUBLIC_HOSTNAME
+  ? `https://${import.meta.env.VITE_PUBLIC_HOSTNAME}`
+  : "https://aether-aqi.vercel.app";
+/** Branded 1200×630 share card — matches home-screen icon (not the tiny grok OG card). */
+const OG_IMAGE = `${siteOrigin}/og-image.png?v=1`;
 
 /**
  * Critical layout CSS inlined so the shell still works if a stale service worker
@@ -74,11 +78,7 @@ export const Route = createRootRoute({
         content: "width=device-width, initial-scale=1, viewport-fit=cover",
       },
       { title: APP_NAME },
-      {
-        name: "description",
-        content:
-          "Track and forecast US Air Quality Index for up to 15 locations. Installable PWA with hourly and daily forecasts.",
-      },
+      { name: "description", content: APP_DESCRIPTION },
       { name: "theme-color", content: "#0c0f12" },
       { name: "color-scheme", content: "dark" },
       { name: "mobile-web-app-capable", content: "yes" },
@@ -90,20 +90,39 @@ export const Route = createRootRoute({
       { name: "apple-mobile-web-app-title", content: APP_SHORT },
       { name: "application-name", content: APP_SHORT },
       { name: "format-detection", content: "telephone=no" },
-      ...(ogImage
-        ? [
-            { property: "og:image", content: ogImage },
-            { property: "og:image:width", content: "1200" },
-            { property: "og:image:height", content: "630" },
-            { property: "og:title", content: APP_NAME },
-          ]
-        : []),
+      // --- Open Graph (iMessage / Messages large preview) ---
+      { property: "og:type", content: "website" },
+      { property: "og:site_name", content: APP_NAME },
+      { property: "og:locale", content: "en_US" },
+      { property: "og:url", content: `${siteOrigin}/` },
+      { property: "og:title", content: APP_NAME },
+      { property: "og:description", content: APP_DESCRIPTION },
+      { property: "og:image", content: OG_IMAGE },
+      { property: "og:image:secure_url", content: OG_IMAGE },
+      { property: "og:image:type", content: "image/png" },
+      { property: "og:image:width", content: "1200" },
+      { property: "og:image:height", content: "630" },
+      {
+        property: "og:image:alt",
+        content: "Air Quality Watchlist app icon — track US AQI forecasts",
+      },
+      // --- Twitter / large card fallbacks ---
+      { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:title", content: APP_NAME },
+      { name: "twitter:description", content: APP_DESCRIPTION },
+      { name: "twitter:image", content: OG_IMAGE },
+      {
+        name: "twitter:image:alt",
+        content: "Air Quality Watchlist app icon — track US AQI forecasts",
+      },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
       { rel: "manifest", href: "/manifest.webmanifest" },
+      { rel: "canonical", href: `${siteOrigin}/` },
       { rel: "icon", href: "/icon-192.png", sizes: "192x192", type: "image/png" },
       { rel: "icon", href: "/icon-512.png", sizes: "512x512", type: "image/png" },
+      // Primary home-screen / share icon (same art as OG card)
       {
         rel: "apple-touch-icon",
         href: "/apple-touch-icon.png",
