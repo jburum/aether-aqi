@@ -7,8 +7,9 @@
     "nf3": "0.3.17"
   },
   "scripts": {
+    "postinstall": "node scripts/copy-maplibre-worker.mjs",
     "dev": "vite dev --host 0.0.0.0 --port 8080",
-    "build": "vite build && npm run db:migrate",
+    "build": "node scripts/copy-maplibre-worker.mjs && vite build && npm run db:migrate",
     "db:migrate": "node scripts/migrate.mjs",
     "build:dev": "vite build --mode development",
     "preview": "vite preview --host 0.0.0.0 --port 8080",

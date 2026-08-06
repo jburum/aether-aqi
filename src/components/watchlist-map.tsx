@@ -6,8 +6,6 @@ import {
   LngLatBounds,
   setWorkerUrl,
 } from "maplibre-gl";
-// Vite must bundle the worker; default lookup hits /assets/maplibre-gl-worker.mjs (404)
-import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { useQueries } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
@@ -18,7 +16,9 @@ import { useLocationsStore } from "@/lib/locations-store";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-setWorkerUrl(maplibreWorkerUrl);
+// Stable public path: worker ESM imports ./maplibre-gl-shared.mjs alongside it.
+// (Vite hashed ?url breaks the relative shared import → black map.)
+setWorkerUrl("/maplibre/maplibre-gl-worker.mjs");
 
 // button look for router links (Button has no asChild)
 const linkBtn =
