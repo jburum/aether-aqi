@@ -24,26 +24,27 @@ function hexToRgb(hex: string): [number, number, number] {
 }
 
 /**
- * Continuous AQI → RGB (smooth across EPA band boundaries so the field
- * doesn't look posterized into hard blocks).
+ * Continuous AQI → RGB. Green stays muted; USG+ is pushed toward saturated
+ * orange/red so trouble spots read clearly at continental zoom.
  */
 export function aqiToRgb(aqi: number): [number, number, number] {
-  // Anchor colors at band midpoints / edges for smooth lerp
+  // Desaturated good / moderate; vivid unhealthy+
   const stops: Array<[number, string]> = [
-    [0, AQI_HEX.good],
-    [50, AQI_HEX.good],
-    [75, AQI_HEX.moderate],
-    [100, AQI_HEX.moderate],
-    [125, AQI_HEX.usg],
-    [150, AQI_HEX.usg],
-    [175, AQI_HEX.unhealthy],
-    [200, AQI_HEX.unhealthy],
-    [250, AQI_HEX.very],
-    [300, AQI_HEX.very],
-    [400, AQI_HEX.hazardous],
-    [500, AQI_HEX.hazardous],
+    [0, "#2a6b45"], // muted good
+    [50, "#3a8f58"],
+    [75, "#a8920a"], // muted moderate
+    [100, "#c4a40c"],
+    [110, "#e07a1f"], // snap toward USG orange
+    [150, "#f06a12"],
+    [160, "#e23d3d"], // unhealthy red pops early
+    [200, "#ff2d2d"],
+    [250, "#c44dff"], // very
+    [300, "#9b5de5"],
+    [400, "#7f1d1d"],
+    [500, "#5c0a0a"],
   ];
-  const v = Math.max(0, Math.min(500, aqi));
+  // Emphasize upper range: compress low AQI, stretch 100–200
+  const v = emphasizeAqi(Math.max(0, Math.min(500, aqi)));
   let i = 0;
   while (i < stops.length - 1 && v > stops[i + 1][0]) i += 1;
   const [a0, c0] = stops[i];
@@ -57,6 +58,24 @@ export function aqiToRgb(aqi: number): [number, number, number] {
     Math.round(g0 + (g1 - g0) * t),
     Math.round(b0 + (b1 - b0) * t),
   ];
+}
+
+/** Piecewise map so 100–200 (trouble) occupies more of the color ramp. */
+function emphasizeAqi(aqi: number): number {
+  if (aqi <= 50) return aqi * 0.7; // keep good subdued
+  if (aqi <= 100) return 35 + (aqi - 50) * 1.0;
+  if (aqi <= 150) return 85 + (aqi - 100) * 1.4; // accelerate into orange
+  if (aqi <= 200) return 155 + (aqi - 150) * 1.3; // strong red
+  return 220 + (aqi - 200) * 0.9;
+}
+
+/** Alpha: good air translucent, unhealthy more solid so reds punch through. */
+function aqiToAlpha(aqi: number, base = 130): number {
+  if (aqi <= 50) return Math.round(base * 0.55);
+  if (aqi <= 100) return Math.round(base * 0.75);
+  if (aqi <= 150) return Math.round(base * 0.95);
+  if (aqi <= 200) return Math.min(220, Math.round(base * 1.2));
+  return Math.min(235, Math.round(base * 1.3));
 }
 
 /**
@@ -118,7 +137,7 @@ export function renderAqiFieldDataUrl(
   bounds: FieldBounds,
   width?: number,
   height?: number,
-  alpha = 155,
+  baseAlpha = 145,
 ): string | null {
   const pts: Sample[] = samples
     .filter((s) => s.us_aqi != null && Number.isFinite(s.us_aqi as number))
@@ -139,8 +158,9 @@ export function renderAqiFieldDataUrl(
   const auto = fieldCanvasSize(bounds);
   const w = width ?? auto.width;
   const h = height ?? auto.height;
-  const power = auto.power;
-  const blurR = auto.blur;
+  // Slightly higher power keeps hot spots localized vs washing into green
+  const power = Math.min(2.1, auto.power + 0.25);
+  const blurR = Math.max(1, auto.blur - 0); // keep smooth but don't smear reds away
 
   const canvas =
     typeof document !== "undefined" ? document.createElement("canvas") : null;
@@ -164,14 +184,16 @@ export function renderAqiFieldDataUrl(
       data[i] = r;
       data[i + 1] = g;
       data[i + 2] = b;
-      data[i + 3] = alpha;
+      // Per-pixel alpha: red zones denser/more opaque than good air
+      data[i + 3] = aqiToAlpha(aqi, baseAlpha);
     }
   }
 
-  // Multi-pass blur for continental smoothness
+  // Multi-pass blur for continental smoothness (don't over-blur hot spots)
   let buf: Uint8ClampedArray = data;
-  for (let p = 0; p < Math.max(1, blurR); p++) {
-    buf = boxBlur(buf, w, h, Math.min(2, blurR));
+  const passes = Math.max(1, blurR);
+  for (let p = 0; p < passes; p++) {
+    buf = boxBlur(buf, w, h, p === passes - 1 ? 1 : Math.min(2, blurR));
   }
   img.data.set(buf);
   ctx.putImageData(img, 0, 0);

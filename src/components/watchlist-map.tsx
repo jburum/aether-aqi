@@ -121,9 +121,9 @@ export function WatchlistMap() {
         type: "raster",
         source: FIELD_SOURCE,
         paint: {
-          "raster-opacity": 0.52,
+          // Slightly higher so orange/red trouble reads at NA zoom
+          "raster-opacity": 0.62,
           "raster-fade-duration": 0,
-          // Linear resampling is critical when the field is stretched at low zoom
           "raster-resampling": "linear",
         },
       });
