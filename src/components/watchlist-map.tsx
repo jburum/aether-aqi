@@ -84,6 +84,8 @@ export function WatchlistMap() {
       })),
     [locations, queries],
   );
+  const pointsRef = useRef(points);
+  pointsRef.current = points;
 
   const selected = points.find((p) => p.loc.id === selectedId) ?? null;
 
@@ -176,7 +178,15 @@ export function WatchlistMap() {
           );
           setGridCount(withAqi.length);
           // Size/power/blur auto-tune for continental vs local spans
-          const dataUrl = renderAqiFieldDataUrl(samples, bounds);
+          // Inject watchlist pin AQI so field matches official card numbers
+          const pinSamples = pointsRef.current
+            .filter((p) => p.aqi != null)
+            .map((p) => ({
+              latitude: p.loc.latitude,
+              longitude: p.loc.longitude,
+              us_aqi: p.aqi as number,
+            }));
+          const dataUrl = renderAqiFieldDataUrl(samples, bounds, pinSamples);
           if (!dataUrl) return;
           const src = mapRef.current.getSource(FIELD_SOURCE) as
             | {

@@ -1,6 +1,9 @@
 /**
- * Continuous AQI color field from sparse samples (IDW → canvas → MapLibre raster).
- * Tuned so yellow/orange/red trouble spots punch through at continental zoom.
+ * Continuous AQI field for the map:
+ * 1) Sample Open-Meteo on a viewport grid
+ * 2) Bilinear (or IDW) interpolate to a canvas
+ * 3) Inject watchlist pin AQI so the field matches official cards
+ * 4) EPA-band colors with strong yellow/orange/red for elevated AQI
  */
 import type { GridSample } from "@/lib/aqi-grid";
 
@@ -13,16 +16,7 @@ export type FieldBounds = {
 
 type Sample = { lon: number; lat: number; aqi: number };
 
-function hexToRgb(hex: string): [number, number, number] {
-  const h = hex.replace("#", "");
-  const n = parseInt(
-    h.length === 3 ? h.split("").map((c) => c + c).join("") : h,
-    16,
-  );
-  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-}
-
-function lerpRgb(
+function lerp(
   a: [number, number, number],
   b: [number, number, number],
   t: number,
@@ -35,125 +29,182 @@ function lerpRgb(
   ];
 }
 
-/**
- * Aggressive display ramp: good = dark quiet green; moderate = bright yellow;
- * USG = hot orange; unhealthy+ = pure red / magenta.
- */
+/** EPA-accurate bands with vivid yellow → orange → red. */
 export function aqiToRgb(aqi: number): [number, number, number] {
   const v = Math.max(0, Math.min(500, aqi));
-  // Bright saturated anchors (not the muted theme greens)
-  const good: [number, number, number] = [22, 72, 48];
-  const moderate: [number, number, number] = [255, 214, 0]; // electric yellow
-  const usg: [number, number, number] = [255, 120, 0]; // hot orange
-  const unhealthy: [number, number, number] = [255, 40, 40]; // alert red
-  const very: [number, number, number] = [200, 40, 255];
-  const haz: [number, number, number] = [120, 0, 20];
+  const good: [number, number, number] = [28, 100, 60];
+  const yellow: [number, number, number] = [255, 210, 0];
+  const orange: [number, number, number] = [255, 120, 0];
+  const red: [number, number, number] = [255, 28, 28];
+  const purple: [number, number, number] = [175, 35, 220];
+  const maroon: [number, number, number] = [100, 8, 18];
 
-  if (v <= 50) return lerpRgb(good, [40, 100, 60], v / 50);
-  if (v <= 80) return lerpRgb([40, 100, 60], moderate, (v - 50) / 30);
-  if (v <= 100) return lerpRgb(moderate, [255, 180, 0], (v - 80) / 20);
-  if (v <= 130) return lerpRgb([255, 180, 0], usg, (v - 100) / 30);
-  if (v <= 150) return lerpRgb(usg, [255, 80, 20], (v - 130) / 20);
-  if (v <= 180) return lerpRgb([255, 80, 20], unhealthy, (v - 150) / 30);
-  if (v <= 250) return lerpRgb(unhealthy, very, (v - 180) / 70);
-  return lerpRgb(very, haz, Math.min(1, (v - 250) / 150));
+  if (v <= 50) return lerp(good, [45, 130, 75], v / 50);
+  if (v <= 100) return lerp([90, 160, 50], yellow, (v - 50) / 50);
+  if (v <= 150) return lerp(yellow, orange, (v - 100) / 50);
+  if (v <= 200) return lerp(orange, red, (v - 150) / 50);
+  if (v <= 300) return lerp(red, purple, (v - 200) / 100);
+  return lerp(purple, maroon, Math.min(1, (v - 300) / 200));
 }
 
-/** Opacity ramps hard into yellow/red so trouble isn't translucent wash. */
 function aqiToAlpha(aqi: number): number {
-  if (aqi <= 50) return 70;
-  if (aqi <= 80) return 110;
-  if (aqi <= 100) return 160;
-  if (aqi <= 130) return 195;
-  if (aqi <= 150) return 215;
+  if (aqi <= 50) return 95;
+  if (aqi <= 100) return 155;
+  if (aqi <= 150) return 205;
   if (aqi <= 200) return 235;
   return 245;
 }
 
-/**
- * IDW + hotspot boost: if any nearby sample is elevated, pull the field
- * toward that max so red zones don't average into green.
- */
-function sampleField(
+function tryBilinearGrid(pts: Sample[]): {
+  lons: number[];
+  lats: number[];
+  grid: (number | null)[][];
+} | null {
+  const lons = [...new Set(pts.map((p) => p.lon))].sort((a, b) => a - b);
+  const lats = [...new Set(pts.map((p) => p.lat))].sort((a, b) => a - b);
+  if (lons.length < 3 || lats.length < 3) return null;
+  if (lons.length * lats.length > pts.length * 1.5) return null;
+
+  const key = (lon: number, lat: number) => `${lon},${lat}`;
+  const map = new Map(pts.map((p) => [key(p.lon, p.lat), p.aqi]));
+  const grid: (number | null)[][] = lats.map((lat) =>
+    lons.map((lon) => map.get(key(lon, lat)) ?? null),
+  );
+  let filled = 0;
+  for (const row of grid) for (const v of row) if (v != null) filled++;
+  if (filled < lons.length * lats.length * 0.7) return null;
+  return { lons, lats, grid };
+}
+
+function bilinear(
+  lon: number,
+  lat: number,
+  lons: number[],
+  lats: number[],
+  grid: (number | null)[][],
+): number | null {
+  let i = 0;
+  while (i < lons.length - 1 && lon > lons[i + 1]) i++;
+  let j = 0;
+  while (j < lats.length - 1 && lat > lats[j + 1]) j++;
+  i = Math.max(0, Math.min(lons.length - 2, i));
+  j = Math.max(0, Math.min(lats.length - 2, j));
+
+  const lon0 = lons[i];
+  const lon1 = lons[i + 1];
+  const lat0 = lats[j];
+  const lat1 = lats[j + 1];
+  const q00 = grid[j][i];
+  const q10 = grid[j][i + 1];
+  const q01 = grid[j + 1][i];
+  const q11 = grid[j + 1][i + 1];
+  if (q00 == null || q10 == null || q01 == null || q11 == null) {
+    const vals = [q00, q10, q01, q11].filter((v): v is number => v != null);
+    if (!vals.length) return null;
+    return vals.reduce((a, b) => a + b, 0) / vals.length;
+  }
+  const tx = lon1 === lon0 ? 0 : (lon - lon0) / (lon1 - lon0);
+  const ty = lat1 === lat0 ? 0 : (lat - lat0) / (lat1 - lat0);
+  const a = q00 * (1 - tx) + q10 * tx;
+  const b = q01 * (1 - tx) + q11 * tx;
+  return a * (1 - ty) + b * ty;
+}
+
+function idw(
   lon: number,
   lat: number,
   samples: Sample[],
   power: number,
   cosLat: number,
-  influenceDeg: number,
 ): number {
   let num = 0;
   let den = 0;
-  let maxNear = 0;
-  let maxW = 0;
-  const infl2 = influenceDeg * influenceDeg;
-
   for (const s of samples) {
     const dlon = (lon - s.lon) * cosLat;
     const dlat = lat - s.lat;
     const d2 = dlon * dlon + dlat * dlat;
     if (d2 < 1e-16) return s.aqi;
-
     const w = 1 / Math.pow(d2, power / 2);
     num += w * s.aqi;
     den += w;
-
-    if (d2 <= infl2 && s.aqi > maxNear) {
-      maxNear = s.aqi;
-      // closer high samples dominate more
-      maxW = Math.exp(-Math.sqrt(d2) / (influenceDeg * 0.45));
-    }
   }
-
-  const base = den > 0 ? num / den : 0;
-
-  // Boost toward local max when it's a real trouble spot
-  if (maxNear >= 90 && maxW > 0.05) {
-    const severity = Math.min(1, (maxNear - 80) / 100); // 0 at 80 → 1 at 180
-    const mix = Math.min(0.85, maxW * (0.55 + 0.45 * severity));
-    return base * (1 - mix) + maxNear * mix;
-  }
-  return base;
+  return den > 0 ? num / den : 0;
 }
 
-export function fieldCanvasSize(bounds: FieldBounds): {
+/** Pull field toward elevated samples (≥100) so pin smoke stays orange/red. */
+function hotspotBoost(
+  lon: number,
+  lat: number,
+  base: number,
+  samples: Sample[],
+  cosLat: number,
+  radiusDeg: number,
+): number {
+  let maxNear = 0;
+  let weight = 0;
+  const r2 = radiusDeg * radiusDeg;
+  for (const s of samples) {
+    if (s.aqi < 100) continue;
+    const dlon = (lon - s.lon) * cosLat;
+    const dlat = lat - s.lat;
+    const d2 = dlon * dlon + dlat * dlat;
+    if (d2 > r2) continue;
+    const fall = Math.exp(-Math.sqrt(d2) / (radiusDeg * 0.35));
+    if (s.aqi * fall > maxNear * weight) {
+      maxNear = s.aqi;
+      weight = fall;
+    }
+  }
+  if (maxNear < 100 || weight < 0.08) return base;
+  const mix = Math.min(0.75, 0.4 + weight * 0.4 + (maxNear - 100) / 250);
+  return base * (1 - mix) + maxNear * mix;
+}
+
+function fieldCanvasSize(bounds: FieldBounds): {
   width: number;
   height: number;
   power: number;
-  blur: number;
   influence: number;
 } {
   let { west, east, south, north } = bounds;
   if (east < west) east += 360;
-  const lonSpan = Math.max(0.01, east - west);
-  const latSpan = Math.max(0.01, north - south);
-  const span = Math.max(lonSpan, latSpan);
-
-  if (span > 50) {
-    return { width: 512, height: 340, power: 1.8, blur: 1, influence: 14 };
-  }
-  if (span > 20) {
-    return { width: 420, height: 290, power: 1.9, blur: 1, influence: 8 };
-  }
-  if (span > 8) {
-    return { width: 380, height: 260, power: 2.0, blur: 1, influence: 4 };
-  }
-  return { width: 340, height: 240, power: 2.15, blur: 1, influence: 2.5 };
+  const span = Math.max(east - west, north - south);
+  if (span > 50) return { width: 512, height: 340, power: 1.8, influence: 11 };
+  if (span > 20) return { width: 420, height: 290, power: 1.95, influence: 6 };
+  return { width: 360, height: 250, power: 2.1, influence: 3 };
 }
 
 export function renderAqiFieldDataUrl(
   samples: GridSample[],
   bounds: FieldBounds,
-  width?: number,
-  height?: number,
+  /** Watchlist pins — field forced to match these AQI values nearby */
+  pinSamples: GridSample[] = [],
 ): string | null {
-  const pts: Sample[] = samples
+  const basePts: Sample[] = samples
     .filter((s) => s.us_aqi != null && Number.isFinite(s.us_aqi as number))
     .map((s) => ({
       lon: s.longitude,
       lat: s.latitude,
       aqi: s.us_aqi as number,
     }));
+
+  const pinPts: Sample[] = pinSamples
+    .filter((s) => s.us_aqi != null && Number.isFinite(s.us_aqi as number))
+    .map((s) => ({
+      lon: s.longitude,
+      lat: s.latitude,
+      aqi: s.us_aqi as number,
+    }));
+
+  // Merge pins into sample set (override nearby grid cells)
+  const pts = [...basePts];
+  for (const p of pinPts) {
+    const idx = pts.findIndex(
+      (g) => Math.hypot(g.lon - p.lon, g.lat - p.lat) < 0.4,
+    );
+    if (idx >= 0) pts[idx] = p;
+    else pts.push(p);
+  }
   if (pts.length < 3) return null;
 
   let { west, south, east, north } = bounds;
@@ -164,8 +215,10 @@ export function renderAqiFieldDataUrl(
   const cosLat = Math.max(0.2, Math.cos((midLat * Math.PI) / 180));
 
   const auto = fieldCanvasSize(bounds);
-  const w = width ?? auto.width;
-  const h = height ?? auto.height;
+  const w = auto.width;
+  const h = auto.height;
+  const grid = tryBilinearGrid(basePts);
+  const hotSamples = pinPts.length ? pinPts : pts.filter((p) => p.aqi >= 100);
 
   const canvas =
     typeof document !== "undefined" ? document.createElement("canvas") : null;
@@ -183,14 +236,13 @@ export function renderAqiFieldDataUrl(
     for (let x = 0; x < w; x++) {
       let lon = west + ((x + 0.5) / w) * lonSpan;
       if (lon > 180) lon -= 360;
-      const aqi = sampleField(
-        lon,
-        lat,
-        pts,
-        auto.power,
-        cosLat,
-        auto.influence,
-      );
+
+      let aqi =
+        (grid && bilinear(lon, lat, grid.lons, grid.lats, grid.grid)) ??
+        idw(lon, lat, pts, auto.power, cosLat);
+
+      aqi = hotspotBoost(lon, lat, aqi, hotSamples, cosLat, auto.influence);
+
       const i = (y * w + x) * 4;
       const [r, g, b] = aqiToRgb(aqi);
       data[i] = r;
@@ -200,8 +252,8 @@ export function renderAqiFieldDataUrl(
     }
   }
 
-  // Single light blur only — multi-pass was killing reds into olive
-  const blurred = boxBlur(data, w, h, auto.blur);
+  // Light blur only
+  const blurred = boxBlur(data, w, h, 1);
   img.data.set(blurred);
   ctx.putImageData(img, 0, 0);
   return canvas.toDataURL("image/png");
