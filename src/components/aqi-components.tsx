@@ -53,6 +53,7 @@ import {
   useLocationsStore,
   type TrackedLocation,
 } from "@/lib/locations-store";
+import { InstallGuide } from "@/components/install-guide";
 
 type AqiData = AirQualityPayload & { mainPollutant: string };
 type ForecastMode = "hour" | "day";
@@ -382,6 +383,8 @@ export function AirQualityApp() {
           </Button>
         </div>
       </header>
+
+      <InstallGuide className="mb-1" />
 
       {locations.length === 0 ? (
         <EmptyState onAdd={() => setAddOpen(true)} />
