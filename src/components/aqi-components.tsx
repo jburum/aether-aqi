@@ -58,7 +58,8 @@ type AqiData = AirQualityPayload & { mainPollutant: string };
 type ForecastMode = "hour" | "day";
 
 const SWIPE_ACTION_W = 88;
-const SWIPE_OPEN_THRESHOLD = 48;
+/** Snap open if released past this (px). Slightly low so desktop mouse drags latch. */
+const SWIPE_OPEN_THRESHOLD = 36;
 /** Touch: hold still this long, then drag to reorder. */
 const LONG_PRESS_MS = 380;
 /** Movement beyond this cancels a touch long-press (or starts mouse reorder). */
@@ -349,7 +350,8 @@ export function AirQualityApp() {
           </h1>
           <p className="max-w-xl text-sm text-muted">
             Live US AQI and forecasts for up to {MAX_LOCATIONS} places. Drag the
-            ⋮⋮ grip to reorder · swipe left to delete. Saved on this device.
+            ⋮⋮ grip to reorder · trash or swipe left to delete. Saved on this
+            device.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -670,8 +672,15 @@ function LocationCard({
       axisLock.current = null;
       return;
     }
+    // Latch open past threshold; otherwise close. Keep suppressClick so the
+    // synthetic click after mouseup doesn't expand the card.
     const shouldOpen = offsetRef.current < -SWIPE_OPEN_THRESHOLD;
-    setOffsetBoth(shouldOpen ? -SWIPE_ACTION_W : 0);
+    if (shouldOpen) {
+      setOffsetBoth(-SWIPE_ACTION_W);
+      suppressClickRef.current = true;
+    } else {
+      setOffsetBoth(0);
+    }
     axisLock.current = null;
   }, [clearLongPress, setOffsetBoth]);
 
@@ -777,12 +786,14 @@ function LocationCard({
       movedRef.current = false;
       return;
     }
+    // After a drag, the browser still fires a click. Do NOT close a latched
+    // swipe here — that was wiping Delete before the user could press it.
     if (suppressClickRef.current || movedRef.current) {
-      if (offsetRef.current < 0) closeSwipe();
       suppressClickRef.current = false;
       movedRef.current = false;
       return;
     }
+    // Plain click on an open swipe-rail closes it (without deleting)
     if (offsetRef.current < 0) {
       closeSwipe();
       return;
@@ -866,12 +877,30 @@ function LocationCard({
               {location.latitude.toFixed(2)}°, {location.longitude.toFixed(2)}°
             </p>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex shrink-0 items-center gap-1.5">
             {isLoading || isFetching ? (
               <Loader2 className="size-4 animate-spin text-subtle" aria-label="Loading AQI" />
             ) : isError ? (
               <span className="text-xs font-medium text-aqi-unhealthy">Failed</span>
             ) : null}
+            <button
+              type="button"
+              data-no-swipe
+              title={`Remove ${location.name}`}
+              aria-label={`Remove ${location.name}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                closeSwipe();
+                onDelete();
+              }}
+              className={cn(
+                "inline-flex size-8 items-center justify-center rounded-md text-subtle",
+                "hover:bg-aqi-unhealthy/15 hover:text-aqi-unhealthy",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              )}
+            >
+              <Trash2 className="size-4" aria-hidden />
+            </button>
             <span
               data-drag-handle
               title="Drag to reorder"
