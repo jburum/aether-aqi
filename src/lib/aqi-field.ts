@@ -2,15 +2,12 @@
  * Smooth continuous AQI field for MapLibre (weather-map style).
  *
  * Pipeline:
- *  1. Viewport samples from API (+ watchlist pins injected)
- *  2. Inverse-distance weighting → dense float AQI buffer
- *  3. Soft peak preservation: raise field toward elevated samples
- *     (smooth falloff only — no pie wedges / hard max sectors)
- *  4. Multi-pass blur on the scalar field (moderate — keep yellow/red)
- *  5. Strong accent curve + vivid EPA colorize → PNG
- *
- * Peak preservation is critical: pure IDW+heavy blur averages LA 64 into
- * surrounding green and the pin color no longer matches the field.
+ *  1. Lattice samples + watchlist pins (pins weighted 6× in IDW)
+ *  2. Inverse-distance weighting → float AQI buffer
+ *  3. Light geographic blur
+ *  4. Post-blur lock to sample lat/lon (fixed ° radii) so red/yellow
+ *     peaks cannot drift when zoom changes
+ *  5. Soft edge/data fade + EPA colorize → PNG
  */
 import type { GridSample } from "@/lib/aqi-grid";
 
@@ -107,13 +104,13 @@ function fieldParams(lonSpan: number, latSpan: number): {
   idwPower: number;
 } {
   // Constant geographic resolution (not viewport-relative tiers)
-  const PX_PER_DEG = 7;
+  const PX_PER_DEG = 8;
   let width = Math.round(lonSpan * PX_PER_DEG);
   let height = Math.round(latSpan * PX_PER_DEG);
   width = Math.max(280, Math.min(960, width));
-  height = Math.max(200, Math.min(640, height));
-  // Blur ~0.7° in geographic space → stable zone edges when zoom changes
-  const blurDeg = 0.7;
+  height = Math.max(200, Math.min(720, height));
+  // Light geographic blur — too much smear shifts red peaks on zoom-out
+  const blurDeg = 0.45;
   const blurRadius = Math.max(
     1,
     Math.round(blurDeg * Math.min(width / lonSpan, height / latSpan)),
@@ -121,9 +118,10 @@ function fieldParams(lonSpan: number, latSpan: number): {
   return {
     width,
     height,
-    blurPasses: 3,
+    blurPasses: 2,
     blurRadius,
-    idwPower: 2.2, // fixed — never changes with zoom
+    // Higher power = more local peaks; fixed so zoom cannot move hotspots
+    idwPower: 2.6,
   };
 }
 
@@ -290,10 +288,13 @@ function blurFloat(
   return a;
 }
 
+/** Sample with optional IDW weight (pins weighted higher so hotspots stay put). */
+type WSample = Sample & { weight: number };
+
 function sampleIdw(
   lon: number,
   lat: number,
-  pts: Sample[],
+  pts: WSample[],
   cosLat: number,
   power: number,
 ): number {
@@ -305,7 +306,8 @@ function sampleIdw(
     const dlat = lat - s.lat;
     const d2 = dlon * dlon + dlat * dlat;
     if (d2 < eps) return s.aqi;
-    const w = Math.pow(d2, -power / 2);
+    // Higher weight → more local authority (pins don't get pulled by distant grid)
+    const w = s.weight * Math.pow(d2, -power / 2);
     num += w * s.aqi;
     den += w;
   }
@@ -313,13 +315,11 @@ function sampleIdw(
 }
 
 /**
- * Soft sample authority: pull field toward sample AQI with smooth falloff.
- * - Elevated samples: lift (yellow/red islands)
- * - Good pins (e.g. Newport 46): also pull *down* so green pins aren't
- *   buried under yellow IDW from distant moderate neighbors
- * `bidirectional` true = pins (trusted); false = grid peaks (lift only)
+ * Fixed geographic lock (degrees — independent of zoom).
+ * After blur, re-anchor field to sample locations so red/yellow peaks
+ * cannot drift when the viewport changes.
  */
-function applySampleInfluence(
+function lockToSamples(
   field: Float32Array,
   w: number,
   h: number,
@@ -327,38 +327,37 @@ function applySampleInfluence(
   lonSpan: number,
   latSpan: number,
   north: number,
-  samples: Sample[],
+  samples: WSample[],
   cosLat: number,
-  bidirectional: boolean,
 ): void {
   if (!samples.length) return;
 
   for (const p of samples) {
+    // Compact, zoom-stable radii — large enough to read, too small to migrate
     const R =
-      p.aqi >= 150
-        ? 7.5
-        : p.aqi >= 100
-          ? 6.0
-          : p.aqi >= 70
-            ? 4.5
-            : p.aqi >= 51
-              ? 3.5
-              : 4.0; // good pins still get a clear local green island
-    const boost =
-      p.aqi >= 150
-        ? 0.95
-        : p.aqi >= 100
-          ? 0.9
-          : p.aqi >= 70
-            ? 0.88
-            : p.aqi >= 51
-              ? 0.85
-              : 0.92; // strong local match for good pins
+      p.weight >= 4
+        ? p.aqi >= 150
+          ? 3.6
+          : p.aqi >= 100
+            ? 3.2
+            : p.aqi >= 55
+              ? 2.8
+              : 2.6 // pins
+        : p.aqi >= 150
+          ? 2.4
+          : p.aqi >= 100
+            ? 2.0
+            : p.aqi >= 70
+              ? 1.6
+              : 0; // grid: only lock elevated; mild cells leave to IDW
+    if (R <= 0) continue;
+
+    const boost = p.weight >= 4 ? 0.98 : 0.75;
 
     const px = ((p.lon < west ? p.lon + 360 : p.lon) - west) / lonSpan;
     const py = (north - p.lat) / latSpan;
-    const padX = (R / lonSpan) * 1.15;
-    const padY = (R / latSpan) * 1.15;
+    const padX = (R / lonSpan) * 1.2;
+    const padY = (R / latSpan) * 1.2;
     const x0 = Math.max(0, Math.floor((px - padX) * w));
     const x1 = Math.min(w - 1, Math.ceil((px + padX) * w));
     const y0 = Math.max(0, Math.floor((py - padY) * h));
@@ -377,13 +376,8 @@ function applySampleInfluence(
         const fall = t * t * (3 - 2 * t);
         const mix = fall * boost;
         const i = y * w + x;
-        const cur = field[i];
-        const blended = cur * (1 - mix) + p.aqi * mix;
-        if (bidirectional) {
-          field[i] = blended; // pins: match pin color both ways
-        } else if (blended > cur) {
-          field[i] = blended; // grid: only lift elevated
-        }
+        // Always pull toward sample (both directions) — locks peak on the point
+        field[i] = field[i] * (1 - mix) + p.aqi * mix;
       }
     }
   }
@@ -392,21 +386,24 @@ function applySampleInfluence(
 function mergeSamples(
   samples: GridSample[],
   pinSamples: GridSample[],
-): { pts: Sample[]; pins: Sample[] } {
-  const base: Sample[] = samples
+): { pts: WSample[]; pins: WSample[] } {
+  const base: WSample[] = samples
     .filter((s) => s.us_aqi != null && Number.isFinite(s.us_aqi as number))
     .map((s) => ({
       lon: s.longitude,
       lat: s.latitude,
       aqi: s.us_aqi as number,
+      weight: 1,
     }));
 
-  const pins: Sample[] = pinSamples
+  const pins: WSample[] = pinSamples
     .filter((s) => s.us_aqi != null && Number.isFinite(s.us_aqi as number))
     .map((s) => ({
       lon: s.longitude,
       lat: s.latitude,
       aqi: s.us_aqi as number,
+      // Heavy weight so IDW hotspot stays under the pin at every zoom
+      weight: 6,
     }));
 
   const pts = [...base];
@@ -414,7 +411,7 @@ function mergeSamples(
     const idx = pts.findIndex(
       (g) => Math.hypot(g.lon - p.lon, g.lat - p.lat) < 0.6,
     );
-    if (idx >= 0) pts[idx] = p;
+    if (idx >= 0) pts[idx] = p; // pin replaces nearby grid cell
     else pts.push(p);
   }
   return { pts, pins };
@@ -441,7 +438,7 @@ export function renderAqiFieldDataUrl(
   const { width: w, height: h, blurPasses, blurRadius, idwPower } =
     fieldParams(lonSpan, latSpan);
 
-  // 1) Dense IDW scalar field
+  // 1) Dense weighted IDW — pins outweigh grid so hotspots stay on watch zones
   const field = new Float32Array(w * h);
   for (let y = 0; y < h; y++) {
     const lat = north - ((y + 0.5) / h) * latSpan;
@@ -452,10 +449,13 @@ export function renderAqiFieldDataUrl(
     }
   }
 
-  // 2) Pin authority (all pins, both directions) so Newport 46 → green island
-  //    and LA 64 / NW 154 match yellow/red. Then grid lift for elevated cells.
-  applySampleInfluence(
-    field,
+  // 2) Light blur only (heavy blur + huge plumes was shifting red north on zoom-out)
+  const smooth = blurFloat(field, w, h, blurRadius, blurPasses);
+
+  // 3) Post-blur lock to fixed lat/lon — peaks cannot migrate with zoom
+  //    Pins first (strong), then elevated grid cells (weaker, tight radius)
+  lockToSamples(
+    smooth,
     w,
     h,
     west,
@@ -464,48 +464,27 @@ export function renderAqiFieldDataUrl(
     north,
     pins,
     cosLat,
-    true,
   );
-
-  const elevatedGrid: Sample[] = [];
-  const seen = new Set(pins.map((p) => `${p.lon.toFixed(2)},${p.lat.toFixed(2)}`));
-  for (const p of pts) {
-    if (p.aqi < 65) continue;
-    const k = `${p.lon.toFixed(2)},${p.lat.toFixed(2)}`;
-    if (seen.has(k)) continue;
-    seen.add(k);
-    elevatedGrid.push(p);
-  }
-  applySampleInfluence(
-    field,
+  const gridElevated = pts.filter((p) => p.weight < 4 && p.aqi >= 100);
+  lockToSamples(
+    smooth,
     w,
     h,
     west,
     lonSpan,
     latSpan,
     north,
-    elevatedGrid,
+    gridElevated,
     cosLat,
-    false,
   );
 
-  // 3) Moderate blur → soft zone edges without dissolving peaks into green
-  const smooth = blurFloat(field, w, h, blurRadius, blurPasses);
+  // Soft edge fades (fixed fractions — visual only, does not move peaks)
+  let dataRadius = Math.max(10, Math.min(22, Math.hypot(lonSpan, latSpan) * 0.18));
+  const dataFadeStart = dataRadius * 0.5;
+  const dataFadeEnd = dataRadius * 1.4;
+  const edgeFeather = 0.12;
 
-  // Precompute max influence radius for data-edge fade (degrees)
-  // Beyond this, field soft-fades into the basemap instead of a hard cut.
-  let dataRadius = 10;
-  if (pts.length >= 4) {
-    // Wider views → longer fade so sparse far-north cells dissolve gently
-    dataRadius = Math.max(8, Math.min(28, Math.hypot(lonSpan, latSpan) * 0.22));
-  }
-  const dataFadeStart = dataRadius * 0.45;
-  const dataFadeEnd = dataRadius * 1.35;
-
-  // Edge feather as fraction of raster (outer rim → transparent)
-  const edgeFeather = 0.14;
-
-  // 4) Colorize + soft edge / data-boundary fade into basemap
+  // 4) Colorize
   const canvas =
     typeof document !== "undefined" ? document.createElement("canvas") : null;
   if (!canvas) return null;
@@ -518,7 +497,6 @@ export function renderAqiFieldDataUrl(
   const data = img.data;
   for (let y = 0; y < h; y++) {
     const lat = north - ((y + 0.5) / h) * latSpan;
-    // Normalized distance to nearest image edge [0=edge, 0.5=center]
     const ey = Math.min(y + 0.5, h - 0.5 - y) / h;
     for (let x = 0; x < w; x++) {
       const i = y * w + x;
@@ -528,7 +506,6 @@ export function renderAqiFieldDataUrl(
       let lon = west + ((x + 0.5) / w) * lonSpan;
       if (lon > 180) lon -= 360;
 
-      // --- Image-edge feather (smoothstep) ---
       const ex = Math.min(x + 0.5, w - 0.5 - x) / w;
       const edgeDist = Math.min(ex, ey);
       let edgeMul = 1;
@@ -537,7 +514,6 @@ export function renderAqiFieldDataUrl(
         edgeMul = t * t * (3 - 2 * t);
       }
 
-      // --- Data-edge feather: fade where samples are far away ---
       let minD = Infinity;
       for (const s of pts) {
         const dlon = (lon - s.lon) * cosLat;
