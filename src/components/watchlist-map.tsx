@@ -4,7 +4,10 @@ import {
   Marker,
   NavigationControl,
   LngLatBounds,
+  setWorkerUrl,
 } from "maplibre-gl";
+// Vite must bundle the worker; default lookup hits /assets/maplibre-gl-worker.mjs (404)
+import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { useQueries } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
@@ -14,6 +17,8 @@ import { fetchAirQuality } from "@/lib/open-meteo";
 import { useLocationsStore } from "@/lib/locations-store";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+
+setWorkerUrl(maplibreWorkerUrl);
 
 // button look for router links (Button has no asChild)
 const linkBtn =
@@ -81,11 +86,26 @@ export function WatchlistMap() {
       zoom: 5,
       attributionControl: { compact: true },
     });
-    map.addControl(new NavigationControl({ showCompass: false }), "top-right");
+    // Bottom-right so +/− never collide with Locate (top-right toolbar)
+    map.addControl(new NavigationControl({ showCompass: false }), "bottom-right");
     mapRef.current = map;
-    map.on("load", () => setMapReady(true));
+    map.on("load", () => {
+      setMapReady(true);
+      // Ensure canvas has a real size after layout (iOS Safari flex)
+      map.resize();
+    });
+    map.on("error", (e) => {
+      console.error("[map]", e.error ?? e);
+    });
+
+    const onResize = () => map.resize();
+    window.addEventListener("resize", onResize);
+    // One more resize after paint
+    const t = window.setTimeout(() => map.resize(), 100);
 
     return () => {
+      window.clearTimeout(t);
+      window.removeEventListener("resize", onResize);
       for (const m of markersRef.current.values()) m.remove();
       markersRef.current.clear();
       map.remove();
@@ -222,7 +242,10 @@ export function WatchlistMap() {
         </div>
       </div>
 
-      <div ref={containerRef} className="aqi-map-canvas absolute inset-0" />
+      <div
+        ref={containerRef}
+        className="aqi-map-canvas absolute inset-0 bottom-[calc(3.75rem+env(safe-area-inset-bottom,0px))]"
+      />
 
       {locations.length === 0 && (
         <div className="absolute inset-0 z-10 flex items-center justify-center bg-bg/60 p-6 backdrop-blur-sm">
