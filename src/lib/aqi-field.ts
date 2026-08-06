@@ -1,13 +1,18 @@
 /**
- * Smooth continuous AQI field for MapLibre (weather-map style).
+ * Regional AQI field for MapLibre — accuracy first.
  *
- * Pipeline:
- *  1. Lattice samples + watchlist pins (pins weighted 6× in IDW)
- *  2. Inverse-distance weighting → float AQI buffer
- *  3. Light geographic blur
- *  4. Post-blur lock to sample lat/lon (fixed ° radii) so red/yellow
- *     peaks cannot drift when zoom changes
- *  5. Soft edge/data fade + EPA colorize → PNG
+ * What we got wrong before:
+ *  - Sparse IDW + huge plumes + heavy accent invented red blobs that
+ *    drifted away from real sample/pin locations when zoom changed.
+ *  - "Data distance" alpha punched dark holes and hard edges.
+ *
+ * What we do now:
+ *  1. Snap samples onto a regular lon/lat lattice (same cells every time)
+ *  2. Inject watchlist pins into nearest cells (field matches pin AQI)
+ *  3. Bilinear interpolate the lattice → continuous field
+ *  4. One light geographic blur (fixed °, not zoom-dependent tiers)
+ *  5. Soft pin halo (fixed °) so 154 stays red under the pin
+ *  6. True EPA colors; only image-rim feather (no data-hole fade)
  */
 import type { GridSample } from "@/lib/aqi-grid";
 
@@ -33,99 +38,33 @@ function lerpRgb(
   ];
 }
 
-/**
- * EPA palette aligned to official bands:
- * 0–50 green, 51–100 yellow, 101–150 orange, 151+ red…
- * Good air (e.g. Newport 46) must stay green — no early yellow.
- */
+/** Official-ish EPA continuous palette (bands at 50 / 100 / 150 / 200…). */
 export function aqiToRgb(aqi: number): [number, number, number] {
   const v = Math.max(0, Math.min(500, aqi));
   const good: [number, number, number] = [34, 140, 78];
-  const goodHi: [number, number, number] = [70, 168, 72];
+  const goodHi: [number, number, number] = [90, 170, 60];
   const yellow: [number, number, number] = [255, 220, 0];
-  const gold: [number, number, number] = [255, 185, 0];
-  const orange: [number, number, number] = [255, 125, 0];
-  const deepOrange: [number, number, number] = [255, 80, 20];
-  const red: [number, number, number] = [255, 36, 36];
+  const orange: [number, number, number] = [255, 140, 0];
+  const red: [number, number, number] = [255, 40, 40];
   const purple: [number, number, number] = [175, 40, 220];
   const maroon: [number, number, number] = [100, 10, 20];
 
-  // Solid green through the "Good" band (0–50)
   if (v <= 50) return lerpRgb(good, goodHi, v / 50);
-  // Moderate → yellow/gold
-  if (v <= 75) return lerpRgb(goodHi, yellow, (v - 50) / 25);
-  if (v <= 100) return lerpRgb(yellow, gold, (v - 75) / 25);
-  // USG → orange
-  if (v <= 125) return lerpRgb(gold, orange, (v - 100) / 25);
-  if (v <= 150) return lerpRgb(orange, deepOrange, (v - 125) / 25);
-  // Unhealthy → red
-  if (v <= 200) return lerpRgb(deepOrange, red, (v - 150) / 50);
+  if (v <= 100) return lerpRgb(goodHi, yellow, (v - 50) / 50);
+  if (v <= 150) return lerpRgb(yellow, orange, (v - 100) / 50);
+  if (v <= 200) return lerpRgb(orange, red, (v - 150) / 50);
   if (v <= 300) return lerpRgb(red, purple, (v - 200) / 100);
   return lerpRgb(purple, maroon, Math.min(1, (v - 300) / 200));
 }
 
 function aqiToAlpha(aqi: number): number {
-  if (aqi <= 50) return 135;
-  if (aqi <= 70) return 175;
-  if (aqi <= 100) return 200;
-  if (aqi <= 150) return 225;
-  if (aqi <= 200) return 240;
-  return 250;
+  if (aqi <= 50) return 130;
+  if (aqi <= 100) return 170;
+  if (aqi <= 150) return 200;
+  if (aqi <= 200) return 220;
+  return 235;
 }
 
-/**
- * Accent only moderate+ so yellow/red read clearly.
- * Never push good air (≤50) into yellow — that made Newport 46 look gold.
- */
-function accentuate(aqi: number): number {
-  if (aqi <= 50) return aqi; // keep Good band truthful
-  if (aqi <= 100) {
-    const t = (aqi - 50) / 50;
-    // Mild lift inside moderate only
-    return 50 + t * 50 + t * (1 - t) * 10;
-  }
-  if (aqi <= 150) {
-    const t = (aqi - 100) / 50;
-    return 100 + t * 50 + t * (1 - t) * 12;
-  }
-  return aqi + Math.min(28, 10 + (aqi - 150) * 0.1);
-}
-
-/**
- * Zoom-stable raster params: fixed °→px scale + geographic blur.
- * Same lat/lon with the same samples always paints the same color,
- * regardless of viewport size.
- */
-function fieldParams(lonSpan: number, latSpan: number): {
-  width: number;
-  height: number;
-  blurPasses: number;
-  blurRadius: number;
-  idwPower: number;
-} {
-  // Constant geographic resolution (not viewport-relative tiers)
-  const PX_PER_DEG = 8;
-  let width = Math.round(lonSpan * PX_PER_DEG);
-  let height = Math.round(latSpan * PX_PER_DEG);
-  width = Math.max(280, Math.min(960, width));
-  height = Math.max(200, Math.min(720, height));
-  // Light geographic blur — too much smear shifts red peaks on zoom-out
-  const blurDeg = 0.45;
-  const blurRadius = Math.max(
-    1,
-    Math.round(blurDeg * Math.min(width / lonSpan, height / latSpan)),
-  );
-  return {
-    width,
-    height,
-    blurPasses: 2,
-    blurRadius,
-    // Higher power = more local peaks; fixed so zoom cannot move hotspots
-    idwPower: 2.6,
-  };
-}
-
-/** Sample query limits (image still paints full viewport via IDW). */
 export const FIELD_MAX_LAT_SPAN = 78;
 export const FIELD_MAX_LON_SPAN = 155;
 
@@ -148,25 +87,22 @@ function packLon(w: number, e: number): { west: number; east: number } {
   return { west: w, east: e > 180 ? e - 360 : e };
 }
 
-/**
- * Bounds for the /api/aqi-grid request only (may be clamped for API limits).
- * Never use this as MapLibre image coordinates.
- */
+/** API sample query bounds (may clamp). Never use as image coordinates alone. */
 export function clampBoundsForApi(b: FieldBounds, pad = 0.12): FieldBounds {
   const { w: viewW, e: viewE } = normalizeLonPair(b.west, b.east);
   const lonSpan = Math.max(0.01, viewE - viewW);
   const latSpan = Math.max(0.01, b.north - b.south);
-  const effectivePad =
+  const p =
     latSpan > 45 || lonSpan > 70
       ? Math.min(pad, 0.05)
       : latSpan > 28 || lonSpan > 45
         ? Math.min(pad, 0.1)
         : pad;
 
-  let w = viewW - lonSpan * effectivePad;
-  let e = viewE + lonSpan * effectivePad;
-  let s = Math.max(-85, b.south - latSpan * effectivePad);
-  let n = Math.min(85, b.north + latSpan * effectivePad);
+  let w = viewW - lonSpan * p;
+  let e = viewE + lonSpan * p;
+  let s = Math.max(-85, b.south - latSpan * p);
+  let n = Math.min(85, b.north + latSpan * p);
 
   if (n - s > FIELD_MAX_LAT_SPAN) {
     const mid = (s + n) / 2;
@@ -178,26 +114,20 @@ export function clampBoundsForApi(b: FieldBounds, pad = 0.12): FieldBounds {
     w = mid - FIELD_MAX_LON_SPAN / 2;
     e = mid + FIELD_MAX_LON_SPAN / 2;
   }
-
   const lon = packLon(w, e);
   return { west: lon.west, south: s, east: lon.east, north: n };
 }
 
-/**
- * Image paint bounds: slightly larger than the viewport so soft feathered
- * edges sit at/beyond the screen edge — no hard cutoff line mid-map.
- * Does NOT clamp to API limits (samples are fetched separately).
- */
-export function padBoundsForPaint(view: FieldBounds, padFrac = 0.22): FieldBounds {
+/** Image bounds: a bit larger than the view so rim feather is at the edge. */
+export function padBoundsForPaint(view: FieldBounds, padFrac = 0.18): FieldBounds {
   const { w: viewW, e: viewE } = normalizeLonPair(view.west, view.east);
   const lonSpan = Math.max(0.01, viewE - viewW);
   const latSpan = Math.max(0.01, view.north - view.south);
-  // Keep pad modest on huge views so the canvas stays reasonable
   const p =
     latSpan > 50 || lonSpan > 80
-      ? Math.min(padFrac, 0.1)
+      ? Math.min(padFrac, 0.08)
       : latSpan > 30 || lonSpan > 50
-        ? Math.min(padFrac, 0.15)
+        ? Math.min(padFrac, 0.12)
         : padFrac;
 
   let w = viewW - lonSpan * p;
@@ -205,30 +135,132 @@ export function padBoundsForPaint(view: FieldBounds, padFrac = 0.22): FieldBound
   let s = Math.max(-85, view.south - latSpan * p);
   let n = Math.min(85, view.north + latSpan * p);
 
-  // Soft size cap for raster only (not API) — still larger than typical view
-  const maxLat = 95;
-  const maxLon = 170;
-  if (n - s > maxLat) {
-    const mid = (view.south + view.north) / 2;
-    s = Math.max(-85, mid - maxLat / 2);
-    n = Math.min(85, mid + maxLat / 2);
-    // Prefer containing the view
-    if (s > view.south) s = view.south;
-    if (n < view.north) n = view.north;
-  }
-  if (e - w > maxLon) {
-    const mid = (viewW + viewE) / 2;
-    w = mid - maxLon / 2;
-    e = mid + maxLon / 2;
-    if (w > viewW) w = viewW;
-    if (e < viewE) e = viewE;
-  }
+  // Always contain the view
+  w = Math.min(w, viewW);
+  e = Math.max(e, viewE);
+  s = Math.min(s, view.south);
+  n = Math.max(n, view.north);
 
   const lon = packLon(w, e);
   return { west: lon.west, south: s, east: lon.east, north: n };
 }
 
-/** Separable box blur on a float field (approximates Gaussian with many passes). */
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+/**
+ * Build a regular lon/lat lattice from scattered samples.
+ * Empty cells filled by neighbor average (few passes) so bilinear works.
+ */
+function buildLattice(pts: Sample[]): {
+  lons: number[];
+  lats: number[];
+  grid: (number | null)[][];
+} | null {
+  if (pts.length < 2) return null;
+
+  // Prefer true regular grid spacing when samples come from our lattice API
+  const lons = [...new Set(pts.map((p) => round2(p.lon)))].sort((a, b) => a - b);
+  const lats = [...new Set(pts.map((p) => round2(p.lat)))].sort((a, b) => a - b);
+  if (lons.length < 2 || lats.length < 2) return null;
+
+  const key = (lon: number, lat: number) => `${round2(lon)},${round2(lat)}`;
+  const map = new Map<string, number>();
+  for (const p of pts) {
+    const k = key(p.lon, p.lat);
+    const prev = map.get(k);
+    // Keep higher AQI if two samples land in same cell (pin overrides mild grid)
+    if (prev == null || p.aqi > prev) map.set(k, p.aqi);
+  }
+
+  const grid: (number | null)[][] = lats.map((lat) =>
+    lons.map((lon) => map.get(`${lon},${lat}`) ?? null),
+  );
+
+  // Fill small gaps so bilinear has 4 corners
+  for (let pass = 0; pass < 4; pass++) {
+    for (let j = 0; j < lats.length; j++) {
+      for (let i = 0; i < lons.length; i++) {
+        if (grid[j][i] != null) continue;
+        const neigh: number[] = [];
+        if (i > 0 && grid[j][i - 1] != null) neigh.push(grid[j][i - 1]!);
+        if (i < lons.length - 1 && grid[j][i + 1] != null)
+          neigh.push(grid[j][i + 1]!);
+        if (j > 0 && grid[j - 1][i] != null) neigh.push(grid[j - 1][i]!);
+        if (j < lats.length - 1 && grid[j + 1][i] != null)
+          neigh.push(grid[j + 1][i]!);
+        if (neigh.length >= 2) {
+          grid[j][i] = neigh.reduce((a, b) => a + b, 0) / neigh.length;
+        }
+      }
+    }
+  }
+  return { lons, lats, grid };
+}
+
+function bilinear(
+  lon: number,
+  lat: number,
+  lons: number[],
+  lats: number[],
+  grid: (number | null)[][],
+): number | null {
+  if (lons.length < 2 || lats.length < 2) return null;
+
+  let i = 0;
+  while (i < lons.length - 1 && lon > lons[i + 1]) i++;
+  let j = 0;
+  while (j < lats.length - 1 && lat > lats[j + 1]) j++;
+  i = Math.max(0, Math.min(lons.length - 2, i));
+  j = Math.max(0, Math.min(lats.length - 2, j));
+
+  const lon0 = lons[i];
+  const lon1 = lons[i + 1];
+  const lat0 = lats[j];
+  const lat1 = lats[j + 1];
+  const q00 = grid[j][i];
+  const q10 = grid[j][i + 1];
+  const q01 = grid[j + 1][i];
+  const q11 = grid[j + 1][i + 1];
+  if (q00 == null || q10 == null || q01 == null || q11 == null) {
+    const vals = [q00, q10, q01, q11].filter((v): v is number => v != null);
+    if (!vals.length) return null;
+    return vals.reduce((a, b) => a + b, 0) / vals.length;
+  }
+  const tx = lon1 === lon0 ? 0 : (lon - lon0) / (lon1 - lon0);
+  const ty = lat1 === lat0 ? 0 : (lat - lat0) / (lat1 - lat0);
+  // Smoothstep for softer cell transitions
+  const sx = tx * tx * (3 - 2 * tx);
+  const sy = ty * ty * (3 - 2 * ty);
+  const a = q00 * (1 - sx) + q10 * sx;
+  const b = q01 * (1 - sx) + q11 * sx;
+  return a * (1 - sy) + b * sy;
+}
+
+/** Fallback when lattice is incomplete: classic IDW, moderate power. */
+function sampleIdw(
+  lon: number,
+  lat: number,
+  pts: Sample[],
+  cosLat: number,
+): number {
+  let num = 0;
+  let den = 0;
+  const power = 2.2;
+  const eps = 1e-10;
+  for (const s of pts) {
+    const dlon = (lon - s.lon) * cosLat;
+    const dlat = lat - s.lat;
+    const d2 = dlon * dlon + dlat * dlat;
+    if (d2 < eps) return s.aqi;
+    const w = Math.pow(d2, -power / 2);
+    num += w * s.aqi;
+    den += w;
+  }
+  return den > 0 ? num / den : 0;
+}
+
 function blurFloat(
   src: Float32Array,
   w: number,
@@ -239,7 +271,6 @@ function blurFloat(
   let a = Float32Array.from(src);
   let b = new Float32Array(src.length);
   const r = Math.max(1, radius);
-
   for (let p = 0; p < passes; p++) {
     for (let y = 0; y < h; y++) {
       const row = y * w;
@@ -288,38 +319,11 @@ function blurFloat(
   return a;
 }
 
-/** Sample with optional IDW weight (pins weighted higher so hotspots stay put). */
-type WSample = Sample & { weight: number };
-
-function sampleIdw(
-  lon: number,
-  lat: number,
-  pts: WSample[],
-  cosLat: number,
-  power: number,
-): number {
-  let num = 0;
-  let den = 0;
-  const eps = 1e-8;
-  for (const s of pts) {
-    const dlon = (lon - s.lon) * cosLat;
-    const dlat = lat - s.lat;
-    const d2 = dlon * dlon + dlat * dlat;
-    if (d2 < eps) return s.aqi;
-    // Higher weight → more local authority (pins don't get pulled by distant grid)
-    const w = s.weight * Math.pow(d2, -power / 2);
-    num += w * s.aqi;
-    den += w;
-  }
-  return den > 0 ? num / den : 0;
-}
-
 /**
- * Fixed geographic lock (degrees — independent of zoom).
- * After blur, re-anchor field to sample locations so red/yellow peaks
- * cannot drift when the viewport changes.
+ * Soft-set field toward pin AQI in a fixed geographic radius.
+ * Runs AFTER blur so the hotspot stays under the pin at every zoom.
  */
-function lockToSamples(
+function applyPinHalos(
   field: Float32Array,
   w: number,
   h: number,
@@ -327,41 +331,20 @@ function lockToSamples(
   lonSpan: number,
   latSpan: number,
   north: number,
-  samples: WSample[],
+  pins: Sample[],
   cosLat: number,
 ): void {
-  if (!samples.length) return;
-
-  for (const p of samples) {
-    // Compact, zoom-stable radii — large enough to read, too small to migrate
-    const R =
-      p.weight >= 4
-        ? p.aqi >= 150
-          ? 3.6
-          : p.aqi >= 100
-            ? 3.2
-            : p.aqi >= 55
-              ? 2.8
-              : 2.6 // pins
-        : p.aqi >= 150
-          ? 2.4
-          : p.aqi >= 100
-            ? 2.0
-            : p.aqi >= 70
-              ? 1.6
-              : 0; // grid: only lock elevated; mild cells leave to IDW
-    if (R <= 0) continue;
-
-    const boost = p.weight >= 4 ? 0.98 : 0.75;
+  for (const p of pins) {
+    // Compact fixed radius (degrees) — does not grow with zoom-out
+    const R = p.aqi >= 150 ? 2.8 : p.aqi >= 100 ? 2.5 : p.aqi >= 55 ? 2.2 : 2.0;
+    const boost = 0.92;
 
     const px = ((p.lon < west ? p.lon + 360 : p.lon) - west) / lonSpan;
     const py = (north - p.lat) / latSpan;
-    const padX = (R / lonSpan) * 1.2;
-    const padY = (R / latSpan) * 1.2;
-    const x0 = Math.max(0, Math.floor((px - padX) * w));
-    const x1 = Math.min(w - 1, Math.ceil((px + padX) * w));
-    const y0 = Math.max(0, Math.floor((py - padY) * h));
-    const y1 = Math.min(h - 1, Math.ceil((py + padY) * h));
+    const x0 = Math.max(0, Math.floor((px - (R / lonSpan) * 1.2) * w));
+    const x1 = Math.min(w - 1, Math.ceil((px + (R / lonSpan) * 1.2) * w));
+    const y0 = Math.max(0, Math.floor((py - (R / latSpan) * 1.2) * h));
+    const y1 = Math.min(h - 1, Math.ceil((py + (R / latSpan) * 1.2) * h));
 
     for (let y = y0; y <= y1; y++) {
       const lat = north - ((y + 0.5) / h) * latSpan;
@@ -376,7 +359,6 @@ function lockToSamples(
         const fall = t * t * (3 - 2 * t);
         const mix = fall * boost;
         const i = y * w + x;
-        // Always pull toward sample (both directions) — locks peak on the point
         field[i] = field[i] * (1 - mix) + p.aqi * mix;
       }
     }
@@ -386,32 +368,36 @@ function lockToSamples(
 function mergeSamples(
   samples: GridSample[],
   pinSamples: GridSample[],
-): { pts: WSample[]; pins: WSample[] } {
-  const base: WSample[] = samples
+): { pts: Sample[]; pins: Sample[] } {
+  const base: Sample[] = samples
     .filter((s) => s.us_aqi != null && Number.isFinite(s.us_aqi as number))
     .map((s) => ({
       lon: s.longitude,
       lat: s.latitude,
       aqi: s.us_aqi as number,
-      weight: 1,
     }));
 
-  const pins: WSample[] = pinSamples
+  const pins: Sample[] = pinSamples
     .filter((s) => s.us_aqi != null && Number.isFinite(s.us_aqi as number))
     .map((s) => ({
       lon: s.longitude,
       lat: s.latitude,
       aqi: s.us_aqi as number,
-      // Heavy weight so IDW hotspot stays under the pin at every zoom
-      weight: 6,
     }));
 
+  // Pins replace nearest grid cell so lattice + bilinear match the card
   const pts = [...base];
   for (const p of pins) {
-    const idx = pts.findIndex(
-      (g) => Math.hypot(g.lon - p.lon, g.lat - p.lat) < 0.6,
-    );
-    if (idx >= 0) pts[idx] = p; // pin replaces nearby grid cell
+    let best = -1;
+    let bestD = Infinity;
+    for (let i = 0; i < pts.length; i++) {
+      const d = Math.hypot(pts[i].lon - p.lon, pts[i].lat - p.lat);
+      if (d < bestD) {
+        bestD = d;
+        best = i;
+      }
+    }
+    if (best >= 0 && bestD < 1.5) pts[best] = { ...p };
     else pts.push(p);
   }
   return { pts, pins };
@@ -419,6 +405,7 @@ function mergeSamples(
 
 /**
  * Render continuous AQI field as a PNG data URL for MapLibre image source.
+ * `bounds` must be the same box passed to boundsToImageCoordinates.
  */
 export function renderAqiFieldDataUrl(
   samples: GridSample[],
@@ -435,56 +422,43 @@ export function renderAqiFieldDataUrl(
   const midLat = (south + north) / 2;
   const cosLat = Math.max(0.2, Math.cos((midLat * Math.PI) / 180));
 
-  const { width: w, height: h, blurPasses, blurRadius, idwPower } =
-    fieldParams(lonSpan, latSpan);
+  // Fixed °→px so the same geography paints the same at every zoom
+  const PX_PER_DEG = 8;
+  let w = Math.round(lonSpan * PX_PER_DEG);
+  let h = Math.round(latSpan * PX_PER_DEG);
+  w = Math.max(320, Math.min(960, w));
+  h = Math.max(240, Math.min(720, h));
 
-  // 1) Dense weighted IDW — pins outweigh grid so hotspots stay on watch zones
+  const lattice = buildLattice(pts);
+
+  // 1) Lattice bilinear (preferred) or IDW fallback
   const field = new Float32Array(w * h);
   for (let y = 0; y < h; y++) {
     const lat = north - ((y + 0.5) / h) * latSpan;
     for (let x = 0; x < w; x++) {
       let lon = west + ((x + 0.5) / w) * lonSpan;
       if (lon > 180) lon -= 360;
-      field[y * w + x] = sampleIdw(lon, lat, pts, cosLat, idwPower);
+      let aqi: number | null = null;
+      if (lattice) {
+        aqi = bilinear(lon, lat, lattice.lons, lattice.lats, lattice.grid);
+      }
+      if (aqi == null) aqi = sampleIdw(lon, lat, pts, cosLat);
+      field[y * w + x] = aqi;
     }
   }
 
-  // 2) Light blur only (heavy blur + huge plumes was shifting red north on zoom-out)
-  const smooth = blurFloat(field, w, h, blurRadius, blurPasses);
-
-  // 3) Post-blur lock to fixed lat/lon — peaks cannot migrate with zoom
-  //    Pins first (strong), then elevated grid cells (weaker, tight radius)
-  lockToSamples(
-    smooth,
-    w,
-    h,
-    west,
-    lonSpan,
-    latSpan,
-    north,
-    pins,
-    cosLat,
+  // 2) Light geographic blur (~0.5°) — soft zones, does not invent peaks
+  const blurDeg = 0.5;
+  const blurRadius = Math.max(
+    1,
+    Math.round(blurDeg * Math.min(w / lonSpan, h / latSpan)),
   );
-  const gridElevated = pts.filter((p) => p.weight < 4 && p.aqi >= 100);
-  lockToSamples(
-    smooth,
-    w,
-    h,
-    west,
-    lonSpan,
-    latSpan,
-    north,
-    gridElevated,
-    cosLat,
-  );
+  const smooth = blurFloat(field, w, h, blurRadius, 2);
 
-  // Soft edge fades (fixed fractions — visual only, does not move peaks)
-  let dataRadius = Math.max(10, Math.min(22, Math.hypot(lonSpan, latSpan) * 0.18));
-  const dataFadeStart = dataRadius * 0.5;
-  const dataFadeEnd = dataRadius * 1.4;
-  const edgeFeather = 0.12;
+  // 3) Pin halos AFTER blur — 154 stays red under the 154 pin
+  applyPinHalos(smooth, w, h, west, lonSpan, latSpan, north, pins, cosLat);
 
-  // 4) Colorize
+  // 4) Colorize; only feather the image rim (no data-distance holes)
   const canvas =
     typeof document !== "undefined" ? document.createElement("canvas") : null;
   if (!canvas) return null;
@@ -493,19 +467,15 @@ export function renderAqiFieldDataUrl(
   const ctx = canvas.getContext("2d");
   if (!ctx) return null;
 
+  const edgeFeather = 0.1;
   const img = ctx.createImageData(w, h);
   const data = img.data;
   for (let y = 0; y < h; y++) {
-    const lat = north - ((y + 0.5) / h) * latSpan;
     const ey = Math.min(y + 0.5, h - 0.5 - y) / h;
     for (let x = 0; x < w; x++) {
       const i = y * w + x;
-      const aqi = accentuate(smooth[i]);
+      const aqi = smooth[i];
       const [r, g, b] = aqiToRgb(aqi);
-
-      let lon = west + ((x + 0.5) / w) * lonSpan;
-      if (lon > 180) lon -= 360;
-
       const ex = Math.min(x + 0.5, w - 0.5 - x) / w;
       const edgeDist = Math.min(ex, ey);
       let edgeMul = 1;
@@ -513,26 +483,11 @@ export function renderAqiFieldDataUrl(
         const t = edgeDist / edgeFeather;
         edgeMul = t * t * (3 - 2 * t);
       }
-
-      let minD = Infinity;
-      for (const s of pts) {
-        const dlon = (lon - s.lon) * cosLat;
-        const dlat = lat - s.lat;
-        const d = Math.sqrt(dlon * dlon + dlat * dlat);
-        if (d < minD) minD = d;
-      }
-      let dataMul = 1;
-      if (minD >= dataFadeEnd) dataMul = 0;
-      else if (minD > dataFadeStart) {
-        const t = 1 - (minD - dataFadeStart) / (dataFadeEnd - dataFadeStart);
-        dataMul = t * t * (3 - 2 * t);
-      }
-
       const o = i * 4;
       data[o] = r;
       data[o + 1] = g;
       data[o + 2] = b;
-      data[o + 3] = Math.round(aqiToAlpha(aqi) * edgeMul * dataMul);
+      data[o + 3] = Math.round(aqiToAlpha(aqi) * edgeMul);
     }
   }
   ctx.putImageData(img, 0, 0);

@@ -476,7 +476,7 @@ export function WatchlistMap() {
             ) : null}
           </p>
           <p className="mt-0.5 max-w-[12rem] text-[10px] leading-snug text-subtle">
-            Soft-edged AQI wash. Numbers = saved places only.
+            Modeled regional AQI (Open‑Meteo). Numbers = your places.
           </p>
         </div>
         <div className="pointer-events-auto flex flex-col items-end gap-2">
