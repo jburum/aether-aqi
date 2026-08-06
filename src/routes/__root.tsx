@@ -23,10 +23,36 @@ const ogImage = host
  * bare Delete buttons, no card chrome).
  */
 const CRITICAL_CSS = `
-html{color-scheme:dark;max-width:100%;overflow-x:hidden}
+html{color-scheme:dark;max-width:100%;overflow-x:hidden;background:#0c0f12}
 body{margin:0;min-height:100dvh;max-width:100%;overflow-x:hidden;background:#0c0f12;color:#e8eaed;font-family:system-ui,-apple-system,sans-serif;line-height:1.5;-webkit-font-smoothing:antialiased}
 *,*::before,*::after{box-sizing:border-box}
-/* Safe-area padding so content clears Dynamic Island / home indicator */
+/*
+ * Solid sticky band under the status bar / Dynamic Island so system clock
+ * and app title never fight. Uses env(safe-area-inset-top) when available;
+ * on phones we also force a minimum height because some Safari modes report 0.
+ */
+.aqi-status-bar{
+  position:sticky;
+  top:0;
+  z-index:300;
+  width:100%;
+  flex-shrink:0;
+  background:#0c0f12;
+  /* iOS 11.0–11.2 */
+  height:constant(safe-area-inset-top);
+  /* modern */
+  height:env(safe-area-inset-top, 0px);
+}
+@media screen and (max-width: 768px){
+  .aqi-status-bar{
+    /* Dynamic Island / notch: never less than ~59px even if env is 0 */
+    min-height:59px;
+    height:max(59px, env(safe-area-inset-top, 0px));
+  }
+}
+@media screen and (min-width: 769px){
+  .aqi-status-bar{display:none}
+}
 .aqi-app-frame{
   min-height:calc(100dvh - var(--grok-banner-h, 0px));
   max-width:100vw;
@@ -41,7 +67,7 @@ body{margin:0;min-height:100dvh;max-width:100%;overflow-x:hidden;background:#0c0
   display:flex;
   flex-direction:column;
   gap:1.5rem;
-  padding-top:max(1.25rem, env(safe-area-inset-top, 0px));
+  padding-top:1rem;
   padding-right:max(1rem, env(safe-area-inset-right, 0px));
   padding-bottom:max(4rem, env(safe-area-inset-bottom, 0px));
   padding-left:max(1rem, env(safe-area-inset-left, 0px));
@@ -246,6 +272,8 @@ function RootDocument() {
         <style dangerouslySetInnerHTML={{ __html: CRITICAL_CSS }} />
       </head>
       <body className="max-w-[100vw] overflow-x-hidden bg-bg text-fg antialiased">
+        {/* Opaque band under status bar / Dynamic Island (readable clock + title) */}
+        <div className="aqi-status-bar" aria-hidden="true" />
         <CreatedWithGrokBanner />
         <AuthProvider>
           <QueryClientProvider client={queryClient}>

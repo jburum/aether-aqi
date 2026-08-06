@@ -56,9 +56,37 @@
     -webkit-font-smoothing: antialiased;
   }
 
-  /* Main app shell clears Dynamic Island / home indicator (viewport-fit=cover) */
+  /*
+   * Sticky opaque strip under the iOS status bar / Dynamic Island.
+   * Keeps system time & signal readable and pushes app chrome below the notch.
+   */
+  .aqi-status-bar {
+    position: sticky;
+    top: 0;
+    z-index: 300;
+    width: 100%;
+    flex-shrink: 0;
+    background: var(--color-bg);
+    height: constant(safe-area-inset-top);
+    height: env(safe-area-inset-top, 0px);
+  }
+
+  @media screen and (max-width: 768px) {
+    .aqi-status-bar {
+      /* Fallback when Safari reports safe-area-inset-top as 0 */
+      min-height: 59px;
+      height: max(59px, env(safe-area-inset-top, 0px));
+    }
+  }
+
+  @media screen and (min-width: 769px) {
+    .aqi-status-bar {
+      display: none;
+    }
+  }
+
   .aqi-shell {
-    padding-top: max(1.25rem, env(safe-area-inset-top, 0px));
+    padding-top: 1rem;
     padding-right: max(1rem, env(safe-area-inset-right, 0px));
     padding-bottom: max(4rem, env(safe-area-inset-bottom, 0px));
     padding-left: max(1rem, env(safe-area-inset-left, 0px));
