@@ -123,8 +123,8 @@ export function WatchlistMap() {
         type: "raster",
         source: FIELD_SOURCE,
         paint: {
-          // High enough that yellow/red hotspots read at NA zoom
-          "raster-opacity": 0.78,
+          // Continuous weather-map wash; linear resampling softens raster edges
+          "raster-opacity": 0.72,
           "raster-fade-duration": 0,
           "raster-resampling": "linear",
         },

@@ -13,7 +13,7 @@ export function buildAqiGrid(
   north: number,
   opts?: { maxPoints?: number; cols?: number; rows?: number },
 ): GridPoint[] {
-  const maxPoints = opts?.maxPoints ?? 80;
+  const maxPoints = opts?.maxPoints ?? 100;
   // Normalize antimeridian-ish spans
   let w = west;
   let e = east;
@@ -22,9 +22,9 @@ export function buildAqiGrid(
   const latSpan = Math.max(0.01, north - south);
   const lonSpan = Math.max(0.01, e - w);
 
-  // Adaptive density: more points when zoomed in (smaller span)
-  let cols = opts?.cols ?? (lonSpan > 40 ? 6 : lonSpan > 15 ? 7 : lonSpan > 6 ? 8 : 9);
-  let rows = opts?.rows ?? (latSpan > 25 ? 5 : latSpan > 12 ? 6 : latSpan > 5 ? 7 : 8);
+  // Denser regular grid → smoother continuous zones under IDW
+  let cols = opts?.cols ?? (lonSpan > 50 ? 9 : lonSpan > 25 ? 10 : lonSpan > 10 ? 11 : 12);
+  let rows = opts?.rows ?? (latSpan > 30 ? 7 : latSpan > 15 ? 8 : latSpan > 6 ? 9 : 10);
   while (cols * rows > maxPoints) {
     if (cols >= rows) cols -= 1;
     else rows -= 1;
