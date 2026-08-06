@@ -2,6 +2,20 @@
 
 Newest first.
 
+## 2026-08-06 — v1.6 (stable close: lattice field, share, install)
+
+### Product
+
+- **Fixed global 2° lattice** map field — pure `aqiAt`; zoom/desktop/mobile alignment improved.
+- Map pan no longer freezes (deferred paint, skip repaint inside padded coverage).
+- **OG share card** `/og-image.png` (matches Home Screen icon) + full Open Graph / large Twitter card meta.
+- **Install guide** on list view (iOS/Android steps) + **Copy invite text**.
+- Docs: STATUS (active · closed), session close, Master registry `aether-aqi`.
+
+### Posture
+
+- **Active · closed for development** — no open backlog; reopen only for intentional features.
+
 ## 2026-08-05 — v1.5.1 (regional AQI map coloring)
 
 ### Product

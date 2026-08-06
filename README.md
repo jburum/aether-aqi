@@ -7,8 +7,10 @@ PWA for tracking **US AQI** across up to **15** locations. Live readings and for
 | **Live app** | [https://aether-aqi.vercel.app](https://aether-aqi.vercel.app) |
 | **Repo** | [github.com/jburum/aether-aqi](https://github.com/jburum/aether-aqi) |
 | **Local** | `~/Projects/AQI` |
+| **Master** | `aether-aqi` — **active · closed** (stable, no backlog) |
 | **Docs** | [docs/](./docs/) |
-| **Latest** | **v1.5.0** |
+| **Latest** | **v1.6** |
+| **Status** | [docs/STATUS.md](./docs/STATUS.md) |
 
 ## Features
 
@@ -18,17 +20,19 @@ PWA for tracking **US AQI** across up to **15** locations. Live readings and for
 - Tap a day to drill into that day’s hourly forecast
 - **Trash** or swipe left to delete
 - **Grip drag** (desktop) / hold-drag (phone) to reorder
-- **Map** tab: AQI pins for your places (MapLibre)
-- Installable PWA (iPhone Home Screen + custom icon)
+- **Map** tab: pins + regional AQI wash (fixed lattice)
+- Installable PWA (Home Screen guide + branded share card)
 - Data stays in the browser (`localStorage`)
 
 ## Documentation
 
 | Doc | |
 | --- | --- |
+| [docs/STATUS.md](./docs/STATUS.md) | Active / closed posture |
 | [docs/README.md](./docs/README.md) | Docs index |
-| [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) | Git → Vercel, proxies, stack |
-| [docs/PRODUCT.md](./docs/PRODUCT.md) | UX, roadmap, map plan |
+| [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) | Git → Vercel, field model, stack |
+| [docs/PRODUCT.md](./docs/PRODUCT.md) | UX, roadmap |
+| [docs/SHARE-INVITE.md](./docs/SHARE-INVITE.md) | Messages install copy |
 | [docs/CHANGELOG.md](./docs/CHANGELOG.md) | What shipped |
 
 ## Develop

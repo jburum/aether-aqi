@@ -1,10 +1,10 @@
 # Product
 
-Last updated: 2026-08-05 · **v1.5.0**
+Last updated: 2026-08-06 · **v1.6** · **Active · closed for development** ([STATUS.md](./STATUS.md))
 
 ## One-liner
 
-Personal **air quality watchlist** PWA: up to **15** places, live US AQI, hour/day forecasts, device-local save. Installable to the **iPhone Home Screen**.
+Personal **air quality watchlist** PWA: up to **15** places, live US AQI, hour/day forecasts, map with regional coloring, device-local save. Installable to the **iPhone Home Screen**.
 
 ## Core UX
 
@@ -19,13 +19,15 @@ Personal **air quality watchlist** PWA: up to **15** places, live US AQI, hour/d
 | **Grip drag** | Reorder (desktop). Touch: hold then drag with floating ghost |
 | Add place | Full-width mobile sheet; search or current location; **max 15** |
 | Refresh | Refetch all AQI queries (same-origin `/api/aqi`) |
-| **Install (iPhone)** | Safari → Share → **Add to Home Screen** |
+| **Install (iPhone)** | Safari → Share → **Add to Home Screen** (in-app guide + [SHARE-INVITE.md](./SHARE-INVITE.md)) |
+| **Share link** | Large OG card (`/og-image.png`) matches Home Screen icon |
 
 ### Branding & icon
 
 - UI titles: **Air Quality** / **Watchlist**
 - App icon: dark tile, bold AQI number + green chart curve
 - Home screen short name: **Air Quality**
+- OG / iMessage: 1200×630 branded card with same icon art
 - Sign-in chrome: **hidden** (optional accounts remain a Phase 2 idea)
 
 ## Data expectations
@@ -54,38 +56,36 @@ Personal **air quality watchlist** PWA: up to **15** places, live US AQI, hour/d
 - [x] Git → Vercel auto-deploy from `~/Projects/AQI`
 - [x] Docs in git
 
-### Phase 1.5 (shipped)
+### Phase 1.5–1.6 (shipped)
 
-- [x] **Map tab** — MapLibre, AQI pins for watchlist, tap sheet, locate me, list↔map nav
-- [x] **Regional AQI coloring** — viewport grid via Open-Meteo; numbers only on watchlist pins
+- [x] **Map tab** — MapLibre, AQI pins, tap sheet, locate, list↔map nav
+- [x] **Regional AQI coloring** — fixed **2° global lattice**, pure `aqiAt(lon,lat)`; pins only numbered
+- [x] Zoom-stable field (desktop ≈ mobile for same seed); deferred paint so pan does not freeze
+- [x] Branded **OG share card** + in-app **Add to Home Screen** guide
 
-### Phase 2 (planned)
+### Phase 2 (parked — not backlog)
 
-- [ ] Map: denser / smoother heatmap when zoomed (optional paid tiles)
-- [ ] AQI threshold alerts (`alertAt` already stored per place)
-- [ ] Optional account-backed sync
-- [ ] Stronger offline last-known AQI
-- [ ] **iOS App Store** free app via Capacitor — see [IOS-APP-STORE.md](./IOS-APP-STORE.md)
+Ideas only if reopened:
+
+- Denser / commercial heatmap tiles
+- AQI threshold alerts (`alertAt` already stored)
+- Account-backed sync; stronger offline cache
+- **iOS App Store** via Capacitor — [IOS-APP-STORE.md](./IOS-APP-STORE.md)
 
 ### Out of scope (for now)
 
 - Multiplayer / social
 - Regulatory AirNow equivalence claims
-- Native App Store builds (PWA only)
+- Native App Store builds (PWA only until reopened)
 - Cloning IQAir’s proprietary 3D globe / station network wholesale
 
 ---
 
 ## Map view
 
-**Shipped (Phase A):** `/map` tab — MapLibre + Carto Dark Matter basemap, AQI-colored pins for watchlist places, tap → detail sheet, Locate me, fit bounds, List ↔ Map bottom nav.
+**Shipped:** `/map` — MapLibre + Carto Dark Matter, numbered pins for watchlist only, soft regional wash from Open-Meteo lattice + IDW, Locate me, fit bounds, List ↔ Map nav.
 
-**Reference UX:** [IQAir AirVisual](https://www.iqair.com/air-quality-monitors/air-quality-app) (patterns only — not their station network or 3D globe).
-
-**Next map steps:**
-
-1. Nearby Open-Meteo grid sample (soft regional context)
-2. Optional true heatmap tiles (Google AQ API) if users need it
+**Field model:** samples on fixed global lattice (not viewport-dependent step); seed from watchlist bbox; pan/zoom re-rasterizes without redefining AQI.
 
 ---
 
