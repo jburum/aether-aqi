@@ -121,8 +121,9 @@ export function WatchlistMap() {
         type: "raster",
         source: FIELD_SOURCE,
         paint: {
-          "raster-opacity": 0.58,
+          "raster-opacity": 0.52,
           "raster-fade-duration": 0,
+          // Linear resampling is critical when the field is stretched at low zoom
           "raster-resampling": "linear",
         },
       });
@@ -174,7 +175,8 @@ export function WatchlistMap() {
             (s) => s.us_aqi != null && Number.isFinite(s.us_aqi),
           );
           setGridCount(withAqi.length);
-          const dataUrl = renderAqiFieldDataUrl(samples, bounds, 320, 200, 165);
+          // Size/power/blur auto-tune for continental vs local spans
+          const dataUrl = renderAqiFieldDataUrl(samples, bounds);
           if (!dataUrl) return;
           const src = mapRef.current.getSource(FIELD_SOURCE) as
             | {

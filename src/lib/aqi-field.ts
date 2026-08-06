@@ -1,6 +1,6 @@
 /**
- * Build a continuous AQI color field from sparse samples (IDW → canvas).
- * Used as a MapLibre image/raster layer so the wash blends across geography.
+ * Continuous AQI color field from sparse samples (IDW → canvas → MapLibre raster).
+ * Designed to stay smooth at continental zoom (no nearest-neighbor Voronoi blocks).
  */
 import { AQI_HEX } from "@/lib/aqi";
 import type { GridSample } from "@/lib/aqi-grid";
@@ -16,24 +16,31 @@ type Sample = { lon: number; lat: number; aqi: number };
 
 function hexToRgb(hex: string): [number, number, number] {
   const h = hex.replace("#", "");
-  const n = parseInt(h.length === 3 ? h.split("").map((c) => c + c).join("") : h, 16);
+  const n = parseInt(
+    h.length === 3 ? h.split("").map((c) => c + c).join("") : h,
+    16,
+  );
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 
-/** Smooth AQI → RGB using EPA band anchors. */
+/**
+ * Continuous AQI → RGB (smooth across EPA band boundaries so the field
+ * doesn't look posterized into hard blocks).
+ */
 export function aqiToRgb(aqi: number): [number, number, number] {
+  // Anchor colors at band midpoints / edges for smooth lerp
   const stops: Array<[number, string]> = [
     [0, AQI_HEX.good],
     [50, AQI_HEX.good],
-    [51, AQI_HEX.moderate],
+    [75, AQI_HEX.moderate],
     [100, AQI_HEX.moderate],
-    [101, AQI_HEX.usg],
+    [125, AQI_HEX.usg],
     [150, AQI_HEX.usg],
-    [151, AQI_HEX.unhealthy],
+    [175, AQI_HEX.unhealthy],
     [200, AQI_HEX.unhealthy],
-    [201, AQI_HEX.very],
+    [250, AQI_HEX.very],
     [300, AQI_HEX.very],
-    [301, AQI_HEX.hazardous],
+    [400, AQI_HEX.hazardous],
     [500, AQI_HEX.hazardous],
   ];
   const v = Math.max(0, Math.min(500, aqi));
@@ -52,42 +59,66 @@ export function aqiToRgb(aqi: number): [number, number, number] {
   ];
 }
 
-/** Inverse-distance weighting; power ~2 is smooth without overshoot. */
-function idw(lon: number, lat: number, samples: Sample[], power = 2): number | null {
+/**
+ * IDW with lat-corrected distance. Lower power → smoother continental field.
+ * No hard nearest-neighbor cutoff (that caused the checkerboard at US zoom).
+ */
+function idw(
+  lon: number,
+  lat: number,
+  samples: Sample[],
+  power: number,
+  cosLat: number,
+): number {
   let num = 0;
   let den = 0;
-  let nearest = Infinity;
-  let nearestAqi = 0;
   for (const s of samples) {
-    const dlon = lon - s.lon;
-    // crude lat-scaled degrees; fine for regional fields
+    const dlon = (lon - s.lon) * cosLat;
     const dlat = lat - s.lat;
     const d2 = dlon * dlon + dlat * dlat;
-    if (d2 < 1e-14) return s.aqi;
-    if (d2 < nearest) {
-      nearest = d2;
-      nearestAqi = s.aqi;
-    }
+    if (d2 < 1e-16) return s.aqi;
     const w = 1 / Math.pow(d2, power / 2);
     num += w * s.aqi;
     den += w;
   }
-  if (den === 0) return null;
-  // Soften extreme far-field when samples are sparse
-  if (nearest > 25) return nearestAqi;
-  return num / den;
+  return den > 0 ? num / den : 0;
+}
+
+/** Choose canvas size from geographic span (more pixels when zoomed out). */
+export function fieldCanvasSize(bounds: FieldBounds): {
+  width: number;
+  height: number;
+  power: number;
+  blur: number;
+} {
+  let { west, east, south, north } = bounds;
+  if (east < west) east += 360;
+  const lonSpan = Math.max(0.01, east - west);
+  const latSpan = Math.max(0.01, north - south);
+  const span = Math.max(lonSpan, latSpan);
+
+  if (span > 50) {
+    // Full North America-ish
+    return { width: 480, height: 320, power: 1.35, blur: 3 };
+  }
+  if (span > 20) {
+    return { width: 400, height: 280, power: 1.5, blur: 2 };
+  }
+  if (span > 8) {
+    return { width: 360, height: 240, power: 1.7, blur: 2 };
+  }
+  return { width: 320, height: 220, power: 1.9, blur: 1 };
 }
 
 /**
  * Rasterize samples into a PNG data URL covering the bounds.
- * @param width/height — internal resolution (higher = smoother, slower)
  */
 export function renderAqiFieldDataUrl(
   samples: GridSample[],
   bounds: FieldBounds,
-  width = 256,
-  height = 192,
-  alpha = 150,
+  width?: number,
+  height?: number,
+  alpha = 155,
 ): string | null {
   const pts: Sample[] = samples
     .filter((s) => s.us_aqi != null && Number.isFinite(s.us_aqi as number))
@@ -102,31 +133,33 @@ export function renderAqiFieldDataUrl(
   if (east < west) east += 360;
   const lonSpan = Math.max(0.01, east - west);
   const latSpan = Math.max(0.01, north - south);
+  const midLat = (south + north) / 2;
+  const cosLat = Math.max(0.2, Math.cos((midLat * Math.PI) / 180));
+
+  const auto = fieldCanvasSize(bounds);
+  const w = width ?? auto.width;
+  const h = height ?? auto.height;
+  const power = auto.power;
+  const blurR = auto.blur;
 
   const canvas =
-    typeof document !== "undefined"
-      ? document.createElement("canvas")
-      : null;
+    typeof document !== "undefined" ? document.createElement("canvas") : null;
   if (!canvas) return null;
-  canvas.width = width;
-  canvas.height = height;
+  canvas.width = w;
+  canvas.height = h;
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
   if (!ctx) return null;
 
-  const img = ctx.createImageData(width, height);
+  const img = ctx.createImageData(w, h);
   const data = img.data;
 
-  for (let y = 0; y < height; y++) {
-    const lat = north - ((y + 0.5) / height) * latSpan;
-    for (let x = 0; x < width; x++) {
-      let lon = west + ((x + 0.5) / width) * lonSpan;
+  for (let y = 0; y < h; y++) {
+    const lat = north - ((y + 0.5) / h) * latSpan;
+    for (let x = 0; x < w; x++) {
+      let lon = west + ((x + 0.5) / w) * lonSpan;
       if (lon > 180) lon -= 360;
-      const aqi = idw(lon, lat, pts, 2.2);
-      const i = (y * width + x) * 4;
-      if (aqi == null) {
-        data[i + 3] = 0;
-        continue;
-      }
+      const aqi = idw(lon, lat, pts, power, cosLat);
+      const i = (y * w + x) * 4;
       const [r, g, b] = aqiToRgb(aqi);
       data[i] = r;
       data[i + 1] = g;
@@ -135,23 +168,27 @@ export function renderAqiFieldDataUrl(
     }
   }
 
-  // Light blur pass for extra smoothness (box blur 1px)
-  const blurred = boxBlurAlpha(data, width, height, 1);
-  img.data.set(blurred);
+  // Multi-pass blur for continental smoothness
+  let buf: Uint8ClampedArray = data;
+  for (let p = 0; p < Math.max(1, blurR); p++) {
+    buf = boxBlur(buf, w, h, Math.min(2, blurR));
+  }
+  img.data.set(buf);
   ctx.putImageData(img, 0, 0);
   return canvas.toDataURL("image/png");
 }
 
-function boxBlurAlpha(
+function boxBlur(
   src: Uint8ClampedArray,
-  w: number,
-  h: number,
-  r: number,
+  width: number,
+  height: number,
+  radius: number,
 ): Uint8ClampedArray {
+  if (radius <= 0) return src;
   const out = new Uint8ClampedArray(src.length);
-  const out32 = out;
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
+  const r = radius;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
       let rSum = 0,
         gSum = 0,
         bSum = 0,
@@ -159,29 +196,23 @@ function boxBlurAlpha(
         n = 0;
       for (let dy = -r; dy <= r; dy++) {
         const yy = y + dy;
-        if (yy < 0 || yy >= h) continue;
+        if (yy < 0 || yy >= height) continue;
         for (let dx = -r; dx <= r; dx++) {
           const xx = x + dx;
-          if (xx < 0 || xx >= w) continue;
-          const i = (yy * w + xx) * 4;
-          const a = src[i + 3];
-          if (a === 0) continue;
-          rSum += src[i] * a;
-          gSum += src[i + 1] * a;
-          bSum += src[i + 2] * a;
-          aSum += a;
+          if (xx < 0 || xx >= width) continue;
+          const i = (yy * width + xx) * 4;
+          rSum += src[i];
+          gSum += src[i + 1];
+          bSum += src[i + 2];
+          aSum += src[i + 3];
           n += 1;
         }
       }
-      const o = (y * w + x) * 4;
-      if (aSum === 0) {
-        out32[o + 3] = 0;
-        continue;
-      }
-      out32[o] = Math.round(rSum / aSum);
-      out32[o + 1] = Math.round(gSum / aSum);
-      out32[o + 2] = Math.round(bSum / aSum);
-      out32[o + 3] = Math.round(aSum / Math.max(1, n));
+      const o = (y * width + x) * 4;
+      out[o] = Math.round(rSum / n);
+      out[o + 1] = Math.round(gSum / n);
+      out[o + 2] = Math.round(bSum / n);
+      out[o + 3] = Math.round(aSum / n);
     }
   }
   return out;
@@ -194,8 +225,7 @@ export function boundsToImageCoordinates(b: FieldBounds): [
   [number, number],
   [number, number],
 ] {
-  let { west, south, east, north } = b;
-  // MapLibre image coords don't love antimeridian; keep simple
+  const { west, south, east, north } = b;
   return [
     [west, north],
     [east, north],
@@ -203,4 +233,3 @@ export function boundsToImageCoordinates(b: FieldBounds): [
     [west, south],
   ];
 }
-
