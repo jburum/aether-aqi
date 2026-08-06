@@ -92,3 +92,18 @@ export function formatAqi(aqi: number | null | undefined): string {
   if (typeof aqi !== "number" || !Number.isFinite(aqi)) return "—";
   return String(Math.round(aqi));
 }
+
+/** Solid hex for canvas / MapLibre markers (matches CSS theme tokens). */
+export const AQI_HEX: Record<string, string> = {
+  good: "#3dba6e",
+  moderate: "#d4b106",
+  usg: "#e07a1f",
+  unhealthy: "#e23d3d",
+  very: "#9b5de5",
+  hazardous: "#7f1d1d",
+  unknown: "#5c6570",
+};
+
+export function aqiHex(token: string): string {
+  return AQI_HEX[token] ?? AQI_HEX.unknown;
+}

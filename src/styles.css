@@ -99,6 +99,48 @@
   }
 }
 
+/* MapLibre markers + canvas */
+.aqi-map-canvas {
+  width: 100%;
+  height: 100%;
+}
+
+.aqi-map-canvas .maplibregl-ctrl-attrib {
+  font-size: 10px;
+  background: color-mix(in oklab, var(--color-bg) 85%, transparent) !important;
+  color: var(--color-subtle);
+}
+
+.aqi-map-marker {
+  display: grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 9999px;
+  border: 2px solid color-mix(in oklab, #fff 85%, transparent);
+  background: var(--aqi-marker, var(--color-aqi-unknown));
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.45);
+  color: #0c0f12;
+  font-size: 0.7rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+
+.aqi-map-marker[data-selected="1"] {
+  width: 2.85rem;
+  height: 2.85rem;
+  font-size: 0.8rem;
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--aqi-marker) 45%, transparent),
+    0 6px 18px rgb(0 0 0 / 0.5);
+}
+
+.aqi-map-marker-value {
+  pointer-events: none;
+}
+
 @layer utilities {
   .tabular {
     font-variant-numeric: tabular-nums;

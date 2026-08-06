@@ -8,7 +8,7 @@ PWA for tracking **US AQI** across up to **15** locations. Live readings and for
 | **Repo** | [github.com/jburum/aether-aqi](https://github.com/jburum/aether-aqi) |
 | **Local** | `~/Projects/AQI` |
 | **Docs** | [docs/](./docs/) |
-| **Latest** | **v1.4.0** |
+| **Latest** | **v1.5.0** |
 
 ## Features
 
@@ -18,6 +18,7 @@ PWA for tracking **US AQI** across up to **15** locations. Live readings and for
 - Tap a day to drill into that day’s hourly forecast
 - **Trash** or swipe left to delete
 - **Grip drag** (desktop) / hold-drag (phone) to reorder
+- **Map** tab: AQI pins for your places (MapLibre)
 - Installable PWA (iPhone Home Screen + custom icon)
 - Data stays in the browser (`localStorage`)
 

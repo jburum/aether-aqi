@@ -1,6 +1,6 @@
 # Product
 
-Last updated: 2026-08-05 · **v1.4.0**
+Last updated: 2026-08-05 · **v1.5.0**
 
 ## One-liner
 
@@ -54,12 +54,17 @@ Personal **air quality watchlist** PWA: up to **15** places, live US AQI, hour/d
 - [x] Git → Vercel auto-deploy from `~/Projects/AQI`
 - [x] Docs in git
 
+### Phase 1.5 (shipped)
+
+- [x] **Map tab** — MapLibre, AQI pins for watchlist, tap sheet, locate me, list↔map nav
+
 ### Phase 2 (planned)
 
-- [ ] **Map view** of watchlist (and later regional AQI) — see below
+- [ ] Map: nearby Open-Meteo sample grid / soft heatmap
 - [ ] AQI threshold alerts (`alertAt` already stored per place)
 - [ ] Optional account-backed sync
 - [ ] Stronger offline last-known AQI
+- [ ] **iOS App Store** free app via Capacitor — see [IOS-APP-STORE.md](./IOS-APP-STORE.md)
 
 ### Out of scope (for now)
 
@@ -70,44 +75,16 @@ Personal **air quality watchlist** PWA: up to **15** places, live US AQI, hour/d
 
 ---
 
-## Map view direction (Phase 2)
+## Map view
 
-**Reference product:** [IQAir AirVisual](https://www.iqair.com/air-quality-monitors/air-quality-app) / [live map](https://www.iqair.com/air-quality-map) — full-screen map, AQI-colored points, layers (stations / fires / wind), tap → detail.
+**Shipped (Phase A):** `/map` tab — MapLibre + Carto Dark Matter basemap, AQI-colored pins for watchlist places, tap → detail sheet, Locate me, fit bounds, List ↔ Map bottom nav.
 
-**What to copy (UX patterns):**
+**Reference UX:** [IQAir AirVisual](https://www.iqair.com/air-quality-monitors/air-quality-app) (patterns only — not their station network or 3D globe).
 
-| Pattern | Why it works |
-| --- | --- |
-| Full-bleed map as a primary tab | Spatial mental model for “where is bad air?” |
-| Color = US AQI band (EPA palette we already use) | Instant read without opening cards |
-| Tap marker → sheet with current AQI + link to full card | Same data model as watchlist |
-| Legend (Good → Hazardous) | Matches our `getAqiMeta` tokens |
-| Optional layers later | Wind / smoke — not day one |
+**Next map steps:**
 
-**What not to copy on day one:**
-
-- Global 80k-station network (IQAir proprietary)
-- 3D “AirVisual Earth” globe
-- Indoor purifier control
-- Paid heatmap tile vendors until we need them
-
-**Recommended build path for *this* app:**
-
-1. **v1 map — watchlist only**  
-   MapLibre GL JS (or Leaflet) + MapTiler / OpenFreeMap / Protomaps basemap.  
-   One circle marker per saved location, fill = AQI band color, label = AQI number.  
-   Tap → bottom sheet (reuse expand-card content).  
-   Fit bounds to watchlist; “Locate me” control.
-
-2. **v1.5 — nearby sample grid**  
-   Query Open-Meteo for a small lat/lon grid around the viewport center (throttled), show low-opacity dots or a simple filled contour. Still modeled CAMS data — honest disclaimer.
-
-3. **v2 — true heatmap (optional)**  
-   Google Air Quality API heatmap tiles, or self-served raster from a backend job. Higher cost/complexity; only if users need “paint the valley” views.
-
-**Stack fit:** React 19 + TanStack Router tab (`/map`), keep Zustand locations + React Query AQI keys. Prefer **MapLibre** over Google Maps for cost and open basemaps; use Google only if we buy heatmap tiles.
-
-**Honesty:** IQAir’s polish comes from exclusive station feeds + years of map UX. We can match the *interaction model* while staying on Open-Meteo and our 15-place watchlist — and label modeled vs monitor data clearly.
+1. Nearby Open-Meteo grid sample (soft regional context)
+2. Optional true heatmap tiles (Google AQ API) if users need it
 
 ---
 

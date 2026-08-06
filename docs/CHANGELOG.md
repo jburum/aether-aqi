@@ -2,6 +2,19 @@
 
 Newest first.
 
+## 2026-08-05 — v1.5.0 (watchlist map + App Store plan)
+
+### Product
+
+- **Map tab** (`/map`): MapLibre dark basemap, AQI number pins for saved places.
+- Tap pin → sheet (AQI, band, advice); **Locate me**; fit bounds to watchlist.
+- Bottom nav: **List** | **Map**.
+
+### Docs
+
+- [IOS-APP-STORE.md](./IOS-APP-STORE.md) — free App Store plan via Capacitor.
+- PRODUCT / ARCHITECTURE map section updated (Phase A shipped).
+
 ## 2026-08-05 — v1.4.0 (desktop + iOS polish, API proxy)
 
 ### Product

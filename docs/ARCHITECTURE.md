@@ -1,6 +1,6 @@
 # Architecture
 
-Last updated: 2026-08-05 · **v1.4.0**
+Last updated: 2026-08-05 · **v1.5.0**
 
 ## Pipeline: Local → Git → Vercel
 
@@ -96,12 +96,14 @@ Modeled AQI ≠ AirNow regulatory monitors.
 | Path | Responsibility |
 | --- | --- |
 | `src/components/aqi-components.tsx` | Cards, gestures, charts, add sheet |
+| `src/components/watchlist-map.tsx` | MapLibre watchlist map + pin sheet |
+| `src/components/app-nav.tsx` | List / Map bottom tabs |
 | `src/lib/locations-store.ts` | localStorage watchlist + reorder |
 | `src/lib/open-meteo.ts` | Client fetch to `/api/*` proxies |
 | `src/routes/api/aqi.ts` | Server proxy → Open-Meteo AQ |
 | `src/routes/api/geocode.ts` | Server proxy → Open-Meteo search |
 | `src/styles.css` + critical CSS in `__root.tsx` | Theme + safe-area shell |
-| `docs/` | Product + architecture |
+| `docs/` | Product + architecture + App Store plan |
 
 ---
 
@@ -114,6 +116,9 @@ Modeled AQI ≠ AirNow regulatory monitors.
 
 ---
 
-## Future: map view (design note)
+## Map (Phase A)
 
-See [PRODUCT.md](./PRODUCT.md) Phase 2 and the map recommendation in the session handoff / product roadmap. Preferred stack for this codebase: **MapLibre GL JS** (or Leaflet) + AQI-colored markers for saved places first; optional raster heatmap tiles later (Google AQ heatmap / custom). Stay same-origin for data; don’t depend on IQAir’s private APIs.
+- Route `/map`, basemap: Carto Dark Matter (MapLibre style JSON, no API key).
+- Markers: DOM pins with AQI number + band color (`aqiHex` in `src/lib/aqi.ts`).
+- Data: same React Query keys as list (`["aqi", id, lat, lon]`).
+- App Store packaging plan: [IOS-APP-STORE.md](./IOS-APP-STORE.md).
