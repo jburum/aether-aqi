@@ -11,10 +11,15 @@ import { useQueries } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { LocateFixed, X } from "lucide-react";
 import { aqiHex, formatAqi, getAqiMeta } from "@/lib/aqi";
-import { fetchAirQuality } from "@/lib/open-meteo";
+import { gridToGeoJSON } from "@/lib/aqi-grid";
+import { fetchAirQuality, fetchAqiGrid } from "@/lib/open-meteo";
 import { useLocationsStore } from "@/lib/locations-store";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+
+const GRID_SOURCE = "aqi-regional";
+const GRID_HEAT = "aqi-regional-heat";
+const GRID_CIRCLES = "aqi-regional-circles";
 
 // Stable public path: worker ESM imports ./maplibre-gl-shared.mjs alongside it.
 // (Vite hashed ?url breaks the relative shared import → black map.)
@@ -49,6 +54,9 @@ export function WatchlistMap() {
   const [mapReady, setMapReady] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [geoError, setGeoError] = useState<string | null>(null);
+  const [gridLoading, setGridLoading] = useState(false);
+  const gridReqRef = useRef(0);
+  const fitOnceRef = useRef(false);
 
   const queries = useQueries({
     queries: locations.map((loc) => ({
@@ -90,8 +98,134 @@ export function WatchlistMap() {
     map.addControl(new NavigationControl({ showCompass: false }), "bottom-right");
     mapRef.current = map;
     map.on("load", () => {
+      // Empty source; filled when viewport samples return
+      map.addSource(GRID_SOURCE, {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] },
+      });
+      // Soft regional color (numbers only on watchlist markers)
+      map.addLayer({
+        id: GRID_HEAT,
+        type: "heatmap",
+        source: GRID_SOURCE,
+        maxzoom: 12,
+        paint: {
+          "heatmap-weight": [
+            "interpolate",
+            ["linear"],
+            ["get", "aqi"],
+            0,
+            0.15,
+            50,
+            0.35,
+            100,
+            0.55,
+            150,
+            0.75,
+            200,
+            0.9,
+            300,
+            1,
+          ],
+          "heatmap-intensity": [
+            "interpolate",
+            ["linear"],
+            ["zoom"],
+            3,
+            0.55,
+            8,
+            1.1,
+            11,
+            1.4,
+          ],
+          "heatmap-radius": [
+            "interpolate",
+            ["linear"],
+            ["zoom"],
+            3,
+            28,
+            6,
+            42,
+            9,
+            56,
+            11,
+            72,
+          ],
+          "heatmap-opacity": 0.72,
+          "heatmap-color": [
+            "interpolate",
+            ["linear"],
+            ["heatmap-density"],
+            0,
+            "rgba(0,0,0,0)",
+            0.12,
+            "rgba(61,186,110,0.15)",
+            0.28,
+            "rgba(61,186,110,0.45)",
+            0.42,
+            "rgba(212,177,6,0.55)",
+            0.58,
+            "rgba(224,122,31,0.6)",
+            0.72,
+            "rgba(226,61,61,0.65)",
+            0.88,
+            "rgba(155,93,229,0.7)",
+            1,
+            "rgba(127,29,29,0.75)",
+          ],
+        },
+      });
+      // Subtle discrete dots so band color stays legible when zoomed in
+      map.addLayer({
+        id: GRID_CIRCLES,
+        type: "circle",
+        source: GRID_SOURCE,
+        minzoom: 7,
+        paint: {
+          "circle-radius": [
+            "interpolate",
+            ["linear"],
+            ["zoom"],
+            7,
+            10,
+            10,
+            16,
+            12,
+            22,
+          ],
+          "circle-color": [
+            "interpolate",
+            ["linear"],
+            ["get", "aqi"],
+            0,
+            "#3dba6e",
+            50,
+            "#3dba6e",
+            51,
+            "#d4b106",
+            100,
+            "#d4b106",
+            101,
+            "#e07a1f",
+            150,
+            "#e07a1f",
+            151,
+            "#e23d3d",
+            200,
+            "#e23d3d",
+            201,
+            "#9b5de5",
+            300,
+            "#9b5de5",
+            301,
+            "#7f1d1d",
+          ],
+          "circle-opacity": 0.22,
+          "circle-blur": 0.65,
+        },
+      });
+
       setMapReady(true);
-      // Ensure canvas has a real size after layout (iOS Safari flex)
       map.resize();
     });
     map.on("error", (e) => {
@@ -100,7 +234,6 @@ export function WatchlistMap() {
 
     const onResize = () => map.resize();
     window.addEventListener("resize", onResize);
-    // One more resize after paint
     const t = window.setTimeout(() => map.resize(), 100);
 
     return () => {
@@ -113,6 +246,53 @@ export function WatchlistMap() {
       setMapReady(false);
     };
   }, []);
+
+  // Sample AQI across the visible map for regional coloring (not numbered)
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+
+    let debounce: ReturnType<typeof setTimeout> | undefined;
+
+    const loadGrid = () => {
+      const b = map.getBounds();
+      const west = b.getWest();
+      const south = b.getSouth();
+      const east = b.getEast();
+      const north = b.getNorth();
+      const req = ++gridReqRef.current;
+      setGridLoading(true);
+      void fetchAqiGrid({ west, south, east, north })
+        .then((samples) => {
+          if (req !== gridReqRef.current || !mapRef.current) return;
+          const src = mapRef.current.getSource(GRID_SOURCE) as
+            | { setData: (d: ReturnType<typeof gridToGeoJSON>) => void }
+            | undefined;
+          src?.setData(gridToGeoJSON(samples));
+        })
+        .catch((err) => {
+          console.warn("[map grid]", err);
+        })
+        .finally(() => {
+          if (req === gridReqRef.current) setGridLoading(false);
+        });
+    };
+
+    const onMoveEnd = () => {
+      if (debounce) clearTimeout(debounce);
+      debounce = setTimeout(loadGrid, 450);
+    };
+
+    map.on("moveend", onMoveEnd);
+    // Initial sample after first layout
+    const kick = window.setTimeout(loadGrid, 200);
+
+    return () => {
+      window.clearTimeout(kick);
+      if (debounce) clearTimeout(debounce);
+      map.off("moveend", onMoveEnd);
+    };
+  }, [mapReady]);
 
   // Sync markers to locations + AQI
   useEffect(() => {
@@ -155,10 +335,11 @@ export function WatchlistMap() {
     }
   }, [points, mapReady, selectedId]);
 
-  // Fit bounds when location set changes
+  // Fit bounds once when watchlist first available (don't fight user pan after)
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !mapReady || locations.length === 0) return;
+    if (!map || !mapReady || locations.length === 0 || fitOnceRef.current) return;
+    fitOnceRef.current = true;
 
     if (locations.length === 1) {
       map.easeTo({
@@ -220,6 +401,12 @@ export function WatchlistMap() {
           </p>
           <p className="text-sm text-fg">
             {locations.length} place{locations.length === 1 ? "" : "s"}
+            {gridLoading ? (
+              <span className="ml-2 text-xs text-subtle">Updating region…</span>
+            ) : null}
+          </p>
+          <p className="mt-0.5 max-w-[11rem] text-[10px] leading-snug text-subtle">
+            Soft colors = modeled AQI nearby. Numbers = your saved places.
           </p>
         </div>
         <div className="pointer-events-auto flex flex-col items-end gap-2">
@@ -261,8 +448,8 @@ export function WatchlistMap() {
         </div>
       )}
 
-      {/* Legend */}
-      <div className="pointer-events-none absolute bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))] left-3 z-10 hidden sm:block">
+      {/* Legend — always on for map readability */}
+      <div className="pointer-events-none absolute bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))] left-3 z-10">
         <div className="pointer-events-auto rounded-xl border border-border bg-bg/90 px-3 py-2 text-[10px] shadow-lg backdrop-blur-md">
           <div className="mb-1 font-medium uppercase tracking-wider text-muted">
             US AQI

@@ -138,3 +138,25 @@ export function placeLabel(p: Pick<GeoResult, "name" | "admin1" | "country_code"
   else if (p.country_code) parts.push(p.country_code);
   return parts.join(", ");
 }
+
+/** Regional AQI samples for map coloring (viewport grid via /api/aqi-grid). */
+export async function fetchAqiGrid(bounds: {
+  west: number;
+  south: number;
+  east: number;
+  north: number;
+}): Promise<import("@/lib/aqi-grid").GridSample[]> {
+  const url = new URL(
+    "/api/aqi-grid",
+    typeof window !== "undefined" ? window.location.origin : "http://local",
+  );
+  url.searchParams.set("west", String(bounds.west));
+  url.searchParams.set("south", String(bounds.south));
+  url.searchParams.set("east", String(bounds.east));
+  url.searchParams.set("north", String(bounds.north));
+  const data = await fetchJson<{
+    samples?: import("@/lib/aqi-grid").GridSample[];
+    error?: string;
+  }>(url.pathname + url.search, "AQI grid", 20_000);
+  return data.samples ?? [];
+}

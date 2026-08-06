@@ -2,6 +2,14 @@
 
 Newest first.
 
+## 2026-08-05 — v1.5.1 (regional AQI map coloring)
+
+### Product
+
+- Map paints **soft AQI colors** across the visible region (Open-Meteo grid sample).
+- **Numbered pins only** for official watchlist places.
+- Legend + “Updating region…” while samples refresh on pan/zoom.
+
 ## 2026-08-05 — v1.5.0 (watchlist map + App Store plan)
 
 ### Product

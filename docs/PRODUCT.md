@@ -57,10 +57,11 @@ Personal **air quality watchlist** PWA: up to **15** places, live US AQI, hour/d
 ### Phase 1.5 (shipped)
 
 - [x] **Map tab** — MapLibre, AQI pins for watchlist, tap sheet, locate me, list↔map nav
+- [x] **Regional AQI coloring** — viewport grid via Open-Meteo; numbers only on watchlist pins
 
 ### Phase 2 (planned)
 
-- [ ] Map: nearby Open-Meteo sample grid / soft heatmap
+- [ ] Map: denser / smoother heatmap when zoomed (optional paid tiles)
 - [ ] AQI threshold alerts (`alertAt` already stored per place)
 - [ ] Optional account-backed sync
 - [ ] Stronger offline last-known AQI

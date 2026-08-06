@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as MapRouteImport } from './routes/map'
 import { Route as ApiAqiRouteImport } from './routes/api/aqi'
+import { Route as ApiAqiGridRouteImport } from './routes/api/aqi-grid'
 import { Route as ApiGeocodeRouteImport } from './routes/api/geocode'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 
@@ -36,6 +37,11 @@ const ApiAqiRoute = ApiAqiRouteImport.update({
   path: '/api/aqi',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAqiGridRoute = ApiAqiGridRouteImport.update({
+  id: '/api/aqi-grid',
+  path: '/api/aqi-grid',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiGeocodeRoute = ApiGeocodeRouteImport.update({
   id: '/api/geocode',
   path: '/api/geocode',
@@ -52,6 +58,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/map': typeof MapRoute
   '/api/aqi': typeof ApiAqiRoute
+  '/api/aqi-grid': typeof ApiAqiGridRoute
   '/api/geocode': typeof ApiGeocodeRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
 }
@@ -60,6 +67,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/map': typeof MapRoute
   '/api/aqi': typeof ApiAqiRoute
+  '/api/aqi-grid': typeof ApiAqiGridRoute
   '/api/geocode': typeof ApiGeocodeRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
 }
@@ -69,21 +77,36 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/map': typeof MapRoute
   '/api/aqi': typeof ApiAqiRoute
+  '/api/aqi-grid': typeof ApiAqiGridRoute
   '/api/geocode': typeof ApiGeocodeRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
-    '/' | '/login' | '/map' | '/api/aqi' | '/api/geocode' | '/api/auth/$'
+    | '/'
+    | '/login'
+    | '/map'
+    | '/api/aqi'
+    | '/api/aqi-grid'
+    | '/api/geocode'
+    | '/api/auth/$'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login' | '/map' | '/api/aqi' | '/api/geocode' | '/api/auth/$'
+  to:
+    | '/'
+    | '/login'
+    | '/map'
+    | '/api/aqi'
+    | '/api/aqi-grid'
+    | '/api/geocode'
+    | '/api/auth/$'
   id:
     | '__root__'
     | '/'
     | '/login'
     | '/map'
     | '/api/aqi'
+    | '/api/aqi-grid'
     | '/api/geocode'
     | '/api/auth/$'
   fileRoutesById: FileRoutesById
@@ -93,6 +116,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   MapRoute: typeof MapRoute
   ApiAqiRoute: typeof ApiAqiRoute
+  ApiAqiGridRoute: typeof ApiAqiGridRoute
   ApiGeocodeRoute: typeof ApiGeocodeRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
 }
@@ -127,6 +151,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAqiRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/aqi-grid': {
+      id: '/api/aqi-grid'
+      path: '/api/aqi-grid'
+      fullPath: '/api/aqi-grid'
+      preLoaderRoute: typeof ApiAqiGridRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/geocode': {
       id: '/api/geocode'
       path: '/api/geocode'
@@ -149,6 +180,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   MapRoute: MapRoute,
   ApiAqiRoute: ApiAqiRoute,
+  ApiAqiGridRoute: ApiAqiGridRoute,
   ApiGeocodeRoute: ApiGeocodeRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
 }
