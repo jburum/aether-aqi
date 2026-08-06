@@ -14,6 +14,7 @@ import { aqiHex, formatAqi, getAqiMeta } from "@/lib/aqi";
 import {
   boundsToImageCoordinates,
   clampBoundsForApi,
+  padBoundsForPaint,
   renderAqiFieldDataUrl,
   type FieldBounds,
 } from "@/lib/aqi-field";
@@ -190,10 +191,14 @@ export function WatchlistMap() {
         .map((n) => n.toFixed(3))
         .join(",");
 
-    /** Paint field stretched to exact viewport — never a smaller box. */
+    /**
+     * Paint field on a padded box around the viewport with soft edge fade.
+     * Image is never smaller than the view — hard mid-map cutoffs cannot appear.
+     */
     const applyField = (view: FieldBounds, samples: GridSample[]) => {
       if (!mapRef.current?.getSource(FIELD_SOURCE)) return false;
-      const dataUrl = renderAqiFieldDataUrl(samples, view, pinSamples());
+      const paint = padBoundsForPaint(view, 0.22);
+      const dataUrl = renderAqiFieldDataUrl(samples, paint, pinSamples());
       if (!dataUrl) return false;
       const src = mapRef.current.getSource(FIELD_SOURCE) as
         | {
@@ -209,7 +214,7 @@ export function WatchlistMap() {
       }
       src.updateImage({
         url: dataUrl,
-        coordinates: boundsToImageCoordinates(view),
+        coordinates: boundsToImageCoordinates(paint),
       });
       lastPaintViewRef.current = viewKey(view);
       lastPinSigRef.current = pinSig();
@@ -264,6 +269,12 @@ export function WatchlistMap() {
     };
 
     const readView = (): FieldBounds => {
+      // Mobile Safari: ensure layout size is current before reading bounds
+      try {
+        map.resize();
+      } catch {
+        /* ignore */
+      }
       const b = map.getBounds();
       return {
         west: b.getWest(),
@@ -275,7 +286,6 @@ export function WatchlistMap() {
 
     const loadGrid = (opts?: { force?: boolean }) => {
       if (!map.getSource(FIELD_SOURCE)) return;
-      // Re-read bounds at paint time so we never use a stale smaller box
       const view = readView();
       const vk = viewKey(view);
       const pinsChanged = pinSig() !== lastPinSigRef.current;
@@ -466,7 +476,7 @@ export function WatchlistMap() {
             ) : null}
           </p>
           <p className="mt-0.5 max-w-[12rem] text-[10px] leading-snug text-subtle">
-            Full-map AQI wash. Numbers = saved places only.
+            Soft-edged AQI wash. Numbers = saved places only.
           </p>
         </div>
         <div className="pointer-events-auto flex flex-col items-end gap-2">

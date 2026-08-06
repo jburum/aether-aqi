@@ -152,8 +152,7 @@ function packLon(w: number, e: number): { west: number; east: number } {
 
 /**
  * Bounds for the /api/aqi-grid request only (may be clamped for API limits).
- * The field *image* must still be painted to the full viewport separately —
- * never use this as MapLibre image coordinates or you get a hard cutoff.
+ * Never use this as MapLibre image coordinates.
  */
 export function clampBoundsForApi(b: FieldBounds, pad = 0.12): FieldBounds {
   const { w: viewW, e: viewE } = normalizeLonPair(b.west, b.east);
@@ -180,6 +179,51 @@ export function clampBoundsForApi(b: FieldBounds, pad = 0.12): FieldBounds {
     const mid = (w + e) / 2;
     w = mid - FIELD_MAX_LON_SPAN / 2;
     e = mid + FIELD_MAX_LON_SPAN / 2;
+  }
+
+  const lon = packLon(w, e);
+  return { west: lon.west, south: s, east: lon.east, north: n };
+}
+
+/**
+ * Image paint bounds: slightly larger than the viewport so soft feathered
+ * edges sit at/beyond the screen edge — no hard cutoff line mid-map.
+ * Does NOT clamp to API limits (samples are fetched separately).
+ */
+export function padBoundsForPaint(view: FieldBounds, padFrac = 0.22): FieldBounds {
+  const { w: viewW, e: viewE } = normalizeLonPair(view.west, view.east);
+  const lonSpan = Math.max(0.01, viewE - viewW);
+  const latSpan = Math.max(0.01, view.north - view.south);
+  // Keep pad modest on huge views so the canvas stays reasonable
+  const p =
+    latSpan > 50 || lonSpan > 80
+      ? Math.min(padFrac, 0.1)
+      : latSpan > 30 || lonSpan > 50
+        ? Math.min(padFrac, 0.15)
+        : padFrac;
+
+  let w = viewW - lonSpan * p;
+  let e = viewE + lonSpan * p;
+  let s = Math.max(-85, view.south - latSpan * p);
+  let n = Math.min(85, view.north + latSpan * p);
+
+  // Soft size cap for raster only (not API) — still larger than typical view
+  const maxLat = 95;
+  const maxLon = 170;
+  if (n - s > maxLat) {
+    const mid = (view.south + view.north) / 2;
+    s = Math.max(-85, mid - maxLat / 2);
+    n = Math.min(85, mid + maxLat / 2);
+    // Prefer containing the view
+    if (s > view.south) s = view.south;
+    if (n < view.north) n = view.north;
+  }
+  if (e - w > maxLon) {
+    const mid = (viewW + viewE) / 2;
+    w = mid - maxLon / 2;
+    e = mid + maxLon / 2;
+    if (w > viewW) w = viewW;
+    if (e < viewE) e = viewE;
   }
 
   const lon = packLon(w, e);
@@ -448,7 +492,20 @@ export function renderAqiFieldDataUrl(
   // 3) Moderate blur → soft zone edges without dissolving peaks into green
   const smooth = blurFloat(field, w, h, blurRadius, blurPasses);
 
-  // 4) Colorize
+  // Precompute max influence radius for data-edge fade (degrees)
+  // Beyond this, field soft-fades into the basemap instead of a hard cut.
+  let dataRadius = 10;
+  if (pts.length >= 4) {
+    // Wider views → longer fade so sparse far-north cells dissolve gently
+    dataRadius = Math.max(8, Math.min(28, Math.hypot(lonSpan, latSpan) * 0.22));
+  }
+  const dataFadeStart = dataRadius * 0.45;
+  const dataFadeEnd = dataRadius * 1.35;
+
+  // Edge feather as fraction of raster (outer rim → transparent)
+  const edgeFeather = 0.14;
+
+  // 4) Colorize + soft edge / data-boundary fade into basemap
   const canvas =
     typeof document !== "undefined" ? document.createElement("canvas") : null;
   if (!canvas) return null;
@@ -459,14 +516,48 @@ export function renderAqiFieldDataUrl(
 
   const img = ctx.createImageData(w, h);
   const data = img.data;
-  for (let i = 0; i < w * h; i++) {
-    const aqi = accentuate(smooth[i]);
-    const [r, g, b] = aqiToRgb(aqi);
-    const o = i * 4;
-    data[o] = r;
-    data[o + 1] = g;
-    data[o + 2] = b;
-    data[o + 3] = aqiToAlpha(aqi);
+  for (let y = 0; y < h; y++) {
+    const lat = north - ((y + 0.5) / h) * latSpan;
+    // Normalized distance to nearest image edge [0=edge, 0.5=center]
+    const ey = Math.min(y + 0.5, h - 0.5 - y) / h;
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x;
+      const aqi = accentuate(smooth[i]);
+      const [r, g, b] = aqiToRgb(aqi);
+
+      let lon = west + ((x + 0.5) / w) * lonSpan;
+      if (lon > 180) lon -= 360;
+
+      // --- Image-edge feather (smoothstep) ---
+      const ex = Math.min(x + 0.5, w - 0.5 - x) / w;
+      const edgeDist = Math.min(ex, ey);
+      let edgeMul = 1;
+      if (edgeDist < edgeFeather) {
+        const t = edgeDist / edgeFeather;
+        edgeMul = t * t * (3 - 2 * t);
+      }
+
+      // --- Data-edge feather: fade where samples are far away ---
+      let minD = Infinity;
+      for (const s of pts) {
+        const dlon = (lon - s.lon) * cosLat;
+        const dlat = lat - s.lat;
+        const d = Math.sqrt(dlon * dlon + dlat * dlat);
+        if (d < minD) minD = d;
+      }
+      let dataMul = 1;
+      if (minD >= dataFadeEnd) dataMul = 0;
+      else if (minD > dataFadeStart) {
+        const t = 1 - (minD - dataFadeStart) / (dataFadeEnd - dataFadeStart);
+        dataMul = t * t * (3 - 2 * t);
+      }
+
+      const o = i * 4;
+      data[o] = r;
+      data[o + 1] = g;
+      data[o + 2] = b;
+      data[o + 3] = Math.round(aqiToAlpha(aqi) * edgeMul * dataMul);
+    }
   }
   ctx.putImageData(img, 0, 0);
   return canvas.toDataURL("image/png");
