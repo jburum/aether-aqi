@@ -12,10 +12,14 @@ import { Link } from "@tanstack/react-router";
 import { LocateFixed, X } from "lucide-react";
 import { aqiHex, formatAqi, getAqiMeta } from "@/lib/aqi";
 import {
+  boundsContain,
   boundsToImageCoordinates,
+  expandFieldBounds,
   renderAqiFieldDataUrl,
+  unionFieldBounds,
   type FieldBounds,
 } from "@/lib/aqi-field";
+import { sampleKey, type GridSample } from "@/lib/aqi-grid";
 import { fetchAirQuality, fetchAqiGrid } from "@/lib/open-meteo";
 import { useLocationsStore } from "@/lib/locations-store";
 import { Button } from "@/components/ui/button";
@@ -24,6 +28,8 @@ import { cn } from "@/lib/utils";
 /** Continuous AQI wash (IDW raster). Numbers only on watchlist markers. */
 const FIELD_SOURCE = "aqi-field";
 const FIELD_LAYER = "aqi-field-raster";
+/** Re-fetch lattice samples at most this often (ms). */
+const SAMPLE_TTL_MS = 12 * 60 * 1000;
 
 // Stable public path: worker ESM imports ./maplibre-gl-shared.mjs alongside it.
 // (Vite hashed ?url breaks the relative shared import → black map.)
@@ -62,6 +68,13 @@ export function WatchlistMap() {
   const [gridCount, setGridCount] = useState(0);
   const gridReqRef = useRef(0);
   const fitOnceRef = useRef(false);
+  /** Fixed field image coverage — pan inside this does not recolor. */
+  const fieldCoverageRef = useRef<FieldBounds | null>(null);
+  /** Persistent lattice samples keyed by lat,lon — colors stay geographic. */
+  const sampleCacheRef = useRef<
+    Map<string, GridSample & { fetchedAt: number }>
+  >(new Map());
+  const lastPinSigRef = useRef<string>("");
 
   const queries = useQueries({
     queries: locations.map((loc) => ({
@@ -152,62 +165,163 @@ export function WatchlistMap() {
     };
   }, []);
 
-  // Sample AQI across the visible map for regional coloring (not numbered)
+  // Regional AQI field: fixed geographic lattice + coverage image.
+  // Panning inside coverage does NOT recolor — colors stay tied to regions.
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
     let debounce: ReturnType<typeof setTimeout> | undefined;
 
-    const loadGrid = () => {
+    const pinSamples = () =>
+      pointsRef.current
+        .filter((p) => p.aqi != null)
+        .map((p) => ({
+          latitude: p.loc.latitude,
+          longitude: p.loc.longitude,
+          us_aqi: p.aqi as number,
+        }));
+
+    const pinSig = () =>
+      pointsRef.current
+        .map((p) => `${p.loc.id}:${p.aqi ?? "x"}`)
+        .join("|");
+
+    const applyField = (coverage: FieldBounds, samples: GridSample[]) => {
+      if (!mapRef.current?.getSource(FIELD_SOURCE)) return;
+      const dataUrl = renderAqiFieldDataUrl(samples, coverage, pinSamples());
+      if (!dataUrl) return;
+      const src = mapRef.current.getSource(FIELD_SOURCE) as
+        | {
+            updateImage: (o: {
+              url: string;
+              coordinates: ReturnType<typeof boundsToImageCoordinates>;
+            }) => void;
+          }
+        | undefined;
+      if (!src?.updateImage) {
+        console.warn("[map field] image source missing");
+        return;
+      }
+      src.updateImage({
+        url: dataUrl,
+        coordinates: boundsToImageCoordinates(coverage),
+      });
+      fieldCoverageRef.current = coverage;
+      lastPinSigRef.current = pinSig();
+      setGridCount(samples.filter((s) => s.us_aqi != null).length);
+    };
+
+    const cachedSamplesNear = (coverage: FieldBounds): GridSample[] => {
+      const now = Date.now();
+      const out: GridSample[] = [];
+      // Include a little margin so edges stay consistent
+      const pad = expandFieldBounds(coverage, 0.05);
+      let pw = pad.west;
+      let pe = pad.east;
+      if (pe < pw) pe += 360;
+      for (const s of sampleCacheRef.current.values()) {
+        if (now - s.fetchedAt > SAMPLE_TTL_MS) continue;
+        let lon = s.longitude;
+        if (lon < pw - 180) lon += 360;
+        if (
+          lon >= pw &&
+          lon <= pe &&
+          s.latitude >= pad.south &&
+          s.latitude <= pad.north &&
+          s.us_aqi != null
+        ) {
+          out.push({
+            latitude: s.latitude,
+            longitude: s.longitude,
+            us_aqi: s.us_aqi,
+          });
+        }
+      }
+      return out;
+    };
+
+    const mergeIntoCache = (samples: GridSample[]) => {
+      const now = Date.now();
+      for (const s of samples) {
+        if (s.us_aqi == null || !Number.isFinite(s.us_aqi)) continue;
+        const k = sampleKey(s.latitude, s.longitude);
+        sampleCacheRef.current.set(k, { ...s, fetchedAt: now });
+      }
+      // Drop stale
+      for (const [k, v] of sampleCacheRef.current) {
+        if (now - v.fetchedAt > SAMPLE_TTL_MS) sampleCacheRef.current.delete(k);
+      }
+    };
+
+    const loadGrid = (opts?: { force?: boolean }) => {
       if (!map.getSource(FIELD_SOURCE)) return;
       const b = map.getBounds();
-      const bounds: FieldBounds = {
+      const view: FieldBounds = {
         west: b.getWest(),
         south: b.getSouth(),
         east: b.getEast(),
         north: b.getNorth(),
       };
+
+      const coverage = fieldCoverageRef.current;
+      const pinsChanged = pinSig() !== lastPinSigRef.current;
+
+      // Pan/zoom still inside painted coverage → keep image (static colors)
+      if (
+        !opts?.force &&
+        coverage &&
+        boundsContain(coverage, view, 0.06) &&
+        !pinsChanged
+      ) {
+        return;
+      }
+
+      // Pins updated but still inside coverage: re-paint from cache only
+      if (
+        !opts?.force &&
+        coverage &&
+        boundsContain(coverage, view, 0.06) &&
+        pinsChanged
+      ) {
+        const cached = cachedSamplesNear(coverage);
+        if (cached.length >= 2) {
+          applyField(coverage, cached);
+          return;
+        }
+      }
+
+      // Expand coverage so small pans don't refetch; union with prior if close
+      let next = expandFieldBounds(view, 0.45);
+      if (coverage) {
+        const united = unionFieldBounds(coverage, next);
+        let uw = united.west;
+        let ue = united.east;
+        if (ue < uw) ue += 360;
+        // Only keep union if not huge (API + raster limits)
+        if (ue - uw <= 120 && united.north - united.south <= 55) {
+          next = united;
+        }
+      }
+
       const req = ++gridReqRef.current;
       setGridLoading(true);
-      void fetchAqiGrid(bounds)
+      void fetchAqiGrid(next)
         .then((samples) => {
           if (req !== gridReqRef.current || !mapRef.current) return;
-          const withAqi = samples.filter(
-            (s) => s.us_aqi != null && Number.isFinite(s.us_aqi),
-          );
-          setGridCount(withAqi.length);
-          // Size/power/blur auto-tune for continental vs local spans
-          // Inject watchlist pin AQI so field matches official card numbers
-          const pinSamples = pointsRef.current
-            .filter((p) => p.aqi != null)
-            .map((p) => ({
-              latitude: p.loc.latitude,
-              longitude: p.loc.longitude,
-              us_aqi: p.aqi as number,
-            }));
-          const dataUrl = renderAqiFieldDataUrl(samples, bounds, pinSamples);
-          if (!dataUrl) return;
-          const src = mapRef.current.getSource(FIELD_SOURCE) as
-            | {
-                updateImage: (o: {
-                  url: string;
-                  coordinates: ReturnType<typeof boundsToImageCoordinates>;
-                }) => void;
-              }
-            | undefined;
-          if (!src?.updateImage) {
-            console.warn("[map field] image source missing");
-            return;
-          }
-          src.updateImage({
-            url: dataUrl,
-            coordinates: boundsToImageCoordinates(bounds),
-          });
+          mergeIntoCache(samples);
+          const all = cachedSamplesNear(next);
+          // Prefer full cache; fall back to this response alone
+          const forRender = all.length >= 2 ? all : samples;
+          applyField(next, forRender);
         })
         .catch((err) => {
           console.warn("[map field]", err);
-          if (req === gridReqRef.current) setGridCount(0);
+          // Still try to paint from whatever we have cached
+          if (req !== gridReqRef.current) return;
+          const cached = cachedSamplesNear(next);
+          if (cached.length >= 2) applyField(next, cached);
+          else setGridCount(0);
         })
         .finally(() => {
           if (req === gridReqRef.current) setGridLoading(false);
@@ -216,17 +330,24 @@ export function WatchlistMap() {
 
     const onMoveEnd = () => {
       if (debounce) clearTimeout(debounce);
-      debounce = setTimeout(loadGrid, 350);
+      debounce = setTimeout(() => loadGrid(), 400);
     };
 
     map.on("moveend", onMoveEnd);
     // Initial + after fitBounds animation
-    const kick = window.setTimeout(loadGrid, 150);
-    const kick2 = window.setTimeout(loadGrid, 900);
+    const kick = window.setTimeout(() => loadGrid({ force: true }), 150);
+    const kick2 = window.setTimeout(() => loadGrid(), 900);
+    // When pin AQI values stream in after mount
+    const pinPoll = window.setInterval(() => {
+      if (pinSig() !== lastPinSigRef.current && fieldCoverageRef.current) {
+        loadGrid();
+      }
+    }, 2000);
 
     return () => {
       window.clearTimeout(kick);
       window.clearTimeout(kick2);
+      window.clearInterval(pinPoll);
       if (debounce) clearTimeout(debounce);
       map.off("moveend", onMoveEnd);
     };
@@ -346,8 +467,7 @@ export function WatchlistMap() {
             ) : null}
           </p>
           <p className="mt-0.5 max-w-[12rem] text-[10px] leading-snug text-subtle">
-            Blended colors = modeled AQI field. Numbers = your saved places
-            only.
+            Regional colors stay fixed as you pan. Numbers = saved places only.
           </p>
         </div>
         <div className="pointer-events-auto flex flex-col items-end gap-2">

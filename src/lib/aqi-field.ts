@@ -99,27 +99,120 @@ function accentuate(aqi: number): number {
   return aqi + Math.min(35, 12 + (aqi - 150) * 0.12);
 }
 
-function fieldParams(bounds: FieldBounds): {
+/**
+ * Zoom-stable raster params: fixed °→px scale + geographic blur.
+ * Same lat/lon with the same samples always paints the same color,
+ * regardless of viewport size.
+ */
+function fieldParams(lonSpan: number, latSpan: number): {
   width: number;
   height: number;
   blurPasses: number;
   blurRadius: number;
   idwPower: number;
 } {
-  let { west, east, south, north } = bounds;
+  // Constant geographic resolution (not viewport-relative tiers)
+  const PX_PER_DEG = 7;
+  let width = Math.round(lonSpan * PX_PER_DEG);
+  let height = Math.round(latSpan * PX_PER_DEG);
+  width = Math.max(280, Math.min(960, width));
+  height = Math.max(200, Math.min(640, height));
+  // Blur ~0.7° in geographic space → stable zone edges when zoom changes
+  const blurDeg = 0.7;
+  const blurRadius = Math.max(
+    1,
+    Math.round(blurDeg * Math.min(width / lonSpan, height / latSpan)),
+  );
+  return {
+    width,
+    height,
+    blurPasses: 3,
+    blurRadius,
+    idwPower: 2.2, // fixed — never changes with zoom
+  };
+}
+
+/** Expand bounds by a fraction of span (for static field coverage). */
+export function expandFieldBounds(b: FieldBounds, pad = 0.4): FieldBounds {
+  let { west, south, east, north } = b;
   if (east < west) east += 360;
-  const span = Math.max(east - west, north - south);
-  // Lighter blur than before so local yellow/red islands survive
-  if (span > 50) {
-    return { width: 720, height: 480, blurPasses: 4, blurRadius: 3, idwPower: 2.0 };
+  const lonSpan = Math.max(0.01, east - west);
+  const latSpan = Math.max(0.01, north - south);
+  let w = west - lonSpan * pad;
+  let e = east + lonSpan * pad;
+  let s = Math.max(-85, south - latSpan * pad);
+  let n = Math.min(85, north + latSpan * pad);
+  if (e - w > 160) {
+    const mid = (w + e) / 2;
+    w = mid - 80;
+    e = mid + 80;
   }
-  if (span > 20) {
-    return { width: 600, height: 400, blurPasses: 4, blurRadius: 3, idwPower: 2.2 };
+  if (n - s > 70) {
+    const mid = (s + n) / 2;
+    s = mid - 35;
+    n = mid + 35;
   }
-  if (span > 8) {
-    return { width: 520, height: 360, blurPasses: 3, blurRadius: 2, idwPower: 2.4 };
+  // unwrap lon into [-180, 180] display space
+  if (w < -180) {
+    w += 360;
+    e += 360;
   }
-  return { width: 440, height: 320, blurPasses: 3, blurRadius: 2, idwPower: 2.6 };
+  if (e > 180 && w > 180) {
+    w -= 360;
+    e -= 360;
+  }
+  return { west: w, south: s, east: e > 180 ? e - 360 : e, north: n };
+}
+
+/** True if `inner` sits fully inside `outer` with a relative margin. */
+export function boundsContain(
+  outer: FieldBounds,
+  inner: FieldBounds,
+  margin = 0.08,
+): boolean {
+  let ow = outer.west;
+  let oe = outer.east;
+  let iw = inner.west;
+  let ie = inner.east;
+  if (oe < ow) oe += 360;
+  if (ie < iw) ie += 360;
+  // Normalize inner into outer's frame when possible
+  if (iw < ow - 180) {
+    iw += 360;
+    ie += 360;
+  }
+  const lonSpan = Math.max(0.01, oe - ow);
+  const latSpan = Math.max(0.01, outer.north - outer.south);
+  const mx = lonSpan * margin;
+  const my = latSpan * margin;
+  return (
+    iw >= ow + mx &&
+    ie <= oe - mx &&
+    inner.south >= outer.south + my &&
+    inner.north <= outer.north - my
+  );
+}
+
+/** Union of two bounds (simple, assumes same hemisphere / no antimeridian). */
+export function unionFieldBounds(a: FieldBounds, b: FieldBounds): FieldBounds {
+  let aw = a.west;
+  let ae = a.east;
+  let bw = b.west;
+  let be = b.east;
+  if (ae < aw) ae += 360;
+  if (be < bw) be += 360;
+  if (Math.abs(aw - bw) > 180) {
+    // Prefer the wider single span — fall back to b
+    return expandFieldBounds(b, 0);
+  }
+  const west = Math.min(aw, bw);
+  const east = Math.max(ae, be);
+  return {
+    west: west > 180 ? west - 360 : west,
+    south: Math.min(a.south, b.south),
+    east: east > 180 ? east - 360 : east,
+    north: Math.max(a.north, b.north),
+  };
 }
 
 /** Separable box blur on a float field (approximates Gaussian with many passes). */
@@ -320,7 +413,7 @@ export function renderAqiFieldDataUrl(
   const cosLat = Math.max(0.2, Math.cos((midLat * Math.PI) / 180));
 
   const { width: w, height: h, blurPasses, blurRadius, idwPower } =
-    fieldParams(bounds);
+    fieldParams(lonSpan, latSpan);
 
   // 1) Dense IDW scalar field
   const field = new Float32Array(w * h);
