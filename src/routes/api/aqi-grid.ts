@@ -20,18 +20,23 @@ export const Route = createFileRoute("/api/aqi-grid")({
             { status: 400 },
           );
         }
-        // Reject absurd spans (whole world) — too many requests / useless paint
+        // Very wide views still sample (coarser grid); only skip near-global spans
         const latSpan = Math.abs(north - south);
         let lonSpan = Math.abs(east - west);
         if (lonSpan > 180) lonSpan = 360 - lonSpan;
-        if (latSpan > 50 || lonSpan > 80) {
+        if (latSpan > 70 || lonSpan > 160) {
           return Response.json(
-            { error: "viewport too large — zoom in for regional coloring", samples: [] },
+            {
+              error: "zoom in for regional coloring",
+              samples: [],
+            },
             { status: 200 },
           );
         }
 
-        const points = buildAqiGrid(west, south, east, north, { maxPoints: 48 });
+        const points = buildAqiGrid(west, south, east, north, {
+          maxPoints: lonSpan > 60 ? 36 : 56,
+        });
         if (points.length === 0) {
           return Response.json({ samples: [] });
         }

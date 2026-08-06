@@ -23,8 +23,8 @@ export function buildAqiGrid(
   const lonSpan = Math.max(0.01, e - w);
 
   // Adaptive density: more points when zoomed in (smaller span)
-  let cols = opts?.cols ?? (lonSpan > 20 ? 6 : lonSpan > 8 ? 7 : 8);
-  let rows = opts?.rows ?? (latSpan > 15 ? 5 : latSpan > 6 ? 6 : 7);
+  let cols = opts?.cols ?? (lonSpan > 40 ? 6 : lonSpan > 15 ? 7 : lonSpan > 6 ? 8 : 9);
+  let rows = opts?.rows ?? (latSpan > 25 ? 5 : latSpan > 12 ? 6 : latSpan > 5 ? 7 : 8);
   while (cols * rows > maxPoints) {
     if (cols >= rows) cols -= 1;
     else rows -= 1;

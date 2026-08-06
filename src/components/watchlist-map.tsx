@@ -55,6 +55,7 @@ export function WatchlistMap() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [geoError, setGeoError] = useState<string | null>(null);
   const [gridLoading, setGridLoading] = useState(false);
+  const [gridCount, setGridCount] = useState(0);
   const gridReqRef = useRef(0);
   const fitOnceRef = useRef(false);
 
@@ -103,95 +104,30 @@ export function WatchlistMap() {
         type: "geojson",
         data: { type: "FeatureCollection", features: [] },
       });
-      // Soft regional color (numbers only on watchlist markers)
-      map.addLayer({
-        id: GRID_HEAT,
-        type: "heatmap",
-        source: GRID_SOURCE,
-        maxzoom: 12,
-        paint: {
-          "heatmap-weight": [
-            "interpolate",
-            ["linear"],
-            ["get", "aqi"],
-            0,
-            0.15,
-            50,
-            0.35,
-            100,
-            0.55,
-            150,
-            0.75,
-            200,
-            0.9,
-            300,
-            1,
-          ],
-          "heatmap-intensity": [
-            "interpolate",
-            ["linear"],
-            ["zoom"],
-            3,
-            0.55,
-            8,
-            1.1,
-            11,
-            1.4,
-          ],
-          "heatmap-radius": [
-            "interpolate",
-            ["linear"],
-            ["zoom"],
-            3,
-            28,
-            6,
-            42,
-            9,
-            56,
-            11,
-            72,
-          ],
-          "heatmap-opacity": 0.72,
-          "heatmap-color": [
-            "interpolate",
-            ["linear"],
-            ["heatmap-density"],
-            0,
-            "rgba(0,0,0,0)",
-            0.12,
-            "rgba(61,186,110,0.15)",
-            0.28,
-            "rgba(61,186,110,0.45)",
-            0.42,
-            "rgba(212,177,6,0.55)",
-            0.58,
-            "rgba(224,122,31,0.6)",
-            0.72,
-            "rgba(226,61,61,0.65)",
-            0.88,
-            "rgba(155,93,229,0.7)",
-            1,
-            "rgba(127,29,29,0.75)",
-          ],
-        },
-      });
-      // Subtle discrete dots so band color stays legible when zoomed in
+
+      // Large soft blobs — primary regional paint (visible at continental zoom)
+      // Numbers stay only on watchlist DOM markers above this layer.
       map.addLayer({
         id: GRID_CIRCLES,
         type: "circle",
         source: GRID_SOURCE,
-        minzoom: 7,
         paint: {
           "circle-radius": [
             "interpolate",
-            ["linear"],
+            ["exponential", 1.4],
             ["zoom"],
-            7,
+            2,
+            48,
+            4,
+            72,
+            6,
+            90,
+            8,
+            70,
             10,
-            10,
-            16,
+            48,
             12,
-            22,
+            32,
           ],
           "circle-color": [
             "interpolate",
@@ -220,8 +156,87 @@ export function WatchlistMap() {
             301,
             "#7f1d1d",
           ],
-          "circle-opacity": 0.22,
-          "circle-blur": 0.65,
+          "circle-opacity": [
+            "interpolate",
+            ["linear"],
+            ["zoom"],
+            2,
+            0.38,
+            5,
+            0.48,
+            8,
+            0.42,
+            11,
+            0.35,
+          ],
+          "circle-blur": 0.85,
+        },
+      });
+
+      // Extra glow blend so neighboring samples merge into a wash
+      map.addLayer({
+        id: GRID_HEAT,
+        type: "heatmap",
+        source: GRID_SOURCE,
+        maxzoom: 11,
+        paint: {
+          "heatmap-weight": [
+            "interpolate",
+            ["linear"],
+            ["get", "aqi"],
+            0,
+            0.25,
+            100,
+            0.65,
+            200,
+            1,
+          ],
+          "heatmap-intensity": [
+            "interpolate",
+            ["linear"],
+            ["zoom"],
+            2,
+            0.9,
+            6,
+            1.35,
+            10,
+            1.6,
+          ],
+          "heatmap-radius": [
+            "interpolate",
+            ["linear"],
+            ["zoom"],
+            2,
+            36,
+            5,
+            52,
+            8,
+            64,
+            10,
+            80,
+          ],
+          "heatmap-opacity": 0.55,
+          "heatmap-color": [
+            "interpolate",
+            ["linear"],
+            ["heatmap-density"],
+            0,
+            "rgba(0,0,0,0)",
+            0.08,
+            "rgba(61,186,110,0.25)",
+            0.25,
+            "rgba(61,186,110,0.55)",
+            0.4,
+            "rgba(212,177,6,0.6)",
+            0.55,
+            "rgba(224,122,31,0.65)",
+            0.7,
+            "rgba(226,61,61,0.7)",
+            0.85,
+            "rgba(155,93,229,0.72)",
+            1,
+            "rgba(127,29,29,0.78)",
+          ],
         },
       });
 
@@ -255,6 +270,7 @@ export function WatchlistMap() {
     let debounce: ReturnType<typeof setTimeout> | undefined;
 
     const loadGrid = () => {
+      if (!map.getSource(GRID_SOURCE)) return;
       const b = map.getBounds();
       const west = b.getWest();
       const south = b.getSouth();
@@ -265,13 +281,22 @@ export function WatchlistMap() {
       void fetchAqiGrid({ west, south, east, north })
         .then((samples) => {
           if (req !== gridReqRef.current || !mapRef.current) return;
+          const withAqi = samples.filter(
+            (s) => s.us_aqi != null && Number.isFinite(s.us_aqi),
+          );
+          setGridCount(withAqi.length);
           const src = mapRef.current.getSource(GRID_SOURCE) as
             | { setData: (d: ReturnType<typeof gridToGeoJSON>) => void }
             | undefined;
-          src?.setData(gridToGeoJSON(samples));
+          if (!src) {
+            console.warn("[map grid] source missing");
+            return;
+          }
+          src.setData(gridToGeoJSON(samples));
         })
         .catch((err) => {
           console.warn("[map grid]", err);
+          if (req === gridReqRef.current) setGridCount(0);
         })
         .finally(() => {
           if (req === gridReqRef.current) setGridLoading(false);
@@ -280,15 +305,17 @@ export function WatchlistMap() {
 
     const onMoveEnd = () => {
       if (debounce) clearTimeout(debounce);
-      debounce = setTimeout(loadGrid, 450);
+      debounce = setTimeout(loadGrid, 350);
     };
 
     map.on("moveend", onMoveEnd);
-    // Initial sample after first layout
-    const kick = window.setTimeout(loadGrid, 200);
+    // Initial + after fitBounds animation
+    const kick = window.setTimeout(loadGrid, 150);
+    const kick2 = window.setTimeout(loadGrid, 900);
 
     return () => {
       window.clearTimeout(kick);
+      window.clearTimeout(kick2);
       if (debounce) clearTimeout(debounce);
       map.off("moveend", onMoveEnd);
     };
@@ -403,10 +430,13 @@ export function WatchlistMap() {
             {locations.length} place{locations.length === 1 ? "" : "s"}
             {gridLoading ? (
               <span className="ml-2 text-xs text-subtle">Updating region…</span>
+            ) : gridCount > 0 ? (
+              <span className="ml-2 text-xs text-subtle">· region on</span>
             ) : null}
           </p>
-          <p className="mt-0.5 max-w-[11rem] text-[10px] leading-snug text-subtle">
-            Soft colors = modeled AQI nearby. Numbers = your saved places.
+          <p className="mt-0.5 max-w-[12rem] text-[10px] leading-snug text-subtle">
+            Soft colors = modeled AQI across the map. Numbers = your saved
+            places only.
           </p>
         </div>
         <div className="pointer-events-auto flex flex-col items-end gap-2">
