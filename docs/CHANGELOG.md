@@ -2,6 +2,27 @@
 
 Newest first.
 
+## 2026-08-05 — v1.4.0 (desktop + iOS polish, API proxy)
+
+### Product
+
+- Desktop: **grip-drag reorder**; **trash** on each card; swipe-delete latches open (no post-drag close bug).
+- Sign-in chrome **removed** from the home shell (auth code kept for later).
+- Chart times use **12-hour** labels (`2 PM`, `Fri 7:00 PM`).
+- iPhone: safe-area top inset without a huge empty band under the Dynamic Island.
+- AQI / geocode via **same-origin** `/api/aqi` and `/api/geocode` (Safari-friendly).
+
+### Ops
+
+- GitHub ↔ Vercel Git link; push `main` auto-deploys.
+- Service worker reduced to cache **cleanup** (avoids stale HTML/CSS shells).
+- Local workspace: `~/Projects/AQI`.
+
+### Docs
+
+- ARCHITECTURE / PRODUCT / README refreshed for v1.4.0.
+- Phase 2 **map view** direction documented (IQAir-inspired UX, MapLibre + watchlist markers first).
+
 ## 2026-08-05 — Deploy path: native Git → Vercel
 
 ### Ops
