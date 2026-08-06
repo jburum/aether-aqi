@@ -57,15 +57,16 @@
   }
 
   /*
-   * Sticky opaque strip under the iOS status bar / Dynamic Island.
-   * Keeps system time & signal readable and pushes app chrome below the notch.
+   * Fixed (not in-flow) paint under the status bar / Dynamic Island so the
+   * clock stays readable. Does not reserve a second empty block in the layout.
    */
   .aqi-status-bar {
-    position: sticky;
+    position: fixed;
     top: 0;
+    left: 0;
+    right: 0;
     z-index: 300;
-    width: 100%;
-    flex-shrink: 0;
+    pointer-events: none;
     background: var(--color-bg);
     height: constant(safe-area-inset-top);
     height: env(safe-area-inset-top, 0px);
@@ -74,8 +75,15 @@
   @media screen and (max-width: 768px) {
     .aqi-status-bar {
       /* Fallback when Safari reports safe-area-inset-top as 0 */
-      min-height: 59px;
-      height: max(59px, env(safe-area-inset-top, 0px));
+      height: max(47px, env(safe-area-inset-top, 0px));
+    }
+
+    .aqi-shell {
+      /* Content starts just below the unsafe top + a small breath */
+      padding-top: max(0.75rem, calc(env(safe-area-inset-top, 47px) + 0.5rem));
+      padding-right: max(1rem, env(safe-area-inset-right, 0px));
+      padding-bottom: max(4rem, env(safe-area-inset-bottom, 0px));
+      padding-left: max(1rem, env(safe-area-inset-left, 0px));
     }
   }
 
@@ -83,13 +91,13 @@
     .aqi-status-bar {
       display: none;
     }
-  }
 
-  .aqi-shell {
-    padding-top: 1rem;
-    padding-right: max(1rem, env(safe-area-inset-right, 0px));
-    padding-bottom: max(4rem, env(safe-area-inset-bottom, 0px));
-    padding-left: max(1rem, env(safe-area-inset-left, 0px));
+    .aqi-shell {
+      padding-top: 1.5rem;
+      padding-right: 1.5rem;
+      padding-bottom: 4rem;
+      padding-left: 1.5rem;
+    }
   }
 
   /* Prevent iOS focus-zoom (requires ≥16px) which pans content off-screen */
