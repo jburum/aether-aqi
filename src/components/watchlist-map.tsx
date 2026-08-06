@@ -11,15 +11,19 @@ import { useQueries } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { LocateFixed, X } from "lucide-react";
 import { aqiHex, formatAqi, getAqiMeta } from "@/lib/aqi";
-import { gridToGeoJSON } from "@/lib/aqi-grid";
+import {
+  boundsToImageCoordinates,
+  renderAqiFieldDataUrl,
+  type FieldBounds,
+} from "@/lib/aqi-field";
 import { fetchAirQuality, fetchAqiGrid } from "@/lib/open-meteo";
 import { useLocationsStore } from "@/lib/locations-store";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-const GRID_SOURCE = "aqi-regional";
-const GRID_HEAT = "aqi-regional-heat";
-const GRID_CIRCLES = "aqi-regional-circles";
+/** Continuous AQI wash (IDW raster). Numbers only on watchlist markers. */
+const FIELD_SOURCE = "aqi-field";
+const FIELD_LAYER = "aqi-field-raster";
 
 // Stable public path: worker ESM imports ./maplibre-gl-shared.mjs alongside it.
 // (Vite hashed ?url breaks the relative shared import → black map.)
@@ -99,144 +103,27 @@ export function WatchlistMap() {
     map.addControl(new NavigationControl({ showCompass: false }), "bottom-right");
     mapRef.current = map;
     map.on("load", () => {
-      // Empty source; filled when viewport samples return
-      map.addSource(GRID_SOURCE, {
-        type: "geojson",
-        data: { type: "FeatureCollection", features: [] },
+      // Placeholder 1×1; replaced with IDW-interpolated AQI field after samples load
+      const placeholder =
+        "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+      map.addSource(FIELD_SOURCE, {
+        type: "image",
+        url: placeholder,
+        coordinates: [
+          [-180, 85],
+          [180, 85],
+          [180, -85],
+          [-180, -85],
+        ],
       });
-
-      // Large soft blobs — primary regional paint (visible at continental zoom)
-      // Numbers stay only on watchlist DOM markers above this layer.
       map.addLayer({
-        id: GRID_CIRCLES,
-        type: "circle",
-        source: GRID_SOURCE,
+        id: FIELD_LAYER,
+        type: "raster",
+        source: FIELD_SOURCE,
         paint: {
-          "circle-radius": [
-            "interpolate",
-            ["exponential", 1.4],
-            ["zoom"],
-            2,
-            48,
-            4,
-            72,
-            6,
-            90,
-            8,
-            70,
-            10,
-            48,
-            12,
-            32,
-          ],
-          "circle-color": [
-            "interpolate",
-            ["linear"],
-            ["get", "aqi"],
-            0,
-            "#3dba6e",
-            50,
-            "#3dba6e",
-            51,
-            "#d4b106",
-            100,
-            "#d4b106",
-            101,
-            "#e07a1f",
-            150,
-            "#e07a1f",
-            151,
-            "#e23d3d",
-            200,
-            "#e23d3d",
-            201,
-            "#9b5de5",
-            300,
-            "#9b5de5",
-            301,
-            "#7f1d1d",
-          ],
-          "circle-opacity": [
-            "interpolate",
-            ["linear"],
-            ["zoom"],
-            2,
-            0.38,
-            5,
-            0.48,
-            8,
-            0.42,
-            11,
-            0.35,
-          ],
-          "circle-blur": 0.85,
-        },
-      });
-
-      // Extra glow blend so neighboring samples merge into a wash
-      map.addLayer({
-        id: GRID_HEAT,
-        type: "heatmap",
-        source: GRID_SOURCE,
-        maxzoom: 11,
-        paint: {
-          "heatmap-weight": [
-            "interpolate",
-            ["linear"],
-            ["get", "aqi"],
-            0,
-            0.25,
-            100,
-            0.65,
-            200,
-            1,
-          ],
-          "heatmap-intensity": [
-            "interpolate",
-            ["linear"],
-            ["zoom"],
-            2,
-            0.9,
-            6,
-            1.35,
-            10,
-            1.6,
-          ],
-          "heatmap-radius": [
-            "interpolate",
-            ["linear"],
-            ["zoom"],
-            2,
-            36,
-            5,
-            52,
-            8,
-            64,
-            10,
-            80,
-          ],
-          "heatmap-opacity": 0.55,
-          "heatmap-color": [
-            "interpolate",
-            ["linear"],
-            ["heatmap-density"],
-            0,
-            "rgba(0,0,0,0)",
-            0.08,
-            "rgba(61,186,110,0.25)",
-            0.25,
-            "rgba(61,186,110,0.55)",
-            0.4,
-            "rgba(212,177,6,0.6)",
-            0.55,
-            "rgba(224,122,31,0.65)",
-            0.7,
-            "rgba(226,61,61,0.7)",
-            0.85,
-            "rgba(155,93,229,0.72)",
-            1,
-            "rgba(127,29,29,0.78)",
-          ],
+          "raster-opacity": 0.58,
+          "raster-fade-duration": 0,
+          "raster-resampling": "linear",
         },
       });
 
@@ -270,32 +157,44 @@ export function WatchlistMap() {
     let debounce: ReturnType<typeof setTimeout> | undefined;
 
     const loadGrid = () => {
-      if (!map.getSource(GRID_SOURCE)) return;
+      if (!map.getSource(FIELD_SOURCE)) return;
       const b = map.getBounds();
-      const west = b.getWest();
-      const south = b.getSouth();
-      const east = b.getEast();
-      const north = b.getNorth();
+      const bounds: FieldBounds = {
+        west: b.getWest(),
+        south: b.getSouth(),
+        east: b.getEast(),
+        north: b.getNorth(),
+      };
       const req = ++gridReqRef.current;
       setGridLoading(true);
-      void fetchAqiGrid({ west, south, east, north })
+      void fetchAqiGrid(bounds)
         .then((samples) => {
           if (req !== gridReqRef.current || !mapRef.current) return;
           const withAqi = samples.filter(
             (s) => s.us_aqi != null && Number.isFinite(s.us_aqi),
           );
           setGridCount(withAqi.length);
-          const src = mapRef.current.getSource(GRID_SOURCE) as
-            | { setData: (d: ReturnType<typeof gridToGeoJSON>) => void }
+          const dataUrl = renderAqiFieldDataUrl(samples, bounds, 320, 200, 165);
+          if (!dataUrl) return;
+          const src = mapRef.current.getSource(FIELD_SOURCE) as
+            | {
+                updateImage: (o: {
+                  url: string;
+                  coordinates: ReturnType<typeof boundsToImageCoordinates>;
+                }) => void;
+              }
             | undefined;
-          if (!src) {
-            console.warn("[map grid] source missing");
+          if (!src?.updateImage) {
+            console.warn("[map field] image source missing");
             return;
           }
-          src.setData(gridToGeoJSON(samples));
+          src.updateImage({
+            url: dataUrl,
+            coordinates: boundsToImageCoordinates(bounds),
+          });
         })
         .catch((err) => {
-          console.warn("[map grid]", err);
+          console.warn("[map field]", err);
           if (req === gridReqRef.current) setGridCount(0);
         })
         .finally(() => {
@@ -435,8 +334,8 @@ export function WatchlistMap() {
             ) : null}
           </p>
           <p className="mt-0.5 max-w-[12rem] text-[10px] leading-snug text-subtle">
-            Soft colors = modeled AQI across the map. Numbers = your saved
-            places only.
+            Blended colors = modeled AQI field. Numbers = your saved places
+            only.
           </p>
         </div>
         <div className="pointer-events-auto flex flex-col items-end gap-2">

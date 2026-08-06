@@ -35,7 +35,8 @@ export const Route = createFileRoute("/api/aqi-grid")({
         }
 
         const points = buildAqiGrid(west, south, east, north, {
-          maxPoints: lonSpan > 60 ? 36 : 56,
+          // Denser grid → smoother IDW field on the client
+          maxPoints: lonSpan > 80 ? 48 : lonSpan > 40 ? 64 : 80,
         });
         if (points.length === 0) {
           return Response.json({ samples: [] });

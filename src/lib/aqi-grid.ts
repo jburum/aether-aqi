@@ -13,7 +13,7 @@ export function buildAqiGrid(
   north: number,
   opts?: { maxPoints?: number; cols?: number; rows?: number },
 ): GridPoint[] {
-  const maxPoints = opts?.maxPoints ?? 48;
+  const maxPoints = opts?.maxPoints ?? 80;
   // Normalize antimeridian-ish spans
   let w = west;
   let e = east;
