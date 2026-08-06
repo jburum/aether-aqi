@@ -15,6 +15,8 @@ import {
   boundsContain,
   boundsToImageCoordinates,
   expandFieldBounds,
+  FIELD_MAX_LAT_SPAN,
+  FIELD_MAX_LON_SPAN,
   renderAqiFieldDataUrl,
   unionFieldBounds,
   type FieldBounds,
@@ -267,41 +269,42 @@ export function WatchlistMap() {
       const coverage = fieldCoverageRef.current;
       const pinsChanged = pinSig() !== lastPinSigRef.current;
 
-      // Pan/zoom still inside painted coverage → keep image (static colors)
-      if (
-        !opts?.force &&
-        coverage &&
-        boundsContain(coverage, view, 0.06) &&
-        !pinsChanged
-      ) {
+      // Must fully cover the viewport (margin 0) — otherwise Canada/edges cut off
+      const viewCovered =
+        coverage != null && boundsContain(coverage, view, 0);
+
+      // Pan/zoom still fully inside painted coverage → keep image (static colors)
+      if (!opts?.force && viewCovered && !pinsChanged) {
         return;
       }
 
-      // Pins updated but still inside coverage: re-paint from cache only
-      if (
-        !opts?.force &&
-        coverage &&
-        boundsContain(coverage, view, 0.06) &&
-        pinsChanged
-      ) {
-        const cached = cachedSamplesNear(coverage);
+      // Pins updated but view still covered: re-paint from cache only
+      if (!opts?.force && viewCovered && pinsChanged) {
+        const cached = cachedSamplesNear(coverage!);
         if (cached.length >= 2) {
-          applyField(coverage, cached);
+          applyField(coverage!, cached);
           return;
         }
       }
 
-      // Expand coverage so small pans don't refetch; union with prior if close
-      let next = expandFieldBounds(view, 0.45);
-      if (coverage) {
+      // Coverage must always include the full viewport (no mid-map cutoff)
+      let next = expandFieldBounds(view, 0.35);
+      if (coverage && viewCovered) {
         const united = unionFieldBounds(coverage, next);
         let uw = united.west;
         let ue = united.east;
         if (ue < uw) ue += 360;
-        // Only keep union if not huge (API + raster limits)
-        if (ue - uw <= 120 && united.north - united.south <= 55) {
+        if (
+          ue - uw <= FIELD_MAX_LON_SPAN &&
+          united.north - united.south <= FIELD_MAX_LAT_SPAN &&
+          boundsContain(united, view, 0)
+        ) {
           next = united;
         }
+      }
+      // Final safety: if expand still misses view (extreme zoom-out), use view
+      if (!boundsContain(next, view, 0)) {
+        next = expandFieldBounds(view, 0);
       }
 
       const req = ++gridReqRef.current;
@@ -311,13 +314,28 @@ export function WatchlistMap() {
           if (req !== gridReqRef.current || !mapRef.current) return;
           mergeIntoCache(samples);
           const all = cachedSamplesNear(next);
-          // Prefer full cache; fall back to this response alone
           const forRender = all.length >= 2 ? all : samples;
-          applyField(next, forRender);
+          if (forRender.filter((s) => s.us_aqi != null).length >= 2) {
+            // Paint for a box that covers the view so edges never go blank
+            applyField(next, forRender);
+          } else {
+            // API empty (too wide?) — try exact view once
+            const tight = expandFieldBounds(view, 0);
+            return fetchAqiGrid(tight).then((retry) => {
+              if (req !== gridReqRef.current || !mapRef.current) return;
+              mergeIntoCache(retry);
+              const merged = cachedSamplesNear(tight);
+              const paint = merged.length >= 2 ? merged : retry;
+              if (paint.filter((s) => s.us_aqi != null).length >= 2) {
+                applyField(tight, paint);
+              } else {
+                setGridCount(0);
+              }
+            });
+          }
         })
         .catch((err) => {
           console.warn("[map field]", err);
-          // Still try to paint from whatever we have cached
           if (req !== gridReqRef.current) return;
           const cached = cachedSamplesNear(next);
           if (cached.length >= 2) applyField(next, cached);

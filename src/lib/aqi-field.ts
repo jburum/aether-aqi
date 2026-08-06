@@ -127,39 +127,113 @@ function fieldParams(lonSpan: number, latSpan: number): {
   };
 }
 
-/** Expand bounds by a fraction of span (for static field coverage). */
-export function expandFieldBounds(b: FieldBounds, pad = 0.4): FieldBounds {
-  let { west, south, east, north } = b;
-  if (east < west) east += 360;
-  const lonSpan = Math.max(0.01, east - west);
-  const latSpan = Math.max(0.01, north - south);
-  let w = west - lonSpan * pad;
-  let e = east + lonSpan * pad;
-  let s = Math.max(-85, south - latSpan * pad);
-  let n = Math.min(85, north + latSpan * pad);
-  if (e - w > 160) {
-    const mid = (w + e) / 2;
-    w = mid - 80;
-    e = mid + 80;
-  }
-  if (n - s > 70) {
-    const mid = (s + n) / 2;
-    s = mid - 35;
-    n = mid + 35;
-  }
-  // unwrap lon into [-180, 180] display space
-  if (w < -180) {
+/** Must stay under /api/aqi-grid limits so we never paint a partial view. */
+export const FIELD_MAX_LAT_SPAN = 78;
+export const FIELD_MAX_LON_SPAN = 155;
+
+function normalizeLonPair(west: number, east: number): { w: number; e: number } {
+  let w = west;
+  let e = east;
+  if (e < w) e += 360;
+  return { w, e };
+}
+
+function packLon(w: number, e: number): { west: number; east: number } {
+  while (w < -180) {
     w += 360;
     e += 360;
   }
-  if (e > 180 && w > 180) {
+  while (w > 180) {
     w -= 360;
     e -= 360;
   }
-  return { west: w, south: s, east: e > 180 ? e - 360 : e, north: n };
+  return { west: w, east: e > 180 ? e - 360 : e };
 }
 
-/** True if `inner` sits fully inside `outer` with a relative margin. */
+/**
+ * Expand bounds for static field coverage.
+ * Critical: never return a box smaller than the input view — that caused
+ * the hard Canada cutoff on tall mobile viewports (coverage clamped mid-map).
+ */
+export function expandFieldBounds(b: FieldBounds, pad = 0.4): FieldBounds {
+  const viewSouth = b.south;
+  const viewNorth = b.north;
+  const { w: viewW, e: viewE } = normalizeLonPair(b.west, b.east);
+  const lonSpan = Math.max(0.01, viewE - viewW);
+  const latSpan = Math.max(0.01, viewNorth - viewSouth);
+
+  // Less pad when the view is already huge (phone showing Canada→Andes)
+  const effectivePad =
+    latSpan > 45 || lonSpan > 70
+      ? Math.min(pad, 0.08)
+      : latSpan > 28 || lonSpan > 45
+        ? Math.min(pad, 0.2)
+        : pad;
+
+  let w = viewW - lonSpan * effectivePad;
+  let e = viewE + lonSpan * effectivePad;
+  let s = Math.max(-85, viewSouth - latSpan * effectivePad);
+  let n = Math.min(85, viewNorth + latSpan * effectivePad);
+
+  // Always contain the visible map
+  w = Math.min(w, viewW);
+  e = Math.max(e, viewE);
+  s = Math.min(s, viewSouth);
+  n = Math.max(n, viewNorth);
+
+  // Cap span for API/raster, without uncovering the view when possible
+  if (n - s > FIELD_MAX_LAT_SPAN) {
+    if (viewNorth - viewSouth >= FIELD_MAX_LAT_SPAN - 0.01) {
+      const mid = (viewSouth + viewNorth) / 2;
+      s = mid - FIELD_MAX_LAT_SPAN / 2;
+      n = mid + FIELD_MAX_LAT_SPAN / 2;
+    } else {
+      s = viewSouth;
+      n = viewNorth;
+      const room = FIELD_MAX_LAT_SPAN - (n - s);
+      s = Math.max(-85, s - room / 2);
+      n = Math.min(85, n + room / 2);
+      if (s > viewSouth) {
+        n += s - viewSouth;
+        s = viewSouth;
+      }
+      if (n < viewNorth) {
+        s -= viewNorth - n;
+        n = viewNorth;
+      }
+    }
+  }
+
+  if (e - w > FIELD_MAX_LON_SPAN) {
+    if (viewE - viewW >= FIELD_MAX_LON_SPAN - 0.01) {
+      const mid = (viewW + viewE) / 2;
+      w = mid - FIELD_MAX_LON_SPAN / 2;
+      e = mid + FIELD_MAX_LON_SPAN / 2;
+    } else {
+      w = viewW;
+      e = viewE;
+      const room = FIELD_MAX_LON_SPAN - (e - w);
+      w -= room / 2;
+      e += room / 2;
+      if (w > viewW) {
+        e += w - viewW;
+        w = viewW;
+      }
+      if (e < viewE) {
+        w -= viewE - e;
+        e = viewE;
+      }
+    }
+  }
+
+  const lon = packLon(w, e);
+  return { west: lon.west, south: s, east: lon.east, north: n };
+}
+
+/**
+ * True if `outer` fully covers `inner` (with optional relative margin).
+ * Margin 0 = exact contain — use to detect Canada/edge cutoffs.
+ */
 export function boundsContain(
   outer: FieldBounds,
   inner: FieldBounds,
@@ -171,7 +245,6 @@ export function boundsContain(
   let ie = inner.east;
   if (oe < ow) oe += 360;
   if (ie < iw) ie += 360;
-  // Normalize inner into outer's frame when possible
   if (iw < ow - 180) {
     iw += 360;
     ie += 360;
@@ -181,10 +254,10 @@ export function boundsContain(
   const mx = lonSpan * margin;
   const my = latSpan * margin;
   return (
-    iw >= ow + mx &&
-    ie <= oe - mx &&
-    inner.south >= outer.south + my &&
-    inner.north <= outer.north - my
+    iw >= ow + mx - 1e-6 &&
+    ie <= oe - mx + 1e-6 &&
+    inner.south >= outer.south + my - 1e-6 &&
+    inner.north <= outer.north - my + 1e-6
   );
 }
 
@@ -197,17 +270,22 @@ export function unionFieldBounds(a: FieldBounds, b: FieldBounds): FieldBounds {
   if (ae < aw) ae += 360;
   if (be < bw) be += 360;
   if (Math.abs(aw - bw) > 180) {
-    // Prefer the wider single span — fall back to b
     return expandFieldBounds(b, 0);
   }
   const west = Math.min(aw, bw);
   const east = Math.max(ae, be);
-  return {
-    west: west > 180 ? west - 360 : west,
-    south: Math.min(a.south, b.south),
-    east: east > 180 ? east - 360 : east,
-    north: Math.max(a.north, b.north),
-  };
+  const south = Math.min(a.south, b.south);
+  const north = Math.max(a.north, b.north);
+  // Re-run through expand(0) caps so union never exceeds API limits
+  return expandFieldBounds(
+    {
+      west: west > 180 ? west - 360 : west,
+      south,
+      east: east > 180 ? east - 360 : east,
+      north,
+    },
+    0,
+  );
 }
 
 /** Separable box blur on a float field (approximates Gaussian with many passes). */

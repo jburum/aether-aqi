@@ -24,7 +24,8 @@ export const Route = createFileRoute("/api/aqi-grid")({
         const latSpan = Math.abs(north - south);
         let lonSpan = Math.abs(east - west);
         if (lonSpan > 180) lonSpan = 360 - lonSpan;
-        if (latSpan > 70 || lonSpan > 160) {
+        // Match client FIELD_MAX_* — tall mobile (Canada→tropics) needs ~78°
+        if (latSpan > 80 || lonSpan > 160) {
           return Response.json(
             {
               error: "zoom in for regional coloring",
