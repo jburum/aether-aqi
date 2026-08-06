@@ -57,45 +57,22 @@
   }
 
   /*
-   * One shared top inset so the status-bar paint and content padding never
-   * disagree (mismatch was clipping "Watchlist" under a tall empty band).
-   * Note: env(..., 47px) only applies when undefined — not when the value is 0.
+   * Top inset = real safe-area only (no 47px floor — that created a huge
+   * empty band under the Dynamic Island). Page background is already dark
+   * so the system clock stays readable without a fixed overlay bar.
    */
-  :root {
-    --aqi-top-inset: env(safe-area-inset-top, 0px);
-  }
-
   .aqi-status-bar {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    z-index: 300;
-    pointer-events: none;
-    background: var(--color-bg);
-    height: var(--aqi-top-inset);
+    display: none;
   }
 
-  @media screen and (max-width: 768px) {
-    :root {
-      /* Clear Dynamic Island even when Safari reports inset as 0 */
-      --aqi-top-inset: max(47px, env(safe-area-inset-top, 0px));
-    }
-
-    .aqi-shell {
-      /* Exactly under the bar + 8px breath — no double padding */
-      padding-top: calc(var(--aqi-top-inset) + 8px);
-      padding-right: max(1rem, env(safe-area-inset-right, 0px));
-      padding-bottom: max(4rem, env(safe-area-inset-bottom, 0px));
-      padding-left: max(1rem, env(safe-area-inset-left, 0px));
-    }
+  .aqi-shell {
+    padding-top: calc(env(safe-area-inset-top, 0px) + 10px);
+    padding-right: max(1rem, env(safe-area-inset-right, 0px));
+    padding-bottom: max(4rem, env(safe-area-inset-bottom, 0px));
+    padding-left: max(1rem, env(safe-area-inset-left, 0px));
   }
 
   @media screen and (min-width: 769px) {
-    .aqi-status-bar {
-      display: none;
-    }
-
     .aqi-shell {
       padding-top: 1.5rem;
       padding-right: 1.5rem;
