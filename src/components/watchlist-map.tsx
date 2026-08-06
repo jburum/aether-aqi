@@ -68,10 +68,14 @@ export function WatchlistMap() {
   const fitOnceRef = useRef(false);
   /** Geographic box we have already fetched lattice samples for. */
   const fetchedCoverageRef = useRef<FieldBounds | null>(null);
+  /** Bounds of the image currently on the map — skip repaint while pan stays inside. */
+  const paintedCoverageRef = useRef<FieldBounds | null>(null);
+  const paintedZoomRef = useRef<number | null>(null);
   const lastPinSigRef = useRef<string>("");
-  const lastPaintKeyRef = useRef<string>("");
   const seededRef = useRef(false);
   const seedLocSigRef = useRef<string>("");
+  const paintGenRef = useRef(0);
+  const paintingRef = useRef(false);
 
   const queries = useQueries({
     queries: locations.map((loc) => ({
@@ -163,16 +167,17 @@ export function WatchlistMap() {
   }, []);
 
   /**
-   * Data-driven field:
-   *  - Samples live on a FIXED global 2° lattice (same cells desktop/mobile).
-   *  - aqiAt(lon,lat) is pure → zoom only re-rasterizes, never redefines AQI.
-   *  - Seed from watchlist bbox (not viewport) so devices start with same data.
+   * Data-driven field (must not block map drag):
+   *  - Fixed lattice model; aqiAt is pure
+   *  - Paint a *padded* image and keep it while the camera stays inside
+   *  - Heavy raster work is deferred; never call map.resize() on pan
    */
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
     let debounce: ReturnType<typeof setTimeout> | undefined;
+    let paintTimer: ReturnType<typeof setTimeout> | undefined;
 
     const pinSig = () =>
       pointsRef.current
@@ -192,11 +197,7 @@ export function WatchlistMap() {
     };
 
     const readView = (): FieldBounds => {
-      try {
-        map.resize();
-      } catch {
-        /* ignore */
-      }
+      // Do NOT map.resize() here — it freezes interaction mid-gesture.
       const b = map.getBounds();
       return {
         west: b.getWest(),
@@ -206,43 +207,89 @@ export function WatchlistMap() {
       };
     };
 
-    const paintKey = (view: FieldBounds) =>
-      `${view.west.toFixed(2)},${view.south.toFixed(2)},${view.east.toFixed(2)},${view.north.toFixed(2)}|${lastPinSigRef.current}`;
-
-    /** Rasterize pure model for current view — same AQI values at every zoom. */
-    const paintView = (view: FieldBounds) => {
-      if (!mapRef.current?.getSource(FIELD_SOURCE)) return false;
-      syncPins();
-      const paint = padBoundsForPaint(view, 0.1);
-      const dataUrl = aqiFieldModel.renderDataUrl(paint);
-      if (!dataUrl) return false;
-      const src = mapRef.current.getSource(FIELD_SOURCE) as
-        | {
-            updateImage: (o: {
-              url: string;
-              coordinates: ReturnType<typeof boundsToImageCoordinates>;
-            }) => void;
-          }
-        | undefined;
-      if (!src?.updateImage) return false;
-      src.updateImage({
-        url: dataUrl,
-        coordinates: boundsToImageCoordinates(paint),
-      });
-      lastPaintKeyRef.current = paintKey(view);
-      setGridCount(aqiFieldModel.count());
-      return true;
+    /**
+     * Only re-rasterize when:
+     *  - no paint yet, or force, or pins changed
+     *  - zoom moved enough that detail level should change
+     *  - view is leaving the currently painted image (with margin)
+     * Small pans stay on the existing image → smooth drag.
+     */
+    const needsRepaint = (view: FieldBounds, force: boolean, pinsChanged: boolean) => {
+      if (force || pinsChanged) return true;
+      if (!paintedCoverageRef.current) return true;
+      const z = map.getZoom();
+      if (
+        paintedZoomRef.current != null &&
+        Math.abs(z - paintedZoomRef.current) >= 0.55
+      ) {
+        return true;
+      }
+      // Stay inside painted coverage with comfortable margin
+      return !boundsContain(paintedCoverageRef.current, view, 0.1);
     };
 
-    const fetchAndMerge = (bounds: FieldBounds) => {
+    /** Schedule expensive raster off the gesture path. */
+    const schedulePaint = (view: FieldBounds, opts?: { force?: boolean }) => {
+      if (!mapRef.current?.getSource(FIELD_SOURCE)) return;
+      if (aqiFieldModel.count() < 2 && !opts?.force) return;
+
+      const gen = ++paintGenRef.current;
+      if (paintTimer) clearTimeout(paintTimer);
+
+      // Defer so MapLibre can finish the drag/inertia frame first
+      paintTimer = setTimeout(() => {
+        if (gen !== paintGenRef.current) return;
+        if (paintingRef.current) {
+          // Try again shortly if a paint is already running
+          paintTimer = setTimeout(() => schedulePaint(readView(), opts), 80);
+          return;
+        }
+        // Re-read view after deferral (user may still be coasting)
+        const viewNow = readView();
+        const pinsChanged = pinSig() !== lastPinSigRef.current;
+        if (!needsRepaint(viewNow, !!opts?.force, pinsChanged) && !opts?.force) {
+          return;
+        }
+
+        paintingRef.current = true;
+        try {
+          if (pinsChanged || opts?.force) syncPins();
+          // Generous pad so small pans don't force another paint
+          const paint = padBoundsForPaint(viewNow, 0.35);
+          const dataUrl = aqiFieldModel.renderDataUrl(paint);
+          if (!dataUrl || gen !== paintGenRef.current || !mapRef.current) return;
+
+          const src = mapRef.current.getSource(FIELD_SOURCE) as
+            | {
+                updateImage: (o: {
+                  url: string;
+                  coordinates: ReturnType<typeof boundsToImageCoordinates>;
+                }) => void;
+              }
+            | undefined;
+          if (!src?.updateImage) return;
+
+          src.updateImage({
+            url: dataUrl,
+            coordinates: boundsToImageCoordinates(paint),
+          });
+          paintedCoverageRef.current = paint;
+          paintedZoomRef.current = mapRef.current.getZoom();
+          setGridCount(aqiFieldModel.count());
+        } finally {
+          paintingRef.current = false;
+        }
+      }, opts?.force ? 0 : 120);
+    };
+
+    const fetchAndMerge = (bounds: FieldBounds, showLoading: boolean) => {
       const query = clampBoundsForApi(bounds, 0.05);
       const req = ++gridReqRef.current;
-      setGridLoading(true);
+      if (showLoading) setGridLoading(true);
       return fetchAqiGrid(query)
         .then((samples) => {
           if (req !== gridReqRef.current) return;
           aqiFieldModel.mergeGrid(samples);
-          // Expand fetched coverage
           const prev = fetchedCoverageRef.current;
           if (!prev) {
             fetchedCoverageRef.current = query;
@@ -254,75 +301,80 @@ export function WatchlistMap() {
               north: Math.max(prev.north, query.north),
             };
           }
-          paintView(readView());
+          schedulePaint(readView(), { force: true });
         })
         .catch((err) => {
           console.warn("[map field]", err);
-          if (req === gridReqRef.current) paintView(readView());
         })
         .finally(() => {
-          if (req === gridReqRef.current) setGridLoading(false);
+          if (req === gridReqRef.current && showLoading) setGridLoading(false);
         });
     };
 
-    const ensureDataAndPaint = (opts?: { force?: boolean }) => {
-      if (!map.getSource(FIELD_SOURCE)) return;
-      const view = readView();
-      const pinsChanged = pinSig() !== lastPinSigRef.current;
-
-      // Always keep pins in the model
-      if (pinsChanged || opts?.force) syncPins();
-
-      // 1) Seed from watchlist geography (device-independent bbox of pins)
-      const locs = pointsRef.current.map((p) => p.loc);
-      const locSig = locs
-        .map((l) => `${l.id}:${l.latitude.toFixed(2)},${l.longitude.toFixed(2)}`)
-        .join("|");
-      if (!seededRef.current || (locs.length > 0 && locSig !== seedLocSigRef.current)) {
-        seededRef.current = true;
-        seedLocSigRef.current = locSig;
-        const seed =
-          boundsFromLocations(locs, 14) ?? clampBoundsForApi(view, 0.2);
-        void fetchAndMerge(seed);
-        if (aqiFieldModel.count() >= 2) paintView(view);
-        return;
-      }
-
-      // 2) Re-paint from model when view or pins change (no re-fetch needed)
-      const pk = paintKey(view);
-      if (opts?.force || pinsChanged || pk !== lastPaintKeyRef.current) {
-        if (aqiFieldModel.count() >= 2) paintView(view);
-      }
-
-      // 3) If view walks outside fetched coverage, merge more lattice cells
-      const covered = fetchedCoverageRef.current;
-      if (!covered || !boundsContain(covered, view, 0.02)) {
-        void fetchAndMerge(view);
-      }
-    };
-
-    const onMoveEnd = () => {
+    const onCameraIdle = () => {
       if (debounce) clearTimeout(debounce);
-      debounce = setTimeout(() => ensureDataAndPaint(), 300);
+      // Wait for pan/zoom inertia to finish before any field work
+      debounce = setTimeout(() => {
+        if (!map.getSource(FIELD_SOURCE)) return;
+        // Don't work while the user is still touching/dragging
+        if (map.isMoving()) {
+          onCameraIdle();
+          return;
+        }
+
+        const view = readView();
+        const pinsChanged = pinSig() !== lastPinSigRef.current;
+        if (pinsChanged) syncPins();
+
+        // Seed from watchlist once (or when places change)
+        const locs = pointsRef.current.map((p) => p.loc);
+        const locSig = locs
+          .map((l) => `${l.id}:${l.latitude.toFixed(2)},${l.longitude.toFixed(2)}`)
+          .join("|");
+        if (!seededRef.current || (locs.length > 0 && locSig !== seedLocSigRef.current)) {
+          seededRef.current = true;
+          seedLocSigRef.current = locSig;
+          const seed =
+            boundsFromLocations(locs, 14) ?? clampBoundsForApi(view, 0.2);
+          void fetchAndMerge(seed, true);
+          return;
+        }
+
+        // Background fetch only if we're outside sample coverage (no loading spinner)
+        const covered = fetchedCoverageRef.current;
+        if (!covered || !boundsContain(covered, view, 0.05)) {
+          void fetchAndMerge(view, false);
+        } else if (needsRepaint(view, false, pinsChanged)) {
+          schedulePaint(view);
+        }
+      }, 450);
     };
 
-    map.on("moveend", onMoveEnd);
-    map.on("zoomend", onMoveEnd);
-    const kick = window.setTimeout(() => ensureDataAndPaint({ force: true }), 120);
-    const kick2 = window.setTimeout(() => ensureDataAndPaint({ force: true }), 800);
+    // Only idle events — never on every frame of a drag
+    map.on("moveend", onCameraIdle);
+    map.on("zoomend", onCameraIdle);
+
+    const kick = window.setTimeout(() => {
+      seededRef.current = false;
+      onCameraIdle();
+    }, 150);
+    const kick2 = window.setTimeout(() => onCameraIdle(), 900);
+
     const pinPoll = window.setInterval(() => {
-      if (pinSig() !== lastPinSigRef.current) {
-        ensureDataAndPaint({ force: true });
+      if (pinSig() !== lastPinSigRef.current && !map.isMoving()) {
+        syncPins();
+        schedulePaint(readView(), { force: true });
       }
-    }, 2000);
+    }, 2500);
 
     return () => {
       window.clearTimeout(kick);
       window.clearTimeout(kick2);
       window.clearInterval(pinPoll);
       if (debounce) clearTimeout(debounce);
-      map.off("moveend", onMoveEnd);
-      map.off("zoomend", onMoveEnd);
+      if (paintTimer) clearTimeout(paintTimer);
+      map.off("moveend", onCameraIdle);
+      map.off("zoomend", onCameraIdle);
     };
   }, [mapReady]);
 

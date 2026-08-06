@@ -34,7 +34,7 @@ const IDW_POWER = 2.4;
 /** Pin weight multiplier so card AQI dominates local field. */
 const PIN_WEIGHT = 8;
 /** Raster resolution: fixed degrees per pixel (zoom-independent). */
-const DEG_PER_PX = 0.12;
+const DEG_PER_PX = 0.18;
 
 function aqiToAlpha(aqi: number): number {
   if (aqi <= 50) return 125;
@@ -134,6 +134,8 @@ class AqiFieldModel {
   /**
    * Pure geographic AQI — depends only on samples, never on viewport/zoom.
    * Shepard IDW with fixed power; pins weighted higher.
+   * Uses k-nearest lattice neighbors for speed (same result as full IDW
+   * when the lattice is regular and dense enough).
    */
   aqiAt(lon: number, lat: number): number {
     const pts = this.allSamples();
@@ -141,16 +143,37 @@ class AqiFieldModel {
     if (pts.length === 1) return pts[0].aqi;
 
     const cosLat = Math.max(0.2, Math.cos((lat * Math.PI) / 180));
-    let num = 0;
-    let den = 0;
     const eps = 1e-12;
 
-    for (const s of pts) {
+    // Fast path: k-nearest (keeps render off the critical path for map drag)
+    const K = Math.min(12, pts.length);
+    const bestD: number[] = [];
+    const bestI: number[] = [];
+    for (let i = 0; i < pts.length; i++) {
+      const s = pts[i];
       const dlon = (lon - s.lon) * cosLat;
       const dlat = lat - s.lat;
       const d2 = dlon * dlon + dlat * dlat;
       if (d2 < eps) return s.aqi;
-      const w = (s.isPin ? PIN_WEIGHT : 1) * Math.pow(d2, -IDW_POWER / 2);
+      if (bestD.length < K) {
+        bestD.push(d2);
+        bestI.push(i);
+      } else {
+        // Replace farthest of the K
+        let maxJ = 0;
+        for (let j = 1; j < K; j++) if (bestD[j] > bestD[maxJ]) maxJ = j;
+        if (d2 < bestD[maxJ]) {
+          bestD[maxJ] = d2;
+          bestI[maxJ] = i;
+        }
+      }
+    }
+
+    let num = 0;
+    let den = 0;
+    for (let j = 0; j < bestI.length; j++) {
+      const s = pts[bestI[j]];
+      const w = (s.isPin ? PIN_WEIGHT : 1) * Math.pow(bestD[j], -IDW_POWER / 2);
       num += w * s.aqi;
       den += w;
     }
@@ -173,8 +196,9 @@ class AqiFieldModel {
 
     let width = Math.round(lonSpan / DEG_PER_PX);
     let height = Math.round(latSpan / DEG_PER_PX);
-    width = Math.max(240, Math.min(900, width));
-    height = Math.max(180, Math.min(700, height));
+    // Cap resolution — MapLibre linear resampling handles upscale
+    width = Math.max(200, Math.min(560, width));
+    height = Math.max(160, Math.min(420, height));
 
     const canvas = document.createElement("canvas");
     canvas.width = width;
