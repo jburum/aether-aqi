@@ -4,10 +4,10 @@ PWA for tracking **US AQI** across up to **15** locations. Live readings and for
 
 | | |
 | --- | --- |
-| **Live app** | [https://aether-aqi.vercel.app](https://aether-aqi.vercel.app) |
+| **Live app** | [https://aqi.burum.dev](https://aqi.burum.dev) (Vercel: [aether-aqi.vercel.app](https://aether-aqi.vercel.app)) |
 | **Repo** | [github.com/jburum/aether-aqi](https://github.com/jburum/aether-aqi) |
 | **Local** | `~/Projects/AQI` |
-| **Master** | `aether-aqi` — **active · closed** (stable, no backlog) |
+| **Master** | `aether-aqi` — PWA live; **reopened** for App Store planning ([docs/appstore/](./docs/appstore/)) |
 | **Docs** | [docs/](./docs/) |
 | **Latest** | **v1.6** |
 | **Status** | [docs/STATUS.md](./docs/STATUS.md) |
@@ -28,7 +28,8 @@ PWA for tracking **US AQI** across up to **15** locations. Live readings and for
 
 | Doc | |
 | --- | --- |
-| [docs/STATUS.md](./docs/STATUS.md) | Active / closed posture |
+| [docs/STATUS.md](./docs/STATUS.md) | Posture (reopened for App Store planning) |
+| [docs/appstore/](./docs/appstore/) | Audit, iOS plan, listing, backlog |
 | [docs/README.md](./docs/README.md) | Docs index |
 | [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) | Git → Vercel, field model, stack |
 | [docs/PRODUCT.md](./docs/PRODUCT.md) | UX, roadmap |

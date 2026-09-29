@@ -2,16 +2,29 @@
 
 | | |
 | --- | --- |
-| **Status** | **Active · closed for development** |
-| **Meaning** | Live production PWA; code is **stable**; **no open backlog** for this cycle |
-| **As of** | 2026-08-06 |
+| **Status** | **Reopened for App Store planning** (PWA v1.6 remains the live site) |
+| **Meaning** | Production PWA is unchanged. New work is the iOS client and the P0 list in [appstore/BACKLOG.md](./appstore/BACKLOG.md). Do not deploy from the planning branch. |
+| **As of** | 2026-09-29 (plan). Last product close: 2026-08-06 |
 | **Version** | v1.6.x (map lattice field + share/install) |
-| **Live** | https://aether-aqi.vercel.app |
+| **Live** | https://aqi.burum.dev (same Vercel app as https://aether-aqi.vercel.app) |
 | **Repo** | https://github.com/jburum/aether-aqi |
 | **Local** | `~/Projects/AQI` |
 | **Master id** | `aether-aqi` |
 
-## What “closed for now” means
+## Reopened (2026-09-29)
+
+First Apple App Store app for **BBCVC LLC**. Planning docs:
+
+| Doc | |
+| --- | --- |
+| [appstore/AUDIT.md](./appstore/AUDIT.md) | Current product, stack, API licences, rough edges |
+| [appstore/IOS-PLAN.md](./appstore/IOS-PLAN.md) | SwiftUI + WidgetKit + local alerts. Not a Capacitor WebView. |
+| [appstore/LISTING.md](./appstore/LISTING.md) | Store copy and privacy draft |
+| [appstore/BACKLOG.md](./appstore/BACKLOG.md) | P0 before submission |
+
+The 2026-08-06 close still describes the live PWA. [IOS-APP-STORE.md](./IOS-APP-STORE.md) is superseded.
+
+## What “closed for now” meant (2026-08-06)
 
 - Product is **usable daily** (list + map + install + share).
 - **No scheduled work** or ticket backlog.

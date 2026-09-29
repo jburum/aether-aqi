@@ -1,5 +1,7 @@
 # Publishing to the Apple App Store (free app)
 
+> **Superseded 2026-09-29.** Do not wrap the site in a remote WebView. The current plan is a SwiftUI client, WidgetKit, and on-device alerts: [appstore/IOS-PLAN.md](./appstore/IOS-PLAN.md). Audit, listing, and backlog: [appstore/](./appstore/).
+
 Last updated: 2026-08-05
 
 This app is a **PWA** (React / Vite / Vercel). Apple does **not** accept a pure website URL as an App Store app. You ship a thin **native shell** that loads your web app (and optionally offline assets). Recommended path: **Capacitor**.
