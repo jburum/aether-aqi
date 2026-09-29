@@ -8,7 +8,7 @@ Installable PWA for **US AQI** tracking and forecasts across up to **15 location
 | **GitHub** | [jburum/aether-aqi](https://github.com/jburum/aether-aqi) |
 | **Local path** | `~/Projects/AQI` |
 | **Master id** | `aether-aqi` |
-| **Status** | **Active · closed for development** (stable, no backlog) — [STATUS.md](./STATUS.md) |
+| **Status** | PWA v1.6 still live. **Reopened** for App Store planning — [appstore/](./appstore/) · [STATUS.md](./STATUS.md) |
 | **Latest** | **v1.6** (map lattice + share + install) |
 | **Vercel project** | `aether-aqi` |
 | **Team** | `jburums-projects` |
@@ -22,7 +22,11 @@ Installable PWA for **US AQI** tracking and forecasts across up to **15 location
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | Deploy, storage, map field model, stack |
 | [PRODUCT.md](./PRODUCT.md) | UX + roadmap snapshot |
 | [SHARE-INVITE.md](./SHARE-INVITE.md) | iMessage install copy |
-| [IOS-APP-STORE.md](./IOS-APP-STORE.md) | Future Capacitor App Store plan (not in backlog) |
+| [appstore/AUDIT.md](./appstore/AUDIT.md) | What the app is, APIs, licences, gaps |
+| [appstore/IOS-PLAN.md](./appstore/IOS-PLAN.md) | SwiftUI App Store path (replaces the Capacitor note) |
+| [appstore/LISTING.md](./appstore/LISTING.md) | Listing copy, privacy label, privacy policy draft |
+| [appstore/BACKLOG.md](./appstore/BACKLOG.md) | P0 / P1 before submission |
+| [IOS-APP-STORE.md](./IOS-APP-STORE.md) | Old Capacitor note — superseded |
 | [CHANGELOG.md](./CHANGELOG.md) | Ship history (newest first) |
 | [../README.md](../README.md) | Repo root overview |
 
