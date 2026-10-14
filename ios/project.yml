@@ -1,6 +1,6 @@
 name: AetherAQI
 options:
-  bundleIdPrefix: llc.bbcvc
+  bundleIdPrefix: dev.bbcvc
   deploymentTarget:
     iOS: "17.0"
 targets:
@@ -10,7 +10,7 @@ targets:
     sources: [AetherAQI]
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: llc.bbcvc.aqi   # placeholder until BBCVC Apple Developer enrollment
+        PRODUCT_BUNDLE_IDENTIFIER: dev.bbcvc.aqi   # placeholder until BBCVC Apple Developer enrollment
         MARKETING_VERSION: "0.1.0"
         CURRENT_PROJECT_VERSION: "1"
         GENERATE_INFOPLIST_FILE: YES

@@ -33,6 +33,7 @@ The **Forecast** view is the primary and most prominent screen in the app. Every
 
 ## Open items
 
+- Support contact: support@bbcvc.dev (mailbox not yet created). Website: bbcvc.dev (domain not yet attached).
 - Open-Meteo commercial plan decision (required before public launch).
-- Final bundle id after BBCVC Apple Developer enrollment.
+- Final bundle id after BBCVC Apple Developer enrollment (placeholder `dev.bbcvc.aqi`).
 - Rename internal target/folder `AetherAQI` only if needed (display name already set).
