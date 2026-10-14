@@ -14,8 +14,8 @@ targets:
         MARKETING_VERSION: "0.1.0"
         CURRENT_PROJECT_VERSION: "1"
         GENERATE_INFOPLIST_FILE: YES
-        INFOPLIST_KEY_CFBundleDisplayName: Aether AQI
-        INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "Aether AQI uses your location to show the air quality where you are."
+        INFOPLIST_KEY_CFBundleDisplayName: Air Quality Forecast
+        INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "Air Quality Forecast uses your location to show the air quality forecast where you are."
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
         SWIFT_VERSION: "5.9"

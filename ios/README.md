@@ -1,4 +1,6 @@
-# Aether AQI — native iOS (scaffold)
+# Air Quality Forecast — native iOS (scaffold)
+
+App display name: **Air Quality Forecast** (published by BBCVC LLC). Target/folder names (`AetherAQI`) are internal and unchanged for now. See [PLAN.md](PLAN.md) for the forecast-first product plan.
 
 SwiftUI app mirroring the PWA's core view: current US AQI ring, category + advice, main pollutant, PM2.5/PM10/O₃.
 
