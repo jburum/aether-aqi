@@ -70,7 +70,7 @@ Ideas only if reopened:
 - Denser / commercial heatmap tiles
 - AQI threshold alerts (`alertAt` already stored)
 - Account-backed sync; stronger offline cache
-- **iOS App Store** via Capacitor — [IOS-APP-STORE.md](./IOS-APP-STORE.md)
+- **iOS App Store** — reopened 2026-09-29 as a SwiftUI app, not Capacitor. [appstore/IOS-PLAN.md](./appstore/IOS-PLAN.md)
 
 ### Out of scope (for now)
 
