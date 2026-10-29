@@ -161,6 +161,10 @@ if (Round2) {
   }
   if (!html.includes("feGaussianBlur")) fail("confidence band blur missing");
   if (!html.includes(">5-day<")) fail("5-day horizon mark missing");
+  const hourDrags = html.match(/data-drag="hour"/g) || [];
+  if (hourDrags.length < 8) fail(`hour drag surfaces: ${hourDrags.length}`);
+  if (!html.includes('data-drag="pollutant"')) fail("pollutant drag missing");
+  if (!html.includes("function beginHour")) fail("shared hour drag missing");
 }
 
 if (failures.length) {

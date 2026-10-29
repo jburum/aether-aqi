@@ -214,6 +214,8 @@
       #review h2 { margin: 10px 0 6px; font-size: 12px; letter-spacing: 0.4px; text-transform: uppercase; }
       body[data-cvd="deutan"] .stage { filter: url(#cvd-deutan); }
       body[data-cvd="protan"] .stage { filter: url(#cvd-protan); }
+      [data-drag] { touch-action: none; user-select: none; -webkit-user-select: none; }
+      [data-drag="hour"]:not(button) { cursor: ew-resize; }
 </style>
   </head>
   <body>
@@ -242,7 +244,7 @@
 
         <div class="home-only" id="home">
           <button type="button" class="place" id="place">Boise <span>smoke event</span></button>
-          <div class="forecast home-extra" id="forecast">
+          <div class="forecast home-extra" id="forecast" data-drag="hour">
             <p class="kicker" id="kicker">Thu 3–8 PM</p>
             <h2 id="headline">Hazardous smoke</h2>
             <p class="advice" id="advice">Friday from 4 PM, and the weekend, are your outdoor windows.</p>
@@ -253,7 +255,7 @@
             <div class="play-label" id="play-label">Thu 7 AM</div>
             <button type="button" id="back-now" hidden>Now</button>
           </div>
-          <div class="digits home-extra" id="digits" aria-hidden="true"></div>
+          <div class="digits home-extra" id="digits" data-drag="hour" aria-hidden="true"></div>
           <p class="meta home-extra" id="meta"><i class="pat pat-good" id="pat"></i><span id="cat">Good</span> <span class="soft" id="dom">PM2.5</span></p>
           <div class="windows home-extra" id="windows">
             <button type="button" id="win-avoid">Avoid Thu 3–8 PM</button>
@@ -265,13 +267,13 @@
             <button type="button" id="range-day" aria-pressed="false">Day</button>
             <button type="button" id="range-hour" aria-pressed="false">Hour</button>
           </div>
-          <section id="detail" aria-label="What is driving the number">
+          <section id="detail" data-drag="hour" aria-label="What is driving the number">
             <p class="kicker" id="detail-name">PM2.5</p>
             <p id="detail-value">—</p>
             <p id="detail-trend"></p>
             <p id="detail-why"></p>
           </section>
-          <div class="words" id="pollutant-row" role="tablist" aria-label="Pollutant">
+          <div class="words" id="pollutant-row" data-drag="pollutant" role="tablist" aria-label="Pollutant">
             <button type="button" role="tab" data-poll="aqi" aria-selected="true">AQI</button>
             <button type="button" role="tab" data-poll="pm" aria-selected="false">PM2.5</button>
             <button type="button" role="tab" data-poll="o3" aria-selected="false">O3</button>
@@ -282,24 +284,24 @@
 
         <section id="widgets" aria-label="Widgets and Live Activity">
           <p class="w-kicker">Lock Screen</p>
-          <div class="w-lock">
+          <div class="w-lock" data-drag="hour">
             <div class="w-circ" id="w-circ" role="img" aria-label="Lock Screen circular widget">48</div>
             <p class="w-inline" id="w-inline">Boise · 48 · Good</p>
           </div>
           <p class="w-kicker">Small</p>
-          <button type="button" class="w-small" id="w-small" aria-label="Small widget. Tap to step one hour.">
+          <button type="button" class="w-small" id="w-small" data-drag="hour" aria-label="Small widget. Drag to scrub the hour, or tap to step one hour.">
             <b id="w-num">48</b>
             <span id="w-cat">Good</span>
           </button>
           <p class="w-kicker">Medium</p>
-          <div id="w-med">
+          <div id="w-med" data-drag="hour">
             <div class="w-med-top"><b id="w-med-num">48</b><span id="w-med-best">Outdoor window Fri 4–8 PM</span></div>
             <svg id="w-spark" aria-hidden="true"></svg>
           </div>
           <p class="w-kicker">Live Activity</p>
-          <p class="w-live" id="w-live"><b id="w-live-num">48</b> <span id="w-live-trend" aria-hidden="true">↑</span> <span id="w-live-note">Peaks around 6 PM</span></p>
+          <p class="w-live" id="w-live" data-drag="hour"><b id="w-live-num">48</b> <span id="w-live-trend" aria-hidden="true">↑</span> <span id="w-live-note">Peaks around 6 PM</span></p>
           <p class="w-kicker">Large · 5-day horizon</p>
-          <p class="w-horizon" id="w-horizon"></p>
+          <p class="w-horizon" id="w-horizon" data-drag="hour"></p>
           <p class="w-note">Threshold alert is set at Unhealthy. Whether the app warns you, or waits until you check, is still open.</p>
         </section>
       </main>
@@ -308,6 +310,7 @@
 
     <div id="review" hidden>
       <p><b>Critic pass.</b> Socrates, 29 Oct. The sky is the forecast. PR #5 stays on hold.</p>
+      <p><b>Jason, 29 Oct.</b> Not Boring's hour slider is the model. Drag the forecast, the number, the detail, the pollutant words, or any widget. The sky answers while the finger is down. CARROT and Airpocalypse stay out.</p>
       <p>Open with Jason: an app he checks, or one that warns him. This pass does not design the notification.</p>
       <h2>Accessibility</h2>
       <div class="row">
@@ -739,6 +742,7 @@
       let scrubbed = params.has("hour") && Math.abs(targetHour - R.NOW) > 0.45;
       let hourV = 0;
       let dragging = false;
+      let sparkPin = null;
       let hourSpan = null;
       let colorTau = 0.083;
       let disp = null;
@@ -1096,12 +1100,15 @@
         }
         document.getElementById("w-horizon").textContent = parts.join(" · ");
         const spark = document.getElementById("w-spark");
-        const t0 = Math.floor(hour);
+        const t0 = sparkPin != null ? sparkPin : Math.max(0, Math.min(R.LAST - 11, Math.floor(hour) - 2));
         const vals = Array.from({ length: 12 }, (_, i) => R.aqiAt(Math.min(R.LAST, t0 + i)));
         const maxV = Math.max(50, ...vals);
         const d = vals.map((v, i) => (i ? "L" : "M") + (i * 28 + 4) + " " + (48 - (v / maxV) * 40)).join("");
+        const local = Math.max(0, Math.min(11, hour - t0));
+        const px = local * 28 + 4;
+        const py = 48 - (Math.max(0, Math.min(maxV, aqi)) / maxV) * 40;
         spark.setAttribute("viewBox", "0 0 320 52");
-        spark.innerHTML = '<path class="line" d="' + d + '" />';
+        spark.innerHTML = '<path class="line" d="' + d + '" /><circle cx="' + px.toFixed(1) + '" cy="' + py.toFixed(1) + '" r="4" fill="currentColor"/>';
       }
 
       function drawHaze(paint, pm) {
@@ -1112,7 +1119,7 @@
         ctx.clearRect(0, 0, 390, 844);
         if (state.reduce || state.contrast) return;
         const count = Math.round(8 + Math.min(72, pm / 4));
-        const t = state.frame ? shownHour * 3 : performance.now() / 1000;
+        const t = shownHour * 3 + (state.frame ? 0 : performance.now() / 1000);
         ctx.fillStyle = paint.inkHex;
         for (let i = 0; i < count; i++) {
           const p = motes[i];
@@ -1214,6 +1221,7 @@
         colorTau = 0.083;
       }
       function endDrag() {
+        sparkPin = null;
         if (!dragging) return;
         dragging = false;
         const snapped = snap(shownHour);
@@ -1253,7 +1261,6 @@
       document.querySelectorAll("[data-poll]").forEach((b) =>
         b.addEventListener("click", () => {
           state.pollutant = b.dataset.poll;
-          heroShown = null;
           copyKey = "";
           syncClasses();
         }),
@@ -1303,6 +1310,130 @@
         copyKey = "";
         syncClasses();
       });
+      // One hour drives every screen. These drags write the same shownHour the curve uses.
+      function beginHour(hour) {
+        shownHour = Math.max(0, Math.min(R.LAST, hour));
+        targetHour = shownHour;
+        hourV = 0;
+        dragging = true;
+        scrubbed = true;
+        colorTau = 0.083;
+      }
+      function bindDeltaScrub(el, pxPerHour) {
+        let active = false;
+        let originX = 0;
+        let originHour = 0;
+        let moved = false;
+        el.addEventListener("pointerdown", (e) => {
+          if (e.button !== 0) return;
+          el.dataset.suppressClick = "0";
+          el.setPointerCapture(e.pointerId);
+          active = true;
+          originX = e.clientX;
+          originHour = shownHour;
+          moved = false;
+        });
+        el.addEventListener("pointermove", (e) => {
+          if (!active) return;
+          const dx = e.clientX - originX;
+          if (!moved && Math.abs(dx) < 8) return;
+          moved = true;
+          beginHour(originHour + dx / pxPerHour);
+        });
+        function finish(cancel) {
+          if (!active) return;
+          active = false;
+          if (!moved) return;
+          if (!cancel) el.dataset.suppressClick = "1";
+          endDrag();
+        }
+        el.addEventListener("pointerup", () => finish(false));
+        el.addEventListener("pointercancel", () => finish(true));
+        el.addEventListener("click", (e) => {
+          if (el.dataset.suppressClick !== "1") return;
+          el.dataset.suppressClick = "0";
+          e.preventDefault();
+          e.stopImmediatePropagation();
+        });
+      }
+      function bindSpanScrub(el, boundsFn) {
+        let active = false;
+        let pinned = null;
+        el.addEventListener("pointerdown", (e) => {
+          if (e.button !== 0) return;
+          el.setPointerCapture(e.pointerId);
+          active = true;
+          pinned = boundsFn();
+          const rect = el.getBoundingClientRect();
+          if (rect.width <= 0) return;
+          const t = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+          beginHour(pinned[0] + t * (pinned[1] - pinned[0]));
+        });
+        el.addEventListener("pointermove", (e) => {
+          if (!active || !pinned) return;
+          const rect = el.getBoundingClientRect();
+          if (rect.width <= 0) return;
+          const t = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+          beginHour(pinned[0] + t * (pinned[1] - pinned[0]));
+        });
+        function finish() {
+          if (!active) return;
+          active = false;
+          pinned = null;
+          endDrag();
+        }
+        el.addEventListener("pointerup", finish);
+        el.addEventListener("pointercancel", finish);
+      }
+      function pickPollutant(clientX) {
+        const buttons = document.querySelectorAll("#pollutant-row [data-poll]");
+        let best = null;
+        let bestDist = Infinity;
+        buttons.forEach((b) => {
+          const r = b.getBoundingClientRect();
+          const dist = Math.abs(clientX - (r.left + r.right) / 2);
+          if (dist < bestDist) {
+            bestDist = dist;
+            best = b;
+          }
+        });
+        if (!best || state.pollutant === best.dataset.poll) return;
+        state.pollutant = best.dataset.poll;
+        copyKey = "";
+        syncClasses();
+      }
+      function bindPollutantDrag(el) {
+        let active = false;
+        el.addEventListener("pointerdown", (e) => {
+          if (e.button !== 0) return;
+          el.setPointerCapture(e.pointerId);
+          active = true;
+          pickPollutant(e.clientX);
+        });
+        el.addEventListener("pointermove", (e) => {
+          if (!active) return;
+          pickPollutant(e.clientX);
+        });
+        el.addEventListener("pointerup", () => {
+          active = false;
+        });
+        el.addEventListener("pointercancel", () => {
+          active = false;
+        });
+      }
+      bindDeltaScrub(document.getElementById("forecast"), 32);
+      bindDeltaScrub(els.digits, 32);
+      bindDeltaScrub(document.getElementById("detail"), 32);
+      bindDeltaScrub(document.querySelector(".w-lock"), 28);
+      bindDeltaScrub(document.getElementById("w-small"), 28);
+      bindDeltaScrub(document.getElementById("w-live"), 28);
+      bindSpanScrub(document.getElementById("w-med"), () => {
+        const start = Math.max(0, Math.min(R.LAST - 11, Math.floor(clampShown()) - 2));
+        sparkPin = start;
+        return [start, Math.min(R.LAST, start + 11)];
+      });
+      bindSpanScrub(document.getElementById("w-horizon"), () => [0, R.HORIZON - 1]);
+      bindPollutantDrag(document.getElementById("pollutant-row"));
       document.getElementById("w-small").addEventListener("click", () => {
         const next = Math.max(0, Math.min(R.LAST, Math.round(shownHour) + 1));
         setRange("day");
