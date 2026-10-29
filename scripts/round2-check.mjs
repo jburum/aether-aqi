@@ -164,6 +164,13 @@ if (Round2) {
     fail("verdict windows missing");
   }
   if (!html.includes("font-variation-settings")) fail("variable weight missing");
+  if (!html.includes('local(".New York")') || !html.includes("Aether Display")) {
+    fail("the hero face should be New York");
+  }
+  if (!html.includes('font-feature-settings: "lnum" 1, "tnum" 1')) {
+    fail("the hero 1 should be a lining tabular figure");
+  }
+  if (html.includes("SF Pro Display")) fail("SF Pro Display is still on the big number");
   if (!html.includes("--breath")) fail("breathing pace missing");
   if (html.includes("data-dir=")) fail("direction switch is still in the prototype");
   if (html.includes('class="chips"') || html.includes('class="ribbon"')) {

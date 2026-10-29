@@ -6,6 +6,13 @@
     <meta name="theme-color" content="#27A0D3" />
     <title>Boise — Air Quality Forecast</title>
     <style>
+      @font-face {
+        font-family: "Aether Display";
+        src: local(".New York"), local("New York"), local(".NewYork-Regular");
+        font-weight: 400 1000;
+        font-style: normal;
+        font-display: swap;
+      }
       * { box-sizing: border-box; }
       html, body {
         margin: 0;
@@ -14,8 +21,8 @@
         overflow: hidden;
         background: var(--bg, #27a0d3);
         color: var(--ink, #000);
-        font-family: "SF Pro Text", "SF Pro", "Segoe UI Variable", system-ui, sans-serif;
-        font-variant-numeric: tabular-nums;
+        font-family: "SF Pro Text", "SF Pro", system-ui, "Segoe UI", sans-serif;
+        font-variant-numeric: tabular-nums lining-nums;
         -webkit-text-size-adjust: 100%;
       }
       button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
@@ -91,27 +98,31 @@
       .kicker { margin: 0; font-size: 13px; line-height: 16px; font-weight: 650; }
       .forecast h2, #detail-value {
         margin: 0;
-        font-family: "SF Pro Display", "SF Pro", "Segoe UI Variable Display", system-ui, sans-serif;
+        font-family: "Aether Display", "Iowan Old Style", Palatino, "Palatino Linotype", Georgia, serif;
+        font-optical-sizing: none;
         font-size: 26px;
         line-height: 30px;
-        letter-spacing: -0.45px;
+        letter-spacing: -0.02em;
         font-weight: var(--wght-voice, var(--wght, 560));
         font-variation-settings: "wght" var(--wght-voice, var(--wght, 560));
-        font-variant-numeric: tabular-nums lining-nums;
+        font-variant-numeric: lining-nums tabular-nums;
+        font-feature-settings: "lnum" 1, "tnum" 1;
       }
       .advice { margin: 2px 0 0; font-size: 15px; line-height: 19px; font-weight: 560; }
       .digits {
-        height: 1em; font-size: 64px; line-height: 1; letter-spacing: -0.04em;
-        font-family: "SF Pro Display", "SF Pro", "Segoe UI Variable Display", system-ui, sans-serif;
+        height: 1em; font-size: 64px; line-height: 1; letter-spacing: 0; gap: 0.03em;
+        font-family: "Aether Display", "Iowan Old Style", Palatino, "Palatino Linotype", Georgia, serif;
+        font-optical-sizing: none;
         font-weight: var(--wght, 560);
         font-variation-settings: "wght" var(--wght, 560);
-        font-variant-numeric: tabular-nums lining-nums;
+        font-variant-numeric: lining-nums tabular-nums;
+        font-feature-settings: "lnum" 1, "tnum" 1;
         display: flex; overflow: hidden;
       }
       body.ax5 .forecast h2, body.ax5 #detail-value { font-size: 22px; line-height: 26px; }
       body.ax5 .advice, body.ax5 .meta, body.ax5 #detail-why { font-size: 18px; line-height: 22px; }
       body.ax5 .digits { font-size: 48px; }
-      .wheel { height: 1em; width: 0.62em; overflow: hidden; }
+      .wheel { height: 1em; width: 1ch; overflow: hidden; }
       .wheel.off { width: 0; }
       .strip { display: block; will-change: transform; }
       .strip i { display: block; height: 1em; font-style: normal; text-align: center; }
@@ -144,10 +155,12 @@
       .curve svg { width: 100%; height: 100%; display: block; overflow: visible; }
       .line { fill: none; stroke: currentColor; stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
       .scrub-aqi {
-        font-family: "SF Pro Text", "SF Pro", "Segoe UI Variable", system-ui, sans-serif;
+        font-family: "Aether Display", "Iowan Old Style", Palatino, "Palatino Linotype", Georgia, serif;
+        font-optical-sizing: none;
         font-size: 13px;
         font-weight: 750;
-        font-variant-numeric: tabular-nums;
+        font-variant-numeric: lining-nums tabular-nums;
+        font-feature-settings: "lnum" 1, "tnum" 1;
       }
       .forecast-band { pointer-events: none; }
       body.more-contrast .line { stroke-width: 3.5; }
@@ -190,21 +203,26 @@
       }
       .w-small { text-align: left; display: flex; flex-direction: column; align-items: flex-start; min-height: 64px; }
       .w-small b, .w-med-top b, .w-live b {
-        font-family: "SF Pro Display", "SF Pro", system-ui, sans-serif;
+        font-family: "Aether Display", "Iowan Old Style", Palatino, "Palatino Linotype", Georgia, serif;
+        font-optical-sizing: none;
         font-weight: var(--wght, 640);
         font-variation-settings: "wght" var(--wght, 640);
-        font-variant-numeric: tabular-nums;
+        font-variant-numeric: lining-nums tabular-nums;
+        font-feature-settings: "lnum" 1, "tnum" 1;
       }
-      .w-small b { font-size: 52px; line-height: 52px; letter-spacing: -1.5px; }
+      .w-small b { font-size: 52px; line-height: 52px; letter-spacing: -0.02em; }
       .w-lock { display: flex; align-items: center; gap: 12px; }
       .w-circ {
         width: 62px; height: 62px; border-radius: 31px; display: flex; align-items: center; justify-content: center;
+        font-family: "Aether Display", "Iowan Old Style", Palatino, "Palatino Linotype", Georgia, serif;
+        font-optical-sizing: none;
         font-size: 18px; font-weight: 750; box-shadow: inset 0 0 0 2px currentColor;
-        font-variant-numeric: tabular-nums;
+        font-variant-numeric: lining-nums tabular-nums;
+        font-feature-settings: "lnum" 1, "tnum" 1;
       }
       .w-inline, .w-live, .w-horizon, .w-note { margin: 0; font-size: 14px; line-height: 18px; font-weight: 650; }
       .w-med-top { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
-      .w-med-top b { font-size: 28px; letter-spacing: -1px; }
+      .w-med-top b { font-size: 28px; letter-spacing: -0.02em; }
       #w-spark { width: 100%; height: 52px; display: block; }
       .w-note { font-weight: 500; color: var(--ink-soft); }
       #review {
@@ -315,6 +333,7 @@
       <p><b>Critic pass.</b> Socrates, 29 Oct. The sky is the forecast. PR #5 stays on hold.</p>
       <p><b>Jason, 29 Oct.</b> Not Boring's hour slider is the model. Drag the forecast, the number, the detail, the pollutant words, or any widget. The sky answers while the finger is down. CARROT and Airpocalypse stay out.</p>
       <p><b>Jason, 29 Oct.</b> Both, equally. A check-it app and a warns-you app. The home screen rewards opening it: the interactive timeline is the hallmark. Alerts are first-class, the same rank as the scrub. This pass does not design the notification.</p>
+      <p><b>Jason, 29 Oct.</b> Form. The sky is deeper and more saturated, still no purple. The big number is New York, lining and tabular, so the 1 has a flag. UI text stays a plain sans.</p>
       <h2>Accessibility</h2>
       <div class="row">
         <button type="button" id="opt-motion" aria-pressed="false">Reduce Motion</button>
