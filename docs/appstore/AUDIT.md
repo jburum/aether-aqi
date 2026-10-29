@@ -1,6 +1,8 @@
 # Audit — Air Quality Watchlist before the App Store
 
-Date: 2026-09-29. Scope: the repo as of `main`, plus a read-only check of the live site. No production, DNS, or Vercel settings were changed.
+Date: 2026-09-29. Revised note 2026-10-29: v1 scope, the map cut, and the open decisions are in [ROADMAP.md](./ROADMAP.md). This audit does not choose the app name, bundle ID, data stack, or price. Company pages, when published, live on `bbcvc.dev`.
+
+Scope: the repo as of `main` on 2026-09-29, plus a read-only check of the live site. No production, DNS, or Vercel settings were changed.
 
 This audit is the input to [IOS-PLAN.md](./IOS-PLAN.md), [LISTING.md](./LISTING.md), and [BACKLOG.md](./BACKLOG.md). The older note [../IOS-APP-STORE.md](../IOS-APP-STORE.md) recommended a remote WebView. That path does not clear App Store Review Guideline 4.2. Use the plan in this folder instead.
 
@@ -156,7 +158,7 @@ CARTO Basemaps Terms (last updated 26 August 2026, https://carto.com/legal/basem
 - Attribution must stay visible: © OpenStreetMap contributors, © CARTO (https://carto.com/attributions). MapLibre’s compact attribution control is on. Confirm it is still readable on a phone; the CSS shrinks it to 10px.
 - OSM data is ODbL. Not for turn-by-turn navigation (not a risk here).
 
-For the iOS app, MapKit avoids this dependency. If a later iOS version keeps MapLibre for the regional wash, request a CARTO key restricted to bundle id `llc.bbcvc.aqi` and keep attribution. Do not proxy tiles through Vercel.
+The iOS v1 binary does not include a map, so it does not need this basemap ([ROADMAP.md](./ROADMAP.md)). A later map (v1.1) should not copy the unkeyed CARTO style. Bundle ID is **OPEN**, so this audit does not name an App ID to restrict a key to. Do not proxy tiles through Vercel.
 
 ### Not used
 

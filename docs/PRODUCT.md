@@ -1,6 +1,6 @@
 # Product
 
-Last updated: 2026-08-06 · **v1.6** · **Active · closed for development** ([STATUS.md](./STATUS.md))
+Last updated: 2026-10-29 · **v1.6** website still live · iOS v1 reopened ([STATUS.md](./STATUS.md))
 
 ## One-liner
 
@@ -63,20 +63,20 @@ Personal **air quality watchlist** PWA: up to **15** places, live US AQI, hour/d
 - [x] Zoom-stable field (desktop ≈ mobile for same seed); deferred paint so pan does not freeze
 - [x] Branded **OG share card** + in-app **Add to Home Screen** guide
 
-### Phase 2 (parked — not backlog)
+### Phase 2 (iOS v1 reopened 2026-10-29)
 
-Ideas only if reopened:
+The website stays as shipped. The new scope is [appstore/ROADMAP.md](./appstore/ROADMAP.md).
 
-- Denser / commercial heatmap tiles
-- AQI threshold alerts (`alertAt` already stored)
-- Account-backed sync; stronger offline cache
-- **iOS App Store** — reopened 2026-09-29 as a SwiftUI app, not Capacitor. [appstore/IOS-PLAN.md](./appstore/IOS-PLAN.md)
+- **iOS App Store** — SwiftUI, not Capacitor. Location, threshold alerts (visible, off by default), and a widget. Map is v1.1. Name, bundle ID, data stack, and pricing are open.
+- AQI threshold alerts on the website — still not built. `alertAt` is stored and not edited.
+- Denser / commercial heatmap tiles — parked
+- Account-backed sync; stronger offline cache — parked
 
 ### Out of scope (for now)
 
 - Multiplayer / social
 - Regulatory AirNow equivalence claims
-- Native App Store builds (PWA only until reopened)
+- An Xcode project in this repo (the iOS plan is docs until a later implementation PR)
 - Cloning IQAir’s proprietary 3D globe / station network wholesale
 
 ---

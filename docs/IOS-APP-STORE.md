@@ -1,6 +1,6 @@
-# Publishing to the Apple App Store (free app)
+# Publishing to the Apple App Store (superseded Capacitor note)
 
-> **Superseded 2026-09-29.** Do not wrap the site in a remote WebView. The current plan is a SwiftUI client, WidgetKit, and on-device alerts: [appstore/IOS-PLAN.md](./appstore/IOS-PLAN.md). Audit, listing, and backlog: [appstore/](./appstore/).
+> **Superseded 2026-10-29.** Do not wrap the site in Capacitor or any remote WebView. The approved path is a native SwiftUI client: [appstore/ROADMAP.md](./appstore/ROADMAP.md). The steps below, including the free price, the example name, and the example bundle ID, are the old note. They are not decisions. Audit and plan: [appstore/](./appstore/).
 
 Last updated: 2026-08-05
 

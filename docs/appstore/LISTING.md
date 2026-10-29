@@ -1,20 +1,23 @@
-# App Store listing draft — Air Quality Watchlist
+# App Store listing draft
 
-Date: 2026-09-29. Seller: **BBCVC LLC**, after the organization Apple Developer account is enrolled. The binary this copy describes is the native app in [IOS-PLAN.md](./IOS-PLAN.md), not the website in a WebView.
+> **Updated 2026-10-29.** The app name, bundle ID, data stack, and price are **OPEN**. Do not paste this draft into App Store Connect until those are chosen. v1 has no map. See [ROADMAP.md](./ROADMAP.md). Strings below that still say “Air Quality Watchlist” are the PWA’s title or leftover draft wording, not a chosen App Store name. Design mockups use the placeholder “Air Quality Forecast”, and that is not a decision either.
 
-Confirm every URL returns 200 with no login before you paste it into App Store Connect. This repo does not host `bbcvc.llc`.
+Date: 2026-09-29, revised 2026-10-29. Seller: **BBCVC**, after the organization Apple Developer account is enrolled. The binary this copy describes is the native app in [IOS-PLAN.md](./IOS-PLAN.md), not the website in a WebView.
+
+Confirm every URL returns 200 with no login before you paste it into App Store Connect. This repo does not host `bbcvc.dev`.
 
 ## Name, subtitle, keywords
 
-App name limit is 30 characters. Subtitle is 30. The keyword field is 100 characters, comma-separated, no spaces. Do not repeat words already in the name or subtitle. Do not use AirNow, IQAir, EPA, or Apple in the keyword field.
+The name is **OPEN**. App name limit is 30 characters. Subtitle is 30. The keyword field is 100 characters, comma-separated, no spaces. Do not repeat words already in the name or subtitle. Do not use AirNow, IQAir, EPA, or Apple in the keyword field.
 
 | Option | Name | Characters | Note |
 | --- | --- | --- | --- |
-| **Use this** | Air Quality Watchlist | 21 | Matches the PWA title, the manifest, and the icon. |
-| Alternate | AQI Watchlist | 13 | Shorter if the longer name is unavailable on the account. |
+| **OPEN** | — | — | Do not submit a name from this file. |
+| Not a decision | Air Quality Watchlist | 21 | This is the PWA `<title>`. It is not chosen for the store. |
+| Not a decision | Air Quality Forecast | 22 | Placeholder on the design mockups only. |
 | Avoid | BBCVC Air, Aether, Aether AQI | — | Company name belongs in the seller field. “Aether” is leftover branding (`/login`). |
 
-**Subtitle:** `Places, forecasts, alerts` (25)
+**Subtitle draft** (rewrite after the name is chosen): `Places, forecasts, alerts` (25)
 
 **Keywords** (95 characters):
 
@@ -28,7 +31,7 @@ aqi,pm2.5,pm10,ozone,smoke,wildfire,forecast,pollution,no2,particulate,haze,dust
 | --- | --- |
 | Primary category | Weather |
 | Secondary category | Utilities |
-| Price | Free |
+| Price | **OPEN.** Do not mark free or paid. v1 scope does not add IAP. |
 | Distribution | App Store, all territories you are allowed to sell in. Start with the US if you want a smaller first review; the data is global. |
 | Devices | iPhone. Not iPad for v1. |
 | Kids category | No |
@@ -40,15 +43,15 @@ Do not file the app under Health & Fitness. The advice strings are the usual AQI
 Paste as plain text. The first lines are what people see before “more”.
 
 ```text
-Air Quality Watchlist tracks the US Air Quality Index for up to 15 places you choose.
+[APP NAME] tracks the US Air Quality Index for up to 15 places you choose.
 
-See the current index, the band (Good through Hazardous), and a short activity note. Open a place for PM2.5, PM10, ozone, and NO₂, plus an hourly forecast and a daily view. A map shows your places. A home-screen widget shows the latest reading without opening the app.
+See the current index, the band (Good through Hazardous), and a short activity note. Open a place for PM2.5, PM10, ozone, and NO₂, plus an hourly forecast and a five-day daily maximum. A home-screen widget (small, medium, and large) shows the latest reading without opening the app. This version has no map.
 
-Set a threshold per place. When a background refresh finds the index at or above that number, the app can send a local notification. Location is optional: search for a city, or add where you are. Everything you save stays on this iPhone. There is no account.
+Set a threshold per place. The control starts off. When you turn it on and a background refresh finds the index at or above that number, the app can send a local notification. Location is optional: search for a city, or add where you are. Everything you save stays on this iPhone. There is no account.
 
-The index is a modeled US AQI from Open-Meteo and the Copernicus Atmosphere Monitoring Service (CAMS). It is not data from regulatory monitors such as AirNow. During wildfire smoke, check a local official source before you make a health decision.
+The index is a modeled US AQI from our existing API. It is not data from regulatory monitors such as AirNow. During wildfire smoke, check a local official source before you make a health decision.
 
-Air Quality Watchlist is a product of BBCVC LLC.
+[APP NAME] is a product of BBCVC.
 ```
 
 **Promotional text** (170 characters, can change without a new binary):
@@ -60,20 +63,20 @@ Watch up to 15 places, see the hourly forecast, and get a notification when the 
 **What’s New** (1.0):
 
 ```text
-First release. Watchlist, hourly and daily forecast, map, home-screen widget, and optional threshold alerts.
+First release. Places, hourly forecast, five-day daily maximum, home-screen widget, and optional threshold alerts. No map in this version.
 ```
 
 ## Other metadata
 
 | Field | Value |
 | --- | --- |
-| Support URL | https://bbcvc.llc/support |
+| Support URL | https://bbcvc.dev/support |
 | Marketing URL | https://aqi.burum.dev (optional; the site is the PWA, so the description must not imply the App Store app is that page) |
-| Privacy Policy URL | https://bbcvc.llc/privacy |
+| Privacy Policy URL | https://bbcvc.dev/privacy |
 | Copyright | 2026 BBCVC LLC |
 | Age rating | 4+ from the answers below |
 | Sign-in required | No |
-| Content rights | You own the app. Forecast data is used under Open-Meteo’s commercial API terms and CC BY 4.0. Map tiles in v1 are Apple MapKit, not a scraped basemap. |
+| Content rights | You own the app. v1 calls the existing API and has no map. The data-stack licence is **OPEN**. Do not claim a paid vendor plan or MapKit tiles until those exist. |
 
 Subtitle and description must keep the modeled-data sentence. Reviewers and users both need it.
 
@@ -112,11 +115,11 @@ Answers below are for the **recommended iOS app**, not for every code path in th
 
 What the binary does:
 
-- Sends latitude and longitude of saved places, and of a one-shot “where I am” fix, to `aqi.burum.dev`, which forwards them to Open-Meteo to compute AQI.
-- Uses Apple’s geocoder and MapKit on device / Apple’s services. Does not call BigDataCloud. Does not load CARTO.
+- Sends latitude and longitude of saved places, and of a one-shot “where I am” fix, to `aqi.burum.dev` (`/api/aqi` and `/api/geocode`). The website’s current upstream is Open-Meteo. The data stack is **OPEN**, so do not treat that vendor as permanent.
+- Uses Apple’s geocoder on device. Does not call BigDataCloud. Does not load CARTO. v1 has no map.
 - Stores the watchlist, thresholds, and the last readings in an App Group on the device.
 - Does not create an account, does not use IDFA, does not use a tracking SDK, does not link data to a name or email.
-- Open-Meteo’s own policy (checked 2026-09-29) says API logs can contain coordinates and IP, are kept up to 90 days, and are not tied to a person on the free tier. A paid key ties usage to the BBCVC subscription, then drops individual logs after 90 days.
+- The website’s current forecast vendor is Open-Meteo. Whether v1 stays on that vendor is **OPEN**. Open-Meteo’s own policy (checked 2026-09-29) says API logs can contain coordinates and IP, are kept up to 90 days, and are not tied to a person on the free tier. A paid key, if a later decision adds one, would tie usage to that subscription. No key is chosen here.
 
 Apple’s definition of “collected” includes data that leaves the device and can be retained by you **or a partner** longer than it takes to answer the request. Because Open-Meteo keeps logs, declare precise location even though BBCVC does not build a location database.
 
@@ -128,7 +131,7 @@ Apple’s definition of “collected” includes data that leaves the device and
 | Name, email, phone, physical address | No | — | — | No account |
 | User ID / Device ID | No | — | — | No account, no analytics ID. A later push token **is** a device identifier; update this row before you ship push. |
 | Product interaction, crash, performance | No | — | — | No analytics SDK in the plan. If you turn on Apple’s crash reports only, follow the form’s current “diagnostics” question; do not add a third-party crash tool without updating the label. |
-| Purchases | No | — | — | Free, no IAP |
+| Purchases | Leave blank until pricing is chosen | — | — | Price is **OPEN**. v1 scope does not add IAP. |
 
 Tracking: **No.** Do not show the App Tracking Transparency prompt.
 
@@ -148,36 +151,36 @@ App Store Connect requires an HTTP(S) support URL. A `mailto:` link is not enoug
 
 | URL | What it is |
 | --- | --- |
-| https://bbcvc.llc/support | **Support URL.** Static page on the company site. Not the PWA. |
-| https://bbcvc.llc/privacy | **Privacy Policy URL.** The draft below. |
-| mailto:support@bbcvc.llc | Shown on the support page. Create the mailbox before submission and watch it through review. |
+| https://bbcvc.dev/support | **Support URL.** Static page on the company site. Not the PWA. |
+| https://bbcvc.dev/privacy | **Privacy Policy URL.** The draft below. |
+| mailto:support@bbcvc.dev | Shown on the support page. Create the mailbox before submission and watch it through review. |
 | https://aqi.burum.dev | Optional marketing URL only. |
 
 Support page outline (short, no login, works on a phone):
 
 1. What the app does, in two sentences, including “modeled US AQI, not AirNow”.
-2. How to add a place, turn on alerts, and add the widget (widget gallery → Air Quality Watchlist).
+2. How to add a place, turn on alerts, and add the widget (widget gallery → the app name, once chosen).
 3. “Alerts did not fire”: iOS decides when background refresh runs; the app does not use continuous GPS; check that notifications are allowed and a threshold is set.
 4. How to delete on-device data: delete a place, or delete the app (the App Group store goes with it). There is no server account to erase.
-5. Contact: support@bbcvc.llc. Ask for the iOS version from Settings → About if they write in.
+5. Contact: support@bbcvc.dev. Ask for the iOS version from Settings → About if they write in.
 6. Link to the privacy policy.
 
-Host these pages on `bbcvc.llc` (any static host the company controls). Do not point the support URL at a Vercel preview or at `/login`.
+Host these pages on `bbcvc.dev` (any static host the company controls). Do not point the support URL at a Vercel preview or at `/login`.
 
 ## Privacy policy draft
 
-Publish at `https://bbcvc.llc/privacy`. Replace the bracketed address before you publish. This draft covers the iOS app and, in a separate section, the existing website, because they do not collect the same things.
+Publish at `https://bbcvc.dev/privacy`. Replace the bracketed address before you publish. This draft covers the iOS app and, in a separate section, the existing website, because they do not collect the same things.
 
 ---
 
 **Privacy policy**
 
 **BBCVC LLC**
-Last updated: 29 September 2026
+Last updated: 29 October 2026
 
-This policy describes how BBCVC LLC (“BBCVC”, “we”) handles information when you use the Air Quality Watchlist iOS app and the Air Quality Watchlist website at https://aqi.burum.dev (also served as https://aether-aqi.vercel.app).
+This policy describes how BBCVC LLC (“BBCVC”, “we”) handles information when you use the iOS app (App Store name not yet chosen) and the Air Quality Watchlist website at https://aqi.burum.dev (also served as https://aether-aqi.vercel.app).
 
-Contact: privacy@bbcvc.llc or support@bbcvc.llc.
+Contact: privacy@bbcvc.dev or support@bbcvc.dev.
 Postal address: [BBCVC LLC registered mailing address].
 
 We do not sell personal information. We do not show ads. We do not use advertising identifiers. The iOS app does not require an account.
@@ -192,7 +195,7 @@ Deleting a place removes it from the device. Deleting the app removes the store.
 
 **Location**
 
-If you allow location access, the app reads your position while you are using it, to center the map or to save the place you are in. The system prompt is “when in use”. The app does not request always-on location and does not follow you in the background.
+If you allow location access, the app reads your position while you are using it, to save the place you are in. v1 does not include a map. The system prompt is “when in use”. The app does not request always-on location and does not follow you in the background.
 
 The city name for that fix is produced by Apple’s geocoder. Saved coordinates, and coordinates you type a search around, are sent to our website so we can ask our forecast provider for an air-quality result. Background refresh sends the coordinates of places you already saved, for the same purpose. It does not turn on GPS by itself.
 
@@ -206,11 +209,11 @@ If you set a threshold and allow notifications, the app schedules a local notifi
 
 Requests for air quality and place search go to https://aqi.burum.dev, hosted for us on Vercel. The request includes the coordinates or the search text, plus ordinary connection data (IP address, time, user agent). Our host may keep short-lived operational logs.
 
-We request the forecast from Open-Meteo (OpenMeteo GmbH, Switzerland) under a commercial API subscription. Open-Meteo’s privacy notice says API logs can include IP address and request URLs (which contain coordinates), are used to run and protect the service, and individual logs are deleted after 90 days. Their terms and privacy notice are at https://open-meteo.com/en/terms.
+The iOS app does not call a forecast vendor itself. It calls our existing `/api/aqi` and `/api/geocode` on https://aqi.burum.dev. The website currently asks Open-Meteo (OpenMeteo GmbH, Switzerland) for that forecast. Which vendor sits behind the API is an open decision and may change. We do not describe a paid subscription here, because none is chosen. Open-Meteo’s privacy notice says API logs can include IP address and request URLs (which contain coordinates), are used to run and protect the service, and individual logs are deleted after 90 days. Their terms and privacy notice are at https://open-meteo.com/en/terms.
 
-The forecast is derived from Copernicus Atmosphere Monitoring Service data and is licensed CC BY 4.0. We are not a government air-quality agency.
+Where the live API uses Copernicus Atmosphere Monitoring Service data, that forecast is licensed CC BY 4.0. We are not a government air-quality agency.
 
-Map tiles in the iOS app are provided by Apple as part of MapKit. Apple’s privacy policy applies to that processing.
+v1 of the iOS app does not load map tiles.
 
 We do not send your position to BigDataCloud from the iOS app.
 
@@ -235,22 +238,22 @@ We use location and place queries to show an air-quality forecast, to name a pla
 
 ### How long
 
-On the iPhone, until you delete the place or the app. On our side, we do not keep a watchlist database for the iOS app. Host and Open-Meteo logs follow those providers’ retention (Open-Meteo: up to 90 days for individual API logs, as published by them).
+On the iPhone, until you delete the place or the app. On our side, we do not keep a watchlist database for the iOS app. Host logs, and the current upstream vendor’s logs, follow those providers’ retention. Open-Meteo, which the website uses today, publishes up to 90 days for individual API logs.
 
 ### Sharing
 
-We share coordinates and search text with Open-Meteo so they can answer the forecast request, and we rely on Vercel to host that request. The website additionally uses BigDataCloud and CARTO as described above. We may disclose information if the law requires it. We do not sell it.
+The iOS app sends coordinates and search text to our API so a forecast can be returned, and we rely on Vercel to host that request. The website’s current API then asks Open-Meteo. The website additionally uses BigDataCloud and CARTO as described above. We may disclose information if the law requires it. We do not sell it.
 
 ### Your choices
 
 - Deny location or notifications in iOS Settings. The watchlist still works.
 - Remove places in the app.
 - Delete the app.
-- Email privacy@bbcvc.llc for a question about this policy. If you are in a place that gives you access, correction, or deletion rights over personal information a service provider holds, write to us and we will pass the request to the provider where we can.
+- Email privacy@bbcvc.dev for a question about this policy. If you are in a place that gives you access, correction, or deletion rights over personal information a service provider holds, write to us and we will pass the request to the provider where we can.
 
 ### International
 
-We are based in the United States. Our host and Open-Meteo process requests in the United States and Europe. If you use the app from another country, you understand that your request is processed in those places.
+We are based in the United States. Our host processes requests in the United States and Europe. The website’s current upstream does too. If you use the app from another country, you understand that your request is processed in those places.
 
 ### Not medical or regulatory advice
 
@@ -267,7 +270,7 @@ We will post changes on this page and change the date at the top. If a change ma
 Copy into App Store Connect → App Review Information. Also in [IOS-PLAN.md](./IOS-PLAN.md).
 
 ```text
-Air Quality Watchlist is a native SwiftUI app from BBCVC LLC. It is not a WebView of our website. Saved places, thresholds, and the last readings are stored on device in an App Group. The app loads modeled US AQI from our API (Open-Meteo / CAMS, not AirNow). Test without an account. Location and notifications are optional: search still works if location is denied, and the list still works if notifications are denied. The home-screen widget reads the same on-device list. A background refresh updates readings and files a local notification only after the user sets a threshold. Sample places are preloaded. Privacy policy: https://bbcvc.llc/privacy. Support: https://bbcvc.llc/support.
+This is a native SwiftUI app from BBCVC. It is not a WebView of our website. The App Store name is not final. Saved places, thresholds, and the last readings are stored on device in an App Group. The app loads modeled US AQI from our existing API (not AirNow). v1 has no map. Test without an account. Location and notifications are optional: search still works if location is denied, and the list still works if notifications are denied. The home-screen widget reads the same on-device list. A background refresh updates readings and files a local notification only after the user turns a threshold on. The threshold control ships off. Sample places are preloaded. Privacy policy: https://bbcvc.dev/privacy. Support: https://bbcvc.dev/support.
 ```
 
 Sign-in on the review form: leave the demo account blank.
