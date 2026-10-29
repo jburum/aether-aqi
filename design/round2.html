@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=390" />
-    <meta name="theme-color" content="#7DD9BA" />
+    <meta name="theme-color" content="#E1F1FB" />
     <title>Boise — Air Quality Forecast</title>
     <style>
       * { box-sizing: border-box; }
@@ -12,80 +12,110 @@
         width: 390px;
         height: 844px;
         overflow: hidden;
-        background: var(--bg, #7dd9ba);
+        background: var(--bg, #e1f1fb);
         color: var(--ink, #000);
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-family: "SF Pro Text", "SF Pro", "Segoe UI Variable", system-ui, sans-serif;
+        font-variant-numeric: tabular-nums;
         -webkit-text-size-adjust: 100%;
       }
       button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
       :focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
-      .sr {
-        position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
-        overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+      .stage { position: relative; width: 390px; height: 844px; overflow: hidden; }
+      .sky, canvas, .grain {
+        position: absolute; pointer-events: none;
       }
-      canvas, .grain, .glow {
-        position: absolute; inset: 0; width: 390px; height: 844px; pointer-events: none;
+      .sky {
+        z-index: 0;
+        inset: -28px;
+        background: linear-gradient(180deg, var(--bg-top, #e1f1fb) 0%, var(--bg, #e1f1fb) 46%, var(--bg-bot, #c5dbe8) 100%);
+        transform-origin: 50% 36%;
+        animation: breathe var(--breath, 6s) ease-in-out infinite;
       }
-      canvas { z-index: 1; }
+      @keyframes breathe {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.04); }
+      }
+      canvas, .grain { inset: 0; width: 390px; height: 844px; }
+      canvas { z-index: 1; filter: blur(var(--haze-blur, 0px)); }
       .grain {
         z-index: 2;
         opacity: var(--grain, 0.08);
         mix-blend-mode: overlay;
+        animation: grainbreath var(--breath, 6s) ease-in-out infinite;
         background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
       }
-      body.reduce .grain, body.more-contrast .grain, body.frame .grain { opacity: 0; }
-      body.dir-ribbon .grain { opacity: calc(var(--grain, 0.08) * 0.35); }
+      @keyframes grainbreath {
+        0%, 100% { opacity: calc(var(--grain, 0.08) * 0.65); }
+        50% { opacity: var(--grain, 0.08); }
+      }
+      body.reduce .sky, body.reduce .grain,
+      body.frame .sky, body.frame .grain,
+      body.more-contrast .sky, body.more-contrast .grain { animation: none; }
+      body.frame .grain, body.reduce .grain { opacity: var(--grain, 0.08); }
+      @media (prefers-reduced-motion: reduce) {
+        .sky, .grain { animation: none; }
+      }
       .screen {
         position: relative;
         z-index: 3;
         height: 844px;
         display: flex;
         flex-direction: column;
-        gap: 6px;
-        padding: 58px 16px 26px;
+        gap: 2px;
+        padding: 52px 18px 20px;
       }
       .status, .home-ind { position: absolute; left: 0; right: 0; z-index: 4; }
       .status {
-        top: 0; height: 54px; display: flex; align-items: flex-end; justify-content: space-between;
-        padding: 0 22px 8px; font-size: 15px; font-weight: 650;
+        top: 0; height: 48px; display: flex; align-items: flex-end; justify-content: space-between;
+        padding: 0 22px 6px; font-size: 15px; font-weight: 650;
       }
-      .pip {
-        width: 8px; height: 8px; border-radius: 4px; background: currentColor; opacity: 0.35;
-      }
+      .pip { width: 8px; height: 8px; border-radius: 4px; background: currentColor; opacity: 0.35; }
       .pip.pulse { animation: pip 280ms ease-out; }
       @keyframes pip { 0% { transform: scale(1); opacity: 0.9; } 100% { transform: scale(2.2); opacity: 0.2; } }
-      body.reduce .pip.pulse { animation: none; opacity: 0.8; }
-      .home-ind {
-        bottom: 8px; margin: 0 auto; width: 134px; height: 5px; border-radius: 3px; background: currentColor;
-      }
-      .nav { display: flex; align-items: center; gap: 8px; min-height: 32px; }
+      body.reduce .pip.pulse, body.frame .pip.pulse { animation: none; opacity: 0.8; }
+      .home-ind { bottom: 8px; margin: 0 auto; width: 134px; height: 5px; border-radius: 3px; background: currentColor; }
+      .nav { display: flex; align-items: center; gap: 8px; min-height: 28px; }
       .nav h1 {
-        flex: 1; margin: 0; font-size: 15px; line-height: 18px; font-weight: 650; letter-spacing: -0.2px;
+        flex: 1; margin: 0; font-size: 13px; line-height: 16px; font-weight: 650; letter-spacing: -0.2px;
         display: flex; align-items: center; gap: 6px;
       }
       #app-icon {
-        width: 16px; height: 16px; border-radius: 4px; box-shadow: inset 0 0 0 1.5px currentColor; display: block;
+        width: 14px; height: 14px; border-radius: 4px;
+        box-shadow: inset 0 0 0 1.5px currentColor; display: block; background: var(--bg-bot, currentColor);
       }
-      .nav button { min-height: 32px; font-size: 13px; font-weight: 650; }
-      #home, #widgets { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 6px; }
+      .nav button { min-height: 28px; font-size: 13px; font-weight: 650; }
       body.frame .nav-tools { display: none; }
-      .place { text-align: left; min-height: 36px; }
-      .place strong { display: block; font-size: 28px; line-height: 30px; letter-spacing: -0.6px; font-weight: 650; }
-      .place span { font-size: 13px; line-height: 16px; color: var(--ink-soft); }
-      .digits {
-        height: 1em; font-size: 92px; font-weight: 640; letter-spacing: -0.04em; line-height: 1;
-        display: flex; overflow: hidden; font-variant-numeric: tabular-nums;
+      #home, #widgets { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 2px; }
+      .place { text-align: left; min-height: 20px; font-size: 15px; line-height: 18px; font-weight: 650; }
+      .place span, .hint, .meta .soft { color: var(--ink-soft); font-weight: 500; }
+      .kicker { margin: 0; font-size: 13px; line-height: 16px; font-weight: 650; }
+      .forecast h2, #detail-value {
+        margin: 0;
+        font-family: "SF Pro Display", "SF Pro", "Segoe UI Variable Display", system-ui, sans-serif;
+        font-size: 26px;
+        line-height: 30px;
+        letter-spacing: -0.45px;
+        font-weight: var(--wght-voice, var(--wght, 560));
+        font-variation-settings: "wght" var(--wght-voice, var(--wght, 560));
+        font-variant-numeric: tabular-nums lining-nums;
       }
-      body.dir-ribbon .digits { font-size: 72px; }
-      body.ax5 .digits { font-size: 60px; }
+      .advice { margin: 2px 0 0; font-size: 15px; line-height: 19px; font-weight: 560; }
+      .digits {
+        height: 1em; font-size: 64px; line-height: 1; letter-spacing: -0.04em;
+        font-family: "SF Pro Display", "SF Pro", "Segoe UI Variable Display", system-ui, sans-serif;
+        font-weight: var(--wght, 560);
+        font-variation-settings: "wght" var(--wght, 560);
+        font-variant-numeric: tabular-nums lining-nums;
+        display: flex; overflow: hidden;
+      }
+      body.ax5 .forecast h2, body.ax5 #detail-value { font-size: 22px; line-height: 26px; }
+      body.ax5 .advice, body.ax5 .meta, body.ax5 #detail-why { font-size: 18px; line-height: 22px; }
+      body.ax5 .digits { font-size: 48px; }
       .wheel { height: 1em; width: 0.62em; overflow: hidden; }
       .wheel.off { width: 0; }
       .strip { display: block; will-change: transform; }
       .strip i { display: block; height: 1em; font-style: normal; text-align: center; }
-      .meta { min-height: 22px; font-size: 15px; line-height: 20px; font-weight: 650; }
-      .meta .soft, .advice, .hint, .place span { color: var(--ink-soft); font-weight: 500; }
-      .advice { margin: 0; font-size: 16px; line-height: 20px; }
-      body.ax5 .meta, body.ax5 .advice { font-size: 20px; line-height: 24px; }
+      .meta { min-height: 18px; margin: 0; font-size: 14px; line-height: 18px; font-weight: 650; }
       .pat {
         display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -1px;
         margin-right: 4px; box-shadow: inset 0 0 0 1.5px currentColor;
@@ -104,97 +134,87 @@
           repeating-linear-gradient(0deg, currentColor 0 1.5px, transparent 1.5px 4px),
           repeating-linear-gradient(90deg, currentColor 0 1.5px, transparent 1.5px 4px);
       }
-      .curve { position: relative; flex: 1 1 120px; min-height: 96px; touch-action: none; }
-      body.view-detail .curve { flex: 0 0 92px; min-height: 92px; }
-      .curve svg { width: 100%; height: 100%; display: block; }
+      .curve {
+        position: relative; flex: 1 1 280px; min-height: 200px; touch-action: none;
+        transition: flex-basis 600ms cubic-bezier(0.2, 0.8, 0.2, 1);
+      }
+      body.reduce .curve, body.frame .curve { transition: none; }
+      body.view-detail .curve { flex: 0 0 188px; min-height: 150px; }
+      body.ax5 .curve { min-height: 132px; flex-basis: 148px; }
+      .curve svg { width: 100%; height: 100%; display: block; overflow: visible; }
       .line { fill: none; stroke: currentColor; stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
       body.more-contrast .line { stroke-width: 3.5; }
-      #timeline { position: absolute; inset: 0; }
+      #timeline { position: absolute; inset: 0; z-index: 1; }
       .play-label {
-        position: absolute; top: 0; font-size: 12px; font-weight: 700; pointer-events: none;
-        transform: translateX(-50%);
+        position: absolute; top: 0; z-index: 2; font-size: 12px; font-weight: 700;
+        pointer-events: none; transform: translateX(-50%);
       }
       #back-now {
-        position: absolute; top: 0; right: 0; z-index: 2; min-height: 28px; padding: 0 8px;
-        border-radius: 14px; border: 1px solid currentColor; font-size: 12px; font-weight: 650;
-        background: var(--bg);
+        position: absolute; top: 0; right: 0; z-index: 2; min-height: 28px;
+        font-size: 12px; font-weight: 650;
       }
       #back-now[hidden] { display: none; }
-      .tools { display: flex; gap: 6px; }
-      .tools button, .chips button {
-        min-height: 32px; padding: 0 8px; border-radius: 16px; border: 1px solid currentColor;
-        font-size: 13px; font-weight: 650;
+      .words, .windows { display: flex; gap: 14px; align-items: center; min-height: 30px; }
+      .words button, .windows button {
+        min-height: 30px; padding: 0; font-size: 14px; font-weight: 650; text-align: left;
       }
-      .tools button[aria-pressed="true"], .chips button[aria-selected="true"] {
-        background: var(--ink); color: var(--bg);
+      .words button { opacity: 0.5; }
+      .words button[aria-pressed="true"], .words button[aria-selected="true"] {
+        opacity: 1; box-shadow: inset 0 -1.5px 0 currentColor;
       }
-      .chips { display: flex; gap: 4px; }
-      .chips button { flex: 1; padding: 0 2px; }
-      .best {
-        text-align: left; min-height: 36px; font-size: 14px; line-height: 18px; font-weight: 650;
-      }
-      body.ax5 .best, body.ax5 .chips button, body.ax5 .tools button { font-size: 17px; min-height: 40px; }
-      .subchart { height: 92px; flex: 0 0 92px; position: relative; touch-action: none; }
-      body.ax5 .subchart { height: 64px; flex-basis: 64px; }
-      .subchart .hint { position: absolute; left: 0; bottom: 0; margin: 0; font-size: 11px; }
-      .ribbon { display: flex; gap: 4px; min-height: 52px; }
-      .ribbon button {
-        flex: 1; border-radius: 10px; min-height: 52px; padding: 4px 2px; text-align: center;
-        font-size: 11px; line-height: 13px; font-weight: 650;
-      }
-      .ribbon button b { display: block; font-size: 12px; }
-      .ribbon button.on { box-shadow: inset 0 0 0 2px currentColor; }
-      body.dir-ribbon .ribbon { min-height: 64px; }
-      body.dir-ribbon .ribbon button { min-height: 64px; }
-      #detail { display: flex; flex-direction: column; gap: 8px; }
-      #detail dl { margin: 0; display: flex; flex-direction: column; gap: 6px; }
-      #detail div { display: flex; justify-content: space-between; gap: 12px; font-size: 17px; min-height: 28px; }
-      #detail dt { font-weight: 650; }
-      #detail dd { margin: 0; }
+      .windows button { flex: 1; }
+      body.ax5 .words, body.ax5 .windows { min-height: 36px; }
+      body.ax5 .words button, body.ax5 .windows button { font-size: 17px; min-height: 36px; }
+      body.ax5 .windows { flex-direction: column; align-items: stretch; gap: 0; }
+      .reminder { margin: 0; min-height: 0; font-size: 12px; line-height: 16px; color: var(--ink-soft); }
+      .reminder:empty { display: none; }
+      #detail { display: flex; flex-direction: column; gap: 4px; }
+      #detail-trend { margin: 0; font-size: 15px; font-weight: 650; }
+      #detail-why { margin: 0; font-size: 16px; line-height: 21px; }
       body:not(.view-detail) #detail { display: none; }
       body.view-detail .home-extra { display: none; }
-      #widgets { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+      #widgets { gap: 6px; }
       body:not(.view-widgets) #widgets { display: none; }
       body.view-widgets .home-only { display: none; }
-      .wrow { display: flex; gap: 8px; }
-      .w-small {
-        width: 158px; height: 158px; border-radius: 22px; padding: 12px; text-align: left;
-        display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between;
+      .w-kicker {
+        margin: 8px 0 0; font-size: 11px; line-height: 14px; font-weight: 650;
+        letter-spacing: 0.4px; text-transform: uppercase; color: var(--ink-soft);
       }
-      .w-small b { font-size: 52px; line-height: 52px; letter-spacing: -2px; font-weight: 680; }
-      .w-lock { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 8px; }
+      .w-small { text-align: left; display: flex; flex-direction: column; align-items: flex-start; min-height: 64px; }
+      .w-small b, .w-med-top b, .w-live b {
+        font-family: "SF Pro Display", "SF Pro", system-ui, sans-serif;
+        font-weight: var(--wght, 640);
+        font-variation-settings: "wght" var(--wght, 640);
+        font-variant-numeric: tabular-nums;
+      }
+      .w-small b { font-size: 52px; line-height: 52px; letter-spacing: -1.5px; }
+      .w-lock { display: flex; align-items: center; gap: 12px; }
       .w-circ {
-        width: 72px; height: 72px; border-radius: 36px; display: flex; align-items: center; justify-content: center;
-        font-size: 22px; font-weight: 750; box-shadow: inset 0 0 0 3px currentColor;
+        width: 62px; height: 62px; border-radius: 31px; display: flex; align-items: center; justify-content: center;
+        font-size: 18px; font-weight: 750; box-shadow: inset 0 0 0 2px currentColor;
+        font-variant-numeric: tabular-nums;
       }
-      .w-inline { margin: 0; font-size: 13px; font-weight: 650; }
-      .w-med, .w-live, .w-large {
-        border-radius: 18px; padding: 10px 12px; background: transparent;
-        box-shadow: inset 0 0 0 1px currentColor;
-      }
-      .w-med { height: 118px; }
+      .w-inline, .w-live, .w-horizon, .w-note { margin: 0; font-size: 14px; line-height: 18px; font-weight: 650; }
       .w-med-top { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
       .w-med-top b { font-size: 28px; letter-spacing: -1px; }
-      #w-spark { width: 100%; height: 64px; display: block; }
-      .w-live { min-height: 56px; display: flex; align-items: center; gap: 8px; font-weight: 650; }
-      .w-live b { font-size: 28px; letter-spacing: -1px; }
+      #w-spark { width: 100%; height: 52px; display: block; }
+      .w-note { font-weight: 500; color: var(--ink-soft); }
       #review {
-        position: absolute; left: 10px; right: 10px; bottom: 22px; z-index: 6;
-        background: #141414; color: #f4f4f4; border-radius: 16px; padding: 12px;
-        max-height: 620px; overflow: auto;
+        position: absolute; inset: 0; z-index: 6;
+        background: #141414; color: #f4f4f4; padding: 58px 18px 22px; overflow: auto;
       }
       #review[hidden] { display: none; }
       #review p, #review li { margin: 0 0 8px; font-size: 13px; line-height: 17px; color: #f4f4f4; }
-      #review .row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+      #review .row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
       #review button, #review a {
-        min-height: 36px; padding: 0 10px; border-radius: 12px; border: 1px solid #f4f4f4;
-        color: #f4f4f4; font-size: 13px; font-weight: 650; display: inline-flex; align-items: center;
+        min-height: 36px; padding: 0 2px; color: #f4f4f4; font-size: 13px; font-weight: 650;
+        display: inline-flex; align-items: center; margin-right: 12px;
       }
-      #review button[aria-pressed="true"] { background: #f4f4f4; color: #141414; }
-      #review h2 { margin: 8px 0 6px; font-size: 12px; letter-spacing: 0.4px; text-transform: uppercase; }
+      #review button[aria-pressed="true"] { box-shadow: inset 0 -1.5px 0 #f4f4f4; }
+      #review h2 { margin: 10px 0 6px; font-size: 12px; letter-spacing: 0.4px; text-transform: uppercase; }
       body[data-cvd="deutan"] .stage { filter: url(#cvd-deutan); }
       body[data-cvd="protan"] .stage { filter: url(#cvd-protan); }
-    </style>
+</style>
   </head>
   <body>
     <svg width="0" height="0" aria-hidden="true">
@@ -205,90 +225,90 @@
         <feColorMatrix type="matrix" values="0.152286 1.052583 -0.204868 0 0  0.114503 0.786281 0.099216 0 0  -0.003882 -0.048116 1.051998 0 0  0 0 0 1 0" />
       </filter>
     </svg>
-    <canvas id="haze"></canvas>
-    <div class="grain" aria-hidden="true"></div>
-    <div class="status"><span>9:41</span><i id="haptic-pip" class="pip" aria-hidden="true"></i></div>
-    <main class="screen stage" id="stage">
-      <div class="nav">
-        <button type="button" id="back" hidden>Back</button>
-        <h1><i id="app-icon" aria-hidden="true"></i> Air Quality Forecast</h1>
-        <span class="nav-tools">
-          <button type="button" id="open-widgets">Widgets</button>
-          <button type="button" id="open-review">Review</button>
-        </span>
-      </div>
+    <div class="stage" id="stage">
+      <div class="sky" aria-hidden="true"></div>
+      <canvas id="haze"></canvas>
+      <div class="grain" aria-hidden="true"></div>
+      <div class="status"><span>9:41</span><i id="haptic-pip" class="pip" aria-hidden="true"></i></div>
+      <main class="screen">
+        <div class="nav">
+          <button type="button" id="back" hidden>Back</button>
+          <h1><i id="app-icon" aria-hidden="true"></i> Air Quality Forecast</h1>
+          <span class="nav-tools">
+            <button type="button" id="open-widgets">Widgets</button>
+            <button type="button" id="open-review">Review</button>
+          </span>
+        </div>
 
-      <div class="home-only" id="home">
-        <button type="button" class="place" id="place"><strong>Boise</strong><span>Idaho · smoke event</span></button>
-        <div class="digits" id="digits" aria-hidden="true"></div>
-        <p class="meta" id="meta"><i class="pat pat-good" id="pat"></i><span id="cat">Good</span> <span class="soft" id="dom">PM2.5</span></p>
-        <p class="advice" id="advice">Clean enough for a long run.</p>
-        <div class="curve" id="curve">
-          <svg id="hero" role="img" aria-label="Thursday air quality curve"></svg>
-          <div id="timeline" role="slider" tabindex="0" aria-label="Forecast timeline" aria-orientation="horizontal" aria-valuemin="0" aria-valuemax="23" aria-valuenow="7" aria-valuetext="7 AM, AQI 48, Good"></div>
-          <div class="play-label" id="play-label">7 AM</div>
-          <button type="button" id="back-now" hidden>Back to now</button>
+        <div class="home-only" id="home">
+          <button type="button" class="place" id="place">Boise <span>smoke event</span></button>
+          <div class="forecast home-extra" id="forecast">
+            <p class="kicker" id="kicker">Thu 3–8 PM</p>
+            <h2 id="headline">Hazardous smoke</h2>
+            <p class="advice" id="advice">Friday from 4 PM, and the weekend, are your outdoor windows.</p>
+          </div>
+          <div class="curve" id="curve">
+            <svg id="hero" role="img" aria-label="7-day air quality curve"></svg>
+            <div id="timeline" role="slider" tabindex="0" aria-label="Forecast timeline" aria-orientation="horizontal" aria-valuemin="0" aria-valuemax="165" aria-valuenow="7" aria-valuetext="Thu 7 AM, AQI 48, Good"></div>
+            <div class="play-label" id="play-label">Thu 7 AM</div>
+            <button type="button" id="back-now" hidden>Now</button>
+          </div>
+          <div class="digits home-extra" id="digits" aria-hidden="true"></div>
+          <p class="meta home-extra" id="meta"><i class="pat pat-good" id="pat"></i><span id="cat">Good</span> <span class="soft" id="dom">PM2.5</span></p>
+          <div class="windows home-extra" id="windows">
+            <button type="button" id="win-avoid">Avoid Thu 3–8 PM</button>
+            <button type="button" id="win-best">Outdoor window Fri 4–8 PM</button>
+          </div>
+          <p class="reminder home-extra" id="reminder"></p>
+          <div class="words home-extra" role="group" aria-label="Zoom">
+            <button type="button" id="range-week" aria-pressed="true">Week</button>
+            <button type="button" id="range-day" aria-pressed="false">Day</button>
+            <button type="button" id="range-hour" aria-pressed="false">Hour</button>
+          </div>
+          <section id="detail" aria-label="What is driving the number">
+            <p class="kicker" id="detail-name">PM2.5</p>
+            <p id="detail-value">—</p>
+            <p id="detail-trend"></p>
+            <p id="detail-why"></p>
+          </section>
+          <div class="words" id="pollutant-row" role="tablist" aria-label="Pollutant">
+            <button type="button" role="tab" data-poll="aqi" aria-selected="true">AQI</button>
+            <button type="button" role="tab" data-poll="pm" aria-selected="false">PM2.5</button>
+            <button type="button" role="tab" data-poll="o3" aria-selected="false">O3</button>
+            <button type="button" role="tab" data-poll="no2" aria-selected="false">NO2</button>
+            <button type="button" role="tab" data-poll="smoke" aria-selected="false">Smoke</button>
+          </div>
         </div>
-        <div class="tools">
-          <button type="button" id="range-day" aria-pressed="true">24h</button>
-          <button type="button" id="range-week" aria-pressed="false">5-day</button>
-        </div>
-        <div class="chips home-extra" role="tablist" aria-label="Pollutant">
-          <button type="button" role="tab" data-poll="aqi" aria-selected="true">AQI</button>
-          <button type="button" role="tab" data-poll="pm" aria-selected="false">PM2.5</button>
-          <button type="button" role="tab" data-poll="o3" aria-selected="false">O3</button>
-          <button type="button" role="tab" data-poll="no2" aria-selected="false">NO2</button>
-          <button type="button" role="tab" data-poll="smoke" aria-selected="false">Smoke</button>
-        </div>
-        <button type="button" class="best home-extra" id="best" aria-pressed="false">Best window</button>
-        <div class="subchart home-extra" id="subchart">
-          <svg id="sub" aria-hidden="true"></svg>
-          <p class="hint">Hold the chart to scrub</p>
-        </div>
-        <div class="ribbon home-extra" id="ribbon" role="group" aria-label="5-day ribbon"></div>
-        <section id="detail" aria-label="Boise detail">
-          <dl id="detail-list"></dl>
-          <p class="advice" id="detail-outlook"></p>
-        </section>
-      </div>
 
-      <section id="widgets" aria-label="Widgets and Live Activity">
-        <div class="wrow">
-          <button type="button" class="w-small" id="w-small" aria-label="Small widget. Tap to step one hour.">
-            <span>Boise</span>
-            <b id="w-num">48</b>
-            <span id="w-cat">Good</span>
-          </button>
+        <section id="widgets" aria-label="Widgets and Live Activity">
+          <p class="w-kicker">Lock Screen</p>
           <div class="w-lock">
             <div class="w-circ" id="w-circ" role="img" aria-label="Lock Screen circular widget">48</div>
             <p class="w-inline" id="w-inline">Boise · 48 · Good</p>
           </div>
-        </div>
-        <div class="w-med" id="w-med">
-          <div class="w-med-top"><b id="w-med-num">48</b><span id="w-med-best">Best window</span></div>
-          <svg id="w-spark" aria-hidden="true"></svg>
-        </div>
-        <div class="w-live" id="w-live">
-          <b id="w-live-num">48</b>
-          <span id="w-live-trend" aria-hidden="true">↑</span>
-          <span id="w-live-note">Peaks around 6 PM</span>
-        </div>
-        <div class="w-large">
-          <div class="ribbon" id="w-ribbon"></div>
-        </div>
-        <p class="hint">Tap the small widget to step one hour. Smoke Live Activity shows the outlook.</p>
-      </section>
-    </main>
-    <div class="home-ind" aria-hidden="true"></div>
+          <p class="w-kicker">Small</p>
+          <button type="button" class="w-small" id="w-small" aria-label="Small widget. Tap to step one hour.">
+            <b id="w-num">48</b>
+            <span id="w-cat">Good</span>
+          </button>
+          <p class="w-kicker">Medium</p>
+          <div id="w-med">
+            <div class="w-med-top"><b id="w-med-num">48</b><span id="w-med-best">Outdoor window Fri 4–8 PM</span></div>
+            <svg id="w-spark" aria-hidden="true"></svg>
+          </div>
+          <p class="w-kicker">Live Activity</p>
+          <p class="w-live" id="w-live"><b id="w-live-num">48</b> <span id="w-live-trend" aria-hidden="true">↑</span> <span id="w-live-note">Peaks around 6 PM</span></p>
+          <p class="w-kicker">Large · 5-day horizon</p>
+          <p class="w-horizon" id="w-horizon"></p>
+          <p class="w-note">Threshold alert is set at Unhealthy. Whether the app warns you, or waits until you check, is still open.</p>
+        </section>
+      </main>
+      <div class="home-ind" aria-hidden="true"></div>
+    </div>
 
     <div id="review" hidden>
-      <p><b>Round 2 draft.</b> Not final. Waiting on the design critic. Two directions, same smoke day and the same scale.</p>
-      <h2>Direction</h2>
-      <div class="row">
-        <button type="button" data-dir="field" aria-pressed="true">Field</button>
-        <button type="button" data-dir="ribbon" aria-pressed="false">Ribbon</button>
-      </div>
-      <p>Field is the full-bleed atmosphere, grain, and haze. Ribbon keeps that scale and leads with type and the 5-day ribbon.</p>
+      <p><b>Critic pass.</b> Socrates, 29 Oct. The sky is the forecast. PR #5 stays on hold.</p>
+      <p>Open with Jason: an app he checks, or one that warns him. This pass does not design the notification.</p>
       <h2>Accessibility</h2>
       <div class="row">
         <button type="button" id="opt-motion" aria-pressed="false">Reduce Motion</button>
@@ -300,7 +320,7 @@
         <button type="button" data-cvd="deutan" aria-pressed="false">Deuteranopia</button>
         <button type="button" data-cvd="protan" aria-pressed="false">Protanopia</button>
       </div>
-      <p>The timeline is a slider. Up and down move one hour. Category text and chart patterns stay with the color.</p>
+      <p>The timeline is a slider. Up and down move one step. Spread two fingers to go from the week to the day to the hour. Category text and chart patterns stay with the color.</p>
       <p><a href="round2-tokens.html">OKLCH scale and contrast</a></p>
       <h2>Haptic stub</h2>
       <ol id="haptic-log"></ol>
@@ -445,8 +465,8 @@
         }
         function decisionWindows() {
           return [
-            { id: "avoid", hour: 15, label: "Avoid Thu 3–8 PM" },
-            { id: "best", hour: 40, label: "Outdoor window Fri 4–8 PM" },
+            { id: "avoid", hour: 15, end: 20, label: "Avoid Thu 3–8 PM" },
+            { id: "best", hour: 40, end: 44, label: "Outdoor window Fri 4–8 PM" },
           ];
         }
         function dayPeak(hour) {
@@ -699,57 +719,71 @@
     <script>
       const R = Round2;
       const params = new URLSearchParams(location.search);
+      const asked = params.get("range");
       const state = {
-        range: "day",
+        range: asked === "day" || asked === "hour" || asked === "week" ? asked : "week",
         pollutant: "aqi",
-        direction: params.get("dir") === "ribbon" ? "ribbon" : "field",
         reduce: matchMedia("(prefers-reduced-motion: reduce)").matches,
         ax5: false,
         contrast: false,
         cvd: "off",
         view: "home",
         reminder: "",
+        armed: "",
         frame: params.get("frame") === "1",
-        review: false,
       };
       let targetHour = params.has("hour") ? Number(params.get("hour")) : R.NOW;
+      if (!Number.isFinite(targetHour)) targetHour = R.NOW;
+      targetHour = Math.max(0, Math.min(R.LAST, targetHour));
       let shownHour = targetHour;
+      let scrubbed = params.has("hour") && Math.abs(targetHour - R.NOW) > 0.45;
       let hourV = 0;
       let dragging = false;
+      let hourSpan = null;
       let colorTau = 0.083;
       let disp = null;
       let lastStep = null;
       let lastCat = null;
       let heroShown = null;
-      let subShown = null;
-      const digits = [0, 1, 2].map(() => ({ pos: 0, v: 0, target: 0 }));
+      let copyKey = "";
+      const digits = [0, 1, 2].map(() => ({ pos: 0, v: 0, goal: 0, digit: null }));
       const canvas = document.getElementById("haze");
       const ctx = canvas.getContext("2d");
       const rngState = { s: 20261029 };
-      function rnd() { rngState.s = (rngState.s * 16807) % 2147483647; return rngState.s / 2147483647; }
-      const motes = Array.from({ length: 80 }, () => ({ x: rnd(), y: rnd(), s: 0.6 + rnd() * 1.6, p: rnd() * 6.28 }));
+      function rnd() {
+        rngState.s = (rngState.s * 16807) % 2147483647;
+        return rngState.s / 2147483647;
+      }
+      const motes = Array.from({ length: 80 }, () => ({
+        x: rnd(),
+        y: rnd(),
+        s: 0.6 + rnd() * 1.6,
+        p: rnd() * 6.28,
+      }));
 
       const els = {
+        kicker: document.getElementById("kicker"),
+        headline: document.getElementById("headline"),
+        advice: document.getElementById("advice"),
         digits: document.getElementById("digits"),
         cat: document.getElementById("cat"),
         pat: document.getElementById("pat"),
         dom: document.getElementById("dom"),
-        advice: document.getElementById("advice"),
         hero: document.getElementById("hero"),
-        sub: document.getElementById("sub"),
         timeline: document.getElementById("timeline"),
         play: document.getElementById("play-label"),
         backNow: document.getElementById("back-now"),
-        best: document.getElementById("best"),
-        ribbon: document.getElementById("ribbon"),
-        wRibbon: document.getElementById("w-ribbon"),
+        reminder: document.getElementById("reminder"),
         review: document.getElementById("review"),
         log: document.getElementById("haptic-log"),
         pip: document.getElementById("haptic-pip"),
+        detailName: document.getElementById("detail-name"),
+        detailValue: document.getElementById("detail-value"),
+        detailTrend: document.getElementById("detail-trend"),
+        detailWhy: document.getElementById("detail-why"),
       };
 
       function syncClasses() {
-        document.body.classList.toggle("dir-ribbon", state.direction === "ribbon");
         document.body.classList.toggle("reduce", state.reduce);
         document.body.classList.toggle("ax5", state.ax5);
         document.body.classList.toggle("more-contrast", state.contrast);
@@ -759,32 +793,58 @@
         document.body.dataset.cvd = state.cvd;
         document.getElementById("back").hidden = state.view !== "detail";
         document.getElementById("open-widgets").textContent = state.view === "widgets" ? "Home" : "Widgets";
-        document.getElementById("range-day").setAttribute("aria-pressed", String(state.range === "day"));
-        document.getElementById("range-week").setAttribute("aria-pressed", String(state.range === "week"));
-        document.querySelectorAll("[data-dir]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.dir === state.direction)));
-        document.querySelectorAll("[data-cvd]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.cvd === state.cvd)));
+        for (const name of ["week", "day", "hour"]) {
+          document.getElementById("range-" + name).setAttribute("aria-pressed", String(state.range === name));
+        }
+        document.querySelectorAll("[data-cvd]").forEach((b) => {
+          b.setAttribute("aria-pressed", String(b.dataset.cvd === state.cvd));
+        });
         document.getElementById("opt-motion").setAttribute("aria-pressed", String(state.reduce));
         document.getElementById("opt-type").setAttribute("aria-pressed", String(state.ax5));
         document.getElementById("opt-contrast").setAttribute("aria-pressed", String(state.contrast));
-        document.querySelectorAll("[data-poll]").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.poll === state.pollutant)));
+        document.querySelectorAll("[data-poll]").forEach((b) => {
+          b.setAttribute("aria-selected", String(b.dataset.poll === state.pollutant));
+        });
+        els.reminder.textContent = state.reminder ? "Reminder set · " + state.reminder : "";
       }
 
-      function viewBounds() {
-        if (state.range === "week") return [0, 117];
-        const day0 = Math.floor(clampShown() / 24) * 24;
-        return [day0, day0 + 23];
+      function clampShown() {
+        return Math.max(0, Math.min(R.LAST, shownHour));
       }
-      function clampShown() { return Math.max(0, Math.min(119, shownHour)); }
+      function pinHourSpan(hour) {
+        const c = Math.max(0, Math.min(R.LAST, hour));
+        const end = Math.min(R.LAST, Math.max(6, c + 3));
+        hourSpan = [end - 6, end];
+      }
+      function viewBounds() {
+        const hour = clampShown();
+        if (state.range === "week") return [0, 165];
+        if (state.range === "hour") {
+          if (!hourSpan) pinHourSpan(hour);
+          return hourSpan;
+        }
+        const day0 = Math.floor(hour / 24) * 24;
+        return [day0, Math.min(R.LAST, day0 + 23)];
+      }
       function snap(hour) {
-        if (state.range === "week") return Math.max(0, Math.min(117, Math.round(hour / 3) * 3));
-        const day0 = Math.floor(Math.max(0, Math.min(119, hour)) / 24) * 24;
-        return Math.max(day0, Math.min(day0 + 23, Math.round(hour)));
+        const h = Math.max(0, Math.min(R.LAST, hour));
+        if (state.range === "week") return Math.max(0, Math.min(165, Math.round(h / 3) * 3));
+        if (state.range === "hour") return Math.round(h * 4) / 4;
+        const day0 = Math.floor(h / 24) * 24;
+        return Math.max(day0, Math.min(Math.min(R.LAST, day0 + 23), Math.round(h)));
+      }
+      function formatClock(h) {
+        if (state.range !== "hour") return R.formatHour(h);
+        const hour = ((h % 24) + 24) % 24;
+        const whole = Math.floor(hour + 1e-6);
+        const min = Math.round((hour - whole) * 60) % 60;
+        const ap = whole < 12 ? "AM" : "PM";
+        const h12 = whole % 12 || 12;
+        return h12 + ":" + String(min).padStart(2, "0") + " " + ap;
       }
       function formatWhen(hour) {
-        const dayIndex = Math.floor(hour / 24);
-        const label = R.formatHour(hour);
-        if (dayIndex === 0 && state.range === "day") return label;
-        return R.DAY_NAMES[dayIndex] + " " + label;
+        const dayIndex = Math.min(6, Math.floor(Math.max(0, hour) / 24));
+        return R.DAY_NAMES[dayIndex] + " " + formatClock(hour);
       }
       function valueText(hour) {
         const aqi = Math.round(R.aqiAt(hour));
@@ -801,10 +861,22 @@
         els.pip.classList.add("pulse");
         if (navigator.vibrate) navigator.vibrate(kind === "impact" ? 18 : kind === "success" ? 12 : 8);
       }
+      function setRange(next) {
+        if (state.range === next) return;
+        state.range = next;
+        hourSpan = null;
+        heroShown = null;
+        if (next === "hour") pinHourSpan(targetHour);
+        syncClasses();
+      }
       function jumpTo(hour) {
         targetHour = snap(hour);
         colorTau = 0.2;
-        if (state.reduce || state.frame) { shownHour = targetHour; hourV = 0; }
+        if (state.range === "hour") pinHourSpan(targetHour);
+        if (state.reduce || state.frame) {
+          shownHour = targetHour;
+          hourV = 0;
+        }
       }
       function stepSpring(st, target, dt, response, damping) {
         const wn = (2 * Math.PI) / response;
@@ -821,10 +893,7 @@
           wheel.className = "wheel";
           const strip = document.createElement("div");
           strip.className = "strip";
-          for (let d = 0; d < 4; d++) {
-            const cell = document.createElement("i");
-            strip.appendChild(cell);
-          }
+          for (let d = 0; d < 4; d++) strip.appendChild(document.createElement("i"));
           wheel.append(strip);
           els.digits.append(wheel);
         }
@@ -859,19 +928,19 @@
           if (!state.reduce && !state.frame) stepSpring(st, st.goal || 0, dt, response, damping);
           const base = Math.floor(st.pos);
           const frac = st.pos - base;
-          const h = wheel.clientHeight || 60;
+          const h = wheel.clientHeight || 48;
           const settled = Math.abs(st.pos - (st.goal || 0)) < 0.2;
           wheel.querySelectorAll("i").forEach((cell, k) => {
             const d = ((base - 1 + k) % 10 + 10) % 10;
             cell.textContent = lead && settled ? "" : String(d);
           });
-          wheel.querySelector(".strip").style.transform = "translateY(" + (-(1 + frac) * h) + "px)";
+          wheel.querySelector(".strip").style.transform = "translateY(" + -(1 + frac) * h + "px)";
           wheel.classList.toggle("off", lead && settled);
         });
         digits.lastN = n;
       }
 
-      function pointsFor(key, t0, t1, step) {
+      function pointsFor(t0, t1, step) {
         const out = [];
         for (let h = t0; h <= t1 + 1e-6; h += step) out.push(Math.min(t1, h));
         return out;
@@ -882,184 +951,176 @@
         return prev.map((v, i) => v + (target[i] - v) * k);
       }
       function bandDefs(id) {
-        return '<defs><pattern id="' + id + '-dots" width="6" height="6" patternUnits="userSpaceOnUse"><circle cx="1.4" cy="1.4" r="1" fill="currentColor"/></pattern><pattern id="' + id + '-diag" width="6" height="6" patternUnits="userSpaceOnUse"><path d="M0 6 L6 0" stroke="currentColor" stroke-width="1.2"/></pattern><pattern id="' + id + '-horiz" width="6" height="5" patternUnits="userSpaceOnUse"><path d="M0 2.5 H6" stroke="currentColor" stroke-width="1.2"/></pattern><pattern id="' + id + '-cross" width="7" height="7" patternUnits="userSpaceOnUse"><path d="M0 7 L7 0 M7 7 L0 0" stroke="currentColor" stroke-width="1"/></pattern><pattern id="' + id + '-grid" width="6" height="6" patternUnits="userSpaceOnUse"><path d="M0 3 H6 M3 0 V6" stroke="currentColor" stroke-width="1.2"/></pattern></defs>';
+        return (
+          '<defs><pattern id="' + id + '-dots" width="6" height="6" patternUnits="userSpaceOnUse"><circle cx="1.4" cy="1.4" r="1" fill="currentColor"/></pattern>' +
+          '<pattern id="' + id + '-diag" width="6" height="6" patternUnits="userSpaceOnUse"><path d="M0 6 L6 0" stroke="currentColor" stroke-width="1.2"/></pattern>' +
+          '<pattern id="' + id + '-horiz" width="6" height="5" patternUnits="userSpaceOnUse"><path d="M0 2.5 H6" stroke="currentColor" stroke-width="1.2"/></pattern>' +
+          '<pattern id="' + id + '-cross" width="7" height="7" patternUnits="userSpaceOnUse"><path d="M0 7 L7 0 M7 7 L0 0" stroke="currentColor" stroke-width="1"/></pattern>' +
+          '<pattern id="' + id + '-grid" width="6" height="6" patternUnits="userSpaceOnUse"><path d="M0 3 H6 M3 0 V6" stroke="currentColor" stroke-width="1.2"/></pattern>' +
+          '<filter id="' + id + '-near" x="-15%" y="-40%" width="130%" height="180%"><feGaussianBlur stdDeviation="' + (state.reduce ? 0 : 1.6) + '"/></filter>' +
+          '<filter id="' + id + '-far" x="-20%" y="-50%" width="140%" height="200%"><feGaussianBlur stdDeviation="' + (state.reduce ? 0 : 5.5) + '"/></filter></defs>'
+        );
       }
       function bandFill(id, cat) {
-        const map = { good: "currentColor", moderate: "url(#" + id + "-dots)", usg: "url(#" + id + "-diag)", unhealthy: "url(#" + id + "-horiz)", very: "url(#" + id + "-cross)", hazardous: "url(#" + id + "-grid)" };
+        const map = {
+          good: "currentColor",
+          moderate: "url(#" + id + "-dots)",
+          usg: "url(#" + id + "-diag)",
+          unhealthy: "url(#" + id + "-horiz)",
+          very: "url(#" + id + "-cross)",
+          hazardous: "url(#" + id + "-grid)",
+        };
         return map[cat];
       }
-      function drawChart(svg, shown, t0, t1, hour, withChrome, dt) {
-        const w = svg.clientWidth || 350;
-        const h = svg.clientHeight || 120;
+      function drawChart(svg, shown, t0, t1, hour, dt) {
+        const w = svg.clientWidth || 354;
+        const h = svg.clientHeight || 220;
         svg.setAttribute("viewBox", "0 0 " + w + " " + h);
-        const step = state.range === "week" ? 3 : 1;
-        const hours = pointsFor("aqi", t0, t1, step);
-        const values = hours.map((hr) => R.seriesAt(svg === els.hero ? "aqi" : state.pollutant, hr));
+        const step = state.range === "week" ? 3 : state.range === "hour" ? 0.25 : 1;
+        const hours = pointsFor(t0, t1, step);
+        const key = state.pollutant;
+        const values = hours.map((hr) => R.seriesAt(key, hr));
         const next = morph(shown, values, dt);
-        const maxV = Math.max(10, ...next) * 1.12;
-        const xOf = (hr) => 8 + ((hr - t0) / (t1 - t0)) * (w - 16);
-        const yOf = (v) => 14 + (1 - Math.max(0, v) / maxV) * (h - 26);
+        const maxV = Math.max(10, ...next) * 1.16;
+        const xOf = (hr) => 10 + ((hr - t0) / Math.max(0.001, t1 - t0)) * (w - 20);
+        const yOf = (v) => 18 + (1 - Math.max(0, v) / maxV) * (h - 32);
+        const confOf = (hr) => (key === "aqi" || key === "smoke" ? R.confAt(hr) : 0);
         const pts = next.map((v, i) => ({ x: xOf(hours[i]), y: yOf(v), v, hour: hours[i] }));
-        const upper = pts.map((p, i) => ({ x: p.x, y: yOf(p.v + (svg === els.hero ? R.confAt(hours[i]) : 0)) }));
-        const lower = pts.map((p, i) => ({ x: p.x, y: yOf(p.v - (svg === els.hero ? R.confAt(hours[i]) : 0)) }));
         const line = pts.map((p, i) => (i ? "L" : "M") + p.x.toFixed(1) + " " + p.y.toFixed(1)).join("");
-        const seriesKey = svg === els.hero ? "aqi" : state.pollutant;
+        function envelope(pred) {
+          const upper = [];
+          const lower = [];
+          pts.forEach((p) => {
+            if (!pred(p.hour)) return;
+            const c = confOf(p.hour);
+            upper.push(p.x.toFixed(1) + " " + yOf(p.v + c).toFixed(1));
+            lower.push(p.x.toFixed(1) + " " + yOf(Math.max(0, p.v - c * 0.4)).toFixed(1));
+          });
+          if (upper.length < 2) return "";
+          return "M" + upper.join(" L") + " L" + lower.reverse().join(" L") + " Z";
+        }
         let bands = bandDefs(svg.id);
         for (let i = 0; i < pts.length - 1; i++) {
-          const cat = R.category(R.seriesIndex(seriesKey, hours[i]));
-          const op = cat === "good" ? 0.05 : 0.5;
-          bands += '<rect x="' + pts[i].x.toFixed(1) + '" y="12" width="' + Math.max(1, pts[i + 1].x - pts[i].x).toFixed(1) + '" height="' + (h - 20) + '" fill="' + bandFill(svg.id, cat) + '" opacity="' + op + '" />';
+          const cat = R.category(R.seriesIndex(key, hours[i]));
+          const op = cat === "good" ? 0.07 : 0.4;
+          bands +=
+            '<rect x="' + pts[i].x.toFixed(1) + '" y="16" width="' + Math.max(1, pts[i + 1].x - pts[i].x).toFixed(1) +
+            '" height="' + (h - 28) + '" fill="' + bandFill(svg.id, cat) + '" opacity="' + op + '"/>';
         }
-        if (svg === els.hero) {
-          const winDay = Math.floor(t0 / 24);
-          if (state.range === "day") {
-            const win = R.bestWindow(winDay);
-            const x1 = xOf(win.start);
-            const x2 = xOf(win.end);
-            bands += '<rect x="' + x1.toFixed(1) + '" y="10" width="' + (x2 - x1).toFixed(1) + '" height="' + (h - 16) + '" fill="currentColor" opacity="0.12" />';
-          }
+        for (const win of R.decisionWindows()) {
+          const a = Math.max(t0, win.hour);
+          const b = Math.min(t1, win.end);
+          if (b <= a) continue;
+          bands +=
+            '<rect x="' + xOf(a).toFixed(1) + '" y="14" width="' + Math.max(1, xOf(b) - xOf(a)).toFixed(1) +
+            '" height="' + (h - 22) + '" fill="currentColor" opacity="0.1"/>';
         }
-        const band = upper.map((p, i) => (i ? "L" : "M") + p.x.toFixed(1) + " " + p.y.toFixed(1)).join("")
-          + lower.slice().reverse().map((p) => "L" + p.x.toFixed(1) + " " + p.y.toFixed(1)).join("") + "Z";
+        const near = envelope((hr) => hr <= R.HORIZON);
+        const far = envelope((hr) => hr >= R.HORIZON - step);
+        let soft = "";
+        if (near) soft += '<path d="' + near + '" fill="currentColor" opacity="0.22" filter="url(#' + svg.id + '-near)"/>';
+        if (far) soft += '<path d="' + far + '" fill="currentColor" opacity="0.2" filter="url(#' + svg.id + '-far)"/>';
         let marks = "";
-        if (withChrome) {
-          const hClamp = Math.max(t0, Math.min(t1, hour));
-          const hx = xOf(hClamp);
-          let y = pts[0].y;
-          for (let i = 0; i < pts.length - 1; i++) {
-            if (hClamp >= hours[i] && hClamp <= hours[i + 1]) {
-              const t = (hClamp - hours[i]) / (hours[i + 1] - hours[i] || 1);
-              y = pts[i].y + (pts[i + 1].y - pts[i].y) * t;
-            }
-          }
-          marks += '<line x1="' + hx.toFixed(1) + '" y1="8" x2="' + hx.toFixed(1) + '" y2="' + (h - 6) + '" stroke="currentColor" stroke-width="1" opacity="0.45" />';
-          marks += '<circle cx="' + hx.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="6" fill="currentColor" />';
-          if (R.NOW >= t0 && R.NOW <= t1) {
-            const nx = xOf(R.NOW);
-            let ny = yOf(R.aqiAt(R.NOW));
-            marks += '<circle cx="' + nx.toFixed(1) + '" cy="' + ny.toFixed(1) + '" r="5" fill="none" stroke="currentColor" stroke-width="2" />';
-          }
-          els.play.style.left = hx + "px";
-          els.play.textContent = formatWhen(hour);
+        if (R.HORIZON >= t0 && R.HORIZON <= t1) {
+          const x = xOf(R.HORIZON);
+          marks += '<line x1="' + x.toFixed(1) + '" y1="16" x2="' + x.toFixed(1) + '" y2="' + (h - 8) + '" stroke="currentColor" stroke-dasharray="2 3" opacity="0.55"/>';
+          marks += '<text x="' + (x + 4).toFixed(1) + '" y="28" fill="currentColor" font-size="11" font-weight="650">5-day</text>';
         }
-        const dash = { aqi: "", pm: "", o3: "5 4", no2: "1.5 4", smoke: "10 3" }[state.pollutant] || "";
-        svg.innerHTML = bands + '<path d="' + band + '" fill="currentColor" opacity="0.14"></path><path class="line" d="' + line + '" ' + (svg === els.hero ? "" : 'stroke-dasharray="' + dash + '"') + "></path>" + marks;
+        const hClamp = Math.max(t0, Math.min(t1, hour));
+        const hx = xOf(hClamp);
+        let y = pts.length ? pts[0].y : 0;
+        for (let i = 0; i < pts.length - 1; i++) {
+          if (hClamp >= hours[i] && hClamp <= hours[i + 1]) {
+            const t = (hClamp - hours[i]) / (hours[i + 1] - hours[i] || 1);
+            y = pts[i].y + (pts[i + 1].y - pts[i].y) * t;
+          }
+        }
+        marks += '<line x1="' + hx.toFixed(1) + '" y1="12" x2="' + hx.toFixed(1) + '" y2="' + (h - 8) + '" stroke="currentColor" stroke-width="1.5" opacity="0.45"/>';
+        marks += '<circle cx="' + hx.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="8" fill="currentColor"/>';
+        marks += '<circle cx="' + hx.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="3" fill="var(--bg)"/>';
+        if (R.NOW >= t0 && R.NOW <= t1) {
+          marks += '<circle cx="' + xOf(R.NOW).toFixed(1) + '" cy="' + yOf(R.seriesAt(key, R.NOW)).toFixed(1) + '" r="4" fill="none" stroke="currentColor" stroke-width="2"/>';
+        }
+        const labelX = Math.max(36, Math.min(w - 72, hx));
+        els.play.style.left = labelX + "px";
+        els.play.textContent = formatWhen(hour);
+        const dash = { aqi: "", pm: "2 3", o3: "5 4", no2: "1.5 4", smoke: "10 3" }[key] || "";
+        const dashAttr = dash ? ' stroke-dasharray="' + dash + '"' : "";
+        svg.innerHTML = bands + soft + '<path class="line" d="' + line + '"' + dashAttr + "></path>" + marks;
+        const zoom = state.range === "week" ? "7-day" : state.range === "hour" ? "Hour" : "Day";
+        svg.setAttribute("aria-label", zoom + " air quality curve");
         return next;
       }
 
-      function renderRibbon(root) {
-        root.replaceChildren();
-        for (let d = 0; d < 5; d++) {
-          let max = 0;
-          let maxHour = d * 24;
-          for (let h = 0; h < 24; h++) {
-            const v = R.seriesIndex(state.pollutant, d * 24 + h);
-            if (v > max) { max = v; maxHour = d * 24 + h; }
-          }
-          const paint = R.paintAqi(max, state.contrast ? 7 : 4.7);
-          const btn = document.createElement("button");
-          btn.type = "button";
-          btn.style.background = paint.hex;
-          btn.style.color = paint.inkHex;
-          const cat = R.category(max);
-          const shown = state.pollutant === "pm"
-            ? Math.round(Math.max(...Array.from({ length: 24 }, (_, h) => R.pmUgAt(d * 24 + h))))
-            : Math.round(max);
-          btn.innerHTML = "<b>" + R.DAY_NAMES[d] + "</b>" + shown + '<i class="pat pat-' + cat + '"></i>';
-          btn.dataset.hour = String(maxHour);
-          btn.setAttribute("aria-label", R.DAY_NAMES[d] + " maximum " + shown + ", " + R.CATS[cat].label);
-          root.append(btn);
-        }
+      function renderCopy(hour, catId) {
+        const lead = R.forecastLead();
+        const atLead = !scrubbed;
+        const key = (atLead ? "lead" : Math.round(hour)) + ":" + state.pollutant + ":" + catId;
+        if (key === copyKey) return;
+        copyKey = key;
+        els.kicker.textContent = atLead ? lead.when : formatWhen(hour);
+        els.headline.textContent = atLead ? lead.title : R.personal(hour);
+        els.advice.textContent = lead.body;
+        els.cat.textContent = R.CATS[catId].label;
+        els.pat.className = "pat pat-" + catId;
+        els.dom.textContent = R.dominant(hour);
+        const story = R.pollutantStory(state.pollutant, hour);
+        els.detailName.textContent = story.name;
+        els.detailValue.textContent = story.value + " · " + story.trend;
+        els.detailTrend.textContent = story.trend === "rising" ? "Still climbing." : story.trend === "falling" ? "Easing off." : "Holding.";
+        els.detailWhy.textContent = story.why;
       }
 
-      let detailKey = "";
-      function renderDetail(hour) {
-        const rows = [
-          ["PM2.5", Math.round(R.pmUgAt(hour)) + " µg/m³"],
-          ["Ozone", Math.round(R.o3At(hour)) + " index"],
-          ["NO2", Math.round(R.no2At(hour)) + " index"],
-          ["Smoke", Math.round(R.smokeAt(hour)) + " index"],
-        ];
-        const outlook = R.outlook(hour);
-        const key = rows.map((row) => row.join(":")).join("|") + outlook;
-        if (key === detailKey) return;
-        detailKey = key;
-        const list = document.getElementById("detail-list");
-        list.replaceChildren();
-        for (const [name, value] of rows) {
-          const row = document.createElement("div");
-          row.innerHTML = "<dt>" + name + "</dt><dd>" + value + "</dd>";
-          list.append(row);
-        }
-        document.getElementById("detail-outlook").textContent = outlook;
-      }
-
-      function renderWidgets(paint, aqi, hour) {
+      let widgetKey = "";
+      function renderWidgets(aqi, hour) {
         const cat = R.CATS[R.category(aqi)];
         const n = String(Math.round(aqi));
-        for (const id of ["w-small", "w-circ"]) {
-          const el = document.getElementById(id);
-          el.style.background = id === "w-circ" ? "transparent" : paint.hex;
-          el.style.color = paint.inkHex;
-        }
+        const key = n + cat.label + hour.toFixed(2) + state.pollutant;
         document.getElementById("w-num").textContent = n;
         document.getElementById("w-cat").textContent = cat.label;
         document.getElementById("w-circ").textContent = n;
         document.getElementById("w-inline").textContent = "Boise · " + n + " · " + cat.label;
         document.getElementById("w-med-num").textContent = n;
-        const win = R.bestWindow(Math.floor(hour / 24));
-        document.getElementById("w-med-best").textContent = "Best " + R.formatSpan(win.start, win.end);
+        document.getElementById("w-med-best").textContent = R.decisionWindows()[1].label;
         document.getElementById("w-live-num").textContent = n;
-        document.getElementById("w-live").style.background = paint.hex;
-        document.getElementById("w-live").style.color = paint.inkHex;
         const arrow = { up: "↑", down: "↓", flat: "→" }[R.trend(hour)];
         document.getElementById("w-live-trend").textContent = arrow;
         document.getElementById("w-live-note").textContent = arrow + "  " + R.outlook(hour);
+        if (key === widgetKey) return;
+        widgetKey = key;
+        const parts = [];
+        for (let d = 0; d < 5; d++) {
+          let max = 0;
+          for (let h = 0; h < 24; h++) max = Math.max(max, R.aqiAt(d * 24 + h));
+          parts.push(R.DAY_NAMES[d] + " " + R.CATS[R.category(max)].label);
+        }
+        document.getElementById("w-horizon").textContent = parts.join(" · ");
         const spark = document.getElementById("w-spark");
         const t0 = Math.floor(hour);
-        const vals = Array.from({ length: 12 }, (_, i) => R.aqiAt(Math.min(119, t0 + i)));
+        const vals = Array.from({ length: 12 }, (_, i) => R.aqiAt(Math.min(R.LAST, t0 + i)));
         const maxV = Math.max(50, ...vals);
-        const d = vals.map((v, i) => (i ? "L" : "M") + (i * 28 + 4) + " " + (58 - (v / maxV) * 48)).join("");
-        spark.setAttribute("viewBox", "0 0 320 64");
+        const d = vals.map((v, i) => (i ? "L" : "M") + (i * 28 + 4) + " " + (48 - (v / maxV) * 40)).join("");
+        spark.setAttribute("viewBox", "0 0 320 52");
         spark.innerHTML = '<path class="line" d="' + d + '" />';
-      }
-      let ribbonKey = "";
-      function ensureRibbons() {
-        const key = state.pollutant + (state.contrast ? ":c" : ":n");
-        if (key !== ribbonKey) {
-          ribbonKey = key;
-          renderRibbon(els.ribbon);
-          renderRibbon(els.wRibbon);
-        }
-        const day = Math.floor(clampShown() / 24);
-        for (const root of [els.ribbon, els.wRibbon]) {
-          [...root.children].forEach((btn, i) => btn.classList.toggle("on", i === day));
-        }
       }
 
       function drawHaze(paint, pm) {
-        if (canvas.width !== 390) { canvas.width = 390; canvas.height = 844; }
+        if (canvas.width !== 390) {
+          canvas.width = 390;
+          canvas.height = 844;
+        }
         ctx.clearRect(0, 0, 390, 844);
-        if (state.reduce || state.contrast || state.direction === "ribbon") return;
-        const count = Math.round(8 + Math.min(70, pm / 4));
+        if (state.reduce || state.contrast) return;
+        const count = Math.round(8 + Math.min(72, pm / 4));
         const t = state.frame ? shownHour * 3 : performance.now() / 1000;
         ctx.fillStyle = paint.inkHex;
         for (let i = 0; i < count; i++) {
           const p = motes[i];
-          const x = (p.x + t * 0.015 * (1 + (i % 5) * 0.12)) % 1;
-          const y = (p.y - t * 0.004 + Math.sin(t * 0.3 + p.p) * 0.008 + 1) % 1;
-          ctx.globalAlpha = 0.12 + Math.min(0.28, pm / 500);
+          const x = (p.x + t * 0.012 * (1 + (i % 5) * 0.1)) % 1;
+          const y = (p.y + Math.sin(t * 0.25 + p.p) * 0.01 + 1) % 1;
+          ctx.globalAlpha = 0.1 + Math.min(0.32, pm / 420);
           ctx.beginPath();
-          ctx.arc(x * 390, y * 844, p.s, 0, Math.PI * 2);
-          ctx.fill();
-        }
-        const hod = ((shownHour % 24) + 24) % 24;
-        const alt = Math.sin(Math.max(0, Math.min(1, (hod - 7) / 11)) * Math.PI);
-        if (alt > 0.08) {
-          ctx.globalAlpha = 0.45 * alt;
-          ctx.fillStyle = "#FFE7C2";
-          ctx.beginPath();
-          ctx.arc(28 + ((hod - 7) / 11) * 330, 16 + (1 - alt) * 28, 7, 0, Math.PI * 2);
+          ctx.arc(x * 390, y * 844, p.s + Math.min(2.4, pm / 180), 0, Math.PI * 2);
           ctx.fill();
         }
         ctx.globalAlpha = 1;
@@ -1070,8 +1131,10 @@
         const dt = Math.min(0.032, (now - last) / 1000 || 0.016);
         last = now;
         if (!dragging) {
-          if (state.reduce || state.frame) { shownHour = targetHour; hourV = 0; }
-          else {
+          if (state.reduce || state.frame) {
+            shownHour = targetHour;
+            hourV = 0;
+          } else {
             const st = { pos: shownHour, v: hourV };
             stepSpring(st, targetHour, dt, 0.35, 0.85);
             shownHour = st.pos;
@@ -1092,43 +1155,47 @@
         disp.L += (targetColor.L - disp.L) * k;
         disp.C += (targetColor.C - disp.C) * k;
         disp.H += (targetColor.H - disp.H) * k;
-        const paint = R.paintOklch(disp.L, disp.C, disp.H, state.contrast ? 7 : 4.7);
-        document.documentElement.style.setProperty("--bg", paint.hex);
-        document.documentElement.style.setProperty("--ink", paint.inkHex);
-        document.documentElement.style.setProperty("--ink-soft", paint.softHex);
+        const sky = R.skyFrom(disp.L, disp.C, disp.H);
+        const paint = sky.mid;
+        const root = document.documentElement.style;
+        root.setProperty("--bg", paint.hex);
+        root.setProperty("--bg-top", sky.top.hex);
+        root.setProperty("--bg-bot", sky.bot.hex);
+        root.setProperty("--ink", paint.inkHex);
+        root.setProperty("--ink-soft", state.contrast ? paint.inkHex : paint.softHex);
         const pm = R.pmUgAt(hour);
-        document.documentElement.style.setProperty("--grain", String(0.045 + Math.min(0.16, pm / 800)));
+        root.setProperty("--grain", String(0.05 + Math.min(0.2, pm / 700)));
+        const voiceAqi = scrubbed ? aqi : R.aqiAt(R.dayPeak(R.NOW));
+        root.setProperty("--wght", String(Math.round(460 + (Math.min(500, aqi) / 500) * 320)));
+        root.setProperty("--wght-voice", String(Math.round(460 + (Math.min(500, voiceAqi) / 500) * 320)));
+        root.setProperty("--breath", (6.4 - Math.min(500, aqi) / 500 * 4).toFixed(2) + "s");
+        root.setProperty("--haze-blur", (aqi < 90 ? 0 : Math.min(5, ((aqi - 90) / 410) * 5)).toFixed(2) + "px");
         const theme = document.querySelector('meta[name="theme-color"]');
         if (theme) theme.content = paint.hex;
+        document.getElementById("app-icon").style.background = sky.bot.hex;
 
-        drawDigits(aqi, dt);
-        const cat = R.CATS[catId];
-        els.cat.textContent = cat.label;
-        els.pat.className = "pat pat-" + catId;
-        els.dom.textContent = R.dominant(hour);
-        els.advice.textContent = cat.advice;
-        const [t0, t1] = viewBounds();
-        heroShown = drawChart(els.hero, heroShown, t0, t1, hour, true, dt);
-        if (state.view === "home") subShown = drawChart(els.sub, subShown, t0, t1, hour, false, dt);
-        ensureRibbons();
-        els.backNow.hidden = Math.abs(hour - R.NOW) < 0.45;
-        const win = R.bestWindow(Math.floor(hour / 24));
-        const span = R.formatSpan(win.start, win.end);
-        els.best.textContent = state.reminder ? "Reminder set for " + state.reminder : "Best window " + span;
-        els.best.setAttribute("aria-pressed", String(Boolean(state.reminder)));
         const step = snap(hour);
-        if (lastStep === null) { lastStep = step; lastCat = catId; }
-        else if (step !== lastStep) {
-          if (catId !== lastCat) haptic("impact", cat.label);
+        renderCopy(hour, catId);
+        drawDigits(aqi, dt);
+        const [t0, t1] = viewBounds();
+        heroShown = drawChart(els.hero, heroShown, t0, t1, hour, dt);
+        els.backNow.hidden = !scrubbed || Math.abs(hour - R.NOW) < 0.45;
+        if (lastStep === null) {
+          lastStep = step;
+          lastCat = catId;
+        } else if (Math.abs(step - lastStep) > 0.01) {
+          const peak = R.dayPeak(step);
+          if (Math.abs(step - peak) < 0.01) haptic("impact", "peak");
+          else if (catId !== lastCat) haptic("impact", R.CATS[catId].label);
           else haptic("selection", formatWhen(step));
           lastStep = step;
           lastCat = catId;
         }
-        els.timeline.setAttribute("aria-valuenow", String(state.range === "week" ? step : step % 24));
-        els.timeline.setAttribute("aria-valuemax", state.range === "week" ? "117" : "23");
-        els.timeline.setAttribute("aria-valuetext", valueText(step));
-        if (state.view === "detail") renderDetail(hour);
-        if (state.view === "widgets") renderWidgets(paint, aqi, hour);
+        const spoken = Math.round(hour);
+        els.timeline.setAttribute("aria-valuemax", state.range === "week" ? "165" : state.range === "hour" ? "167" : "23");
+        els.timeline.setAttribute("aria-valuenow", String(state.range === "day" ? spoken % 24 : spoken));
+        els.timeline.setAttribute("aria-valuetext", valueText(spoken));
+        if (state.view === "widgets") renderWidgets(aqi, hour);
         drawHaze(paint, pm);
         if (!window.__round2.ready && els.hero.clientWidth > 0) window.__round2.ready = true;
         requestAnimationFrame(frame);
@@ -1143,120 +1210,175 @@
         targetHour = shownHour;
         hourV = 0;
         dragging = true;
+        scrubbed = true;
         colorTau = 0.083;
       }
-
-      buildWheels();
-      syncClasses();
-      ensureRibbons();
-      function onRibbonClick(e) {
-        const btn = e.target.closest("button");
-        if (!btn || !btn.dataset.hour) return;
-        state.range = "week";
-        jumpTo(Number(btn.dataset.hour));
-        syncClasses();
-      }
-      els.ribbon.addEventListener("click", onRibbonClick);
-      els.wRibbon.addEventListener("click", onRibbonClick);
-      document.getElementById("place").addEventListener("click", () => { state.view = "detail"; syncClasses(); });
-      document.getElementById("back").addEventListener("click", () => { state.view = "home"; syncClasses(); });
-      document.getElementById("open-widgets").addEventListener("click", () => {
-        state.view = state.view === "widgets" ? "home" : "widgets";
-        syncClasses();
-      });
-      document.getElementById("open-review").addEventListener("click", () => { els.review.hidden = false; });
-      document.getElementById("review-close").addEventListener("click", () => { els.review.hidden = true; });
-      document.getElementById("range-day").addEventListener("click", () => { state.range = "day"; syncClasses(); });
-      document.getElementById("range-week").addEventListener("click", () => { state.range = "week"; syncClasses(); });
-      document.querySelectorAll("[data-poll]").forEach((b) => b.addEventListener("click", () => {
-        state.pollutant = b.dataset.poll;
-        subShown = null;
-        syncClasses();
-      }));
-      document.querySelectorAll("[data-dir]").forEach((b) => b.addEventListener("click", () => { state.direction = b.dataset.dir; syncClasses(); }));
-      document.querySelectorAll("[data-cvd]").forEach((b) => b.addEventListener("click", () => { state.cvd = b.dataset.cvd; syncClasses(); }));
-      document.getElementById("opt-motion").addEventListener("click", () => { state.reduce = !state.reduce; syncClasses(); });
-      document.getElementById("opt-type").addEventListener("click", () => { state.ax5 = !state.ax5; syncClasses(); });
-      document.getElementById("opt-contrast").addEventListener("click", () => { state.contrast = !state.contrast; syncClasses(); });
-      els.best.addEventListener("click", () => {
-        const win = R.bestWindow(Math.floor(clampShown() / 24));
-        state.reminder = R.formatSpan(win.start, win.end);
-        syncClasses();
-      });
-      els.backNow.addEventListener("click", () => {
-        state.range = "day";
-        jumpTo(R.NOW);
-        haptic("success", "Back at now");
-        syncClasses();
-      });
-      document.getElementById("w-small").addEventListener("click", () => {
-        const next = Math.max(0, Math.min(119, Math.round(shownHour) + 1));
-        targetHour = next;
-        colorTau = 0.2;
-        if (state.reduce || state.frame) { shownHour = next; hourV = 0; }
-      });
-      const pointers = new Map();
-      els.timeline.addEventListener("pointerdown", (e) => {
-        els.timeline.setPointerCapture(e.pointerId);
-        pointers.set(e.pointerId, e.clientX);
-        seekFrom(e.clientX);
-      });
-      els.timeline.addEventListener("pointermove", (e) => { if (dragging) seekFrom(e.clientX); });
       function endDrag() {
         if (!dragging) return;
         dragging = false;
         const snapped = snap(shownHour);
         targetHour = snapped;
         colorTau = 0.2;
+        scrubbed = Math.abs(snapped - R.NOW) > 0.45;
+        if (state.range === "hour") pinHourSpan(snapped);
         if (snapped === R.NOW) haptic("success", "Released at now");
       }
-      els.timeline.addEventListener("pointerup", (e) => {
-        pointers.delete(e.pointerId);
-        endDrag();
+
+      buildWheels();
+      if (state.range === "hour") pinHourSpan(targetHour);
+      syncClasses();
+      document.getElementById("place").addEventListener("click", () => {
+        state.view = "detail";
+        copyKey = "";
+        syncClasses();
       });
-      els.timeline.addEventListener("pointercancel", (e) => {
-        pointers.delete(e.pointerId);
-        endDrag();
+      document.getElementById("back").addEventListener("click", () => {
+        state.view = "home";
+        copyKey = "";
+        syncClasses();
       });
+      document.getElementById("open-widgets").addEventListener("click", () => {
+        state.view = state.view === "widgets" ? "home" : "widgets";
+        syncClasses();
+      });
+      document.getElementById("open-review").addEventListener("click", () => {
+        els.review.hidden = false;
+      });
+      document.getElementById("review-close").addEventListener("click", () => {
+        els.review.hidden = true;
+      });
+      for (const name of ["week", "day", "hour"]) {
+        document.getElementById("range-" + name).addEventListener("click", () => setRange(name));
+      }
+      document.querySelectorAll("[data-poll]").forEach((b) =>
+        b.addEventListener("click", () => {
+          state.pollutant = b.dataset.poll;
+          heroShown = null;
+          copyKey = "";
+          syncClasses();
+        }),
+      );
+      document.querySelectorAll("[data-cvd]").forEach((b) =>
+        b.addEventListener("click", () => {
+          state.cvd = b.dataset.cvd;
+          syncClasses();
+        }),
+      );
+      document.getElementById("opt-motion").addEventListener("click", () => {
+        state.reduce = !state.reduce;
+        syncClasses();
+      });
+      document.getElementById("opt-type").addEventListener("click", () => {
+        state.ax5 = !state.ax5;
+        syncClasses();
+      });
+      document.getElementById("opt-contrast").addEventListener("click", () => {
+        state.contrast = !state.contrast;
+        syncClasses();
+      });
+      function openWindow(win) {
+        const already = state.armed === win.id && Math.abs(snap(targetHour) - win.hour) < 0.6;
+        setRange("day");
+        scrubbed = true;
+        hourSpan = null;
+        heroShown = null;
+        jumpTo(win.hour);
+        state.armed = win.id;
+        if (already) state.reminder = win.label;
+        copyKey = "";
+        syncClasses();
+      }
+      const wins = R.decisionWindows();
+      document.getElementById("win-avoid").textContent = wins[0].label;
+      document.getElementById("win-best").textContent = wins[1].label;
+      document.getElementById("win-avoid").addEventListener("click", () => openWindow(wins[0]));
+      document.getElementById("win-best").addEventListener("click", () => openWindow(wins[1]));
+      els.backNow.addEventListener("click", () => {
+        scrubbed = false;
+        hourSpan = null;
+        heroShown = null;
+        setRange("day");
+        jumpTo(R.NOW);
+        haptic("success", "Back at now");
+        copyKey = "";
+        syncClasses();
+      });
+      document.getElementById("w-small").addEventListener("click", () => {
+        const next = Math.max(0, Math.min(R.LAST, Math.round(shownHour) + 1));
+        setRange("day");
+        scrubbed = Math.abs(next - R.NOW) > 0.45;
+        targetHour = next;
+        colorTau = 0.2;
+        if (state.reduce || state.frame) {
+          shownHour = next;
+          hourV = 0;
+        }
+      });
+
+      const pointers = new Map();
       let pinch = null;
+      els.timeline.addEventListener("pointerdown", (e) => {
+        els.timeline.setPointerCapture(e.pointerId);
+        pointers.set(e.pointerId, e.clientX);
+        if (pointers.size === 1) seekFrom(e.clientX);
+      });
       els.timeline.addEventListener("pointermove", (e) => {
+        if (!pointers.has(e.pointerId)) return;
         pointers.set(e.pointerId, e.clientX);
         if (pointers.size === 2) {
           const [a, b] = [...pointers.values()];
           const dist = Math.abs(a - b);
+          const levels = ["week", "day", "hour"];
+          const index = levels.indexOf(state.range);
           if (!pinch) pinch = dist;
-          else if (dist > pinch * 1.25 && state.range === "day") { state.range = "week"; pinch = dist; syncClasses(); }
-          else if (dist < pinch * 0.8 && state.range === "week") { state.range = "day"; pinch = dist; syncClasses(); }
-        } else pinch = null;
+          else if (dist > pinch * 1.22 && index < 2) {
+            setRange(levels[index + 1]);
+            pinch = dist;
+          } else if (dist < pinch * 0.82 && index > 0) {
+            setRange(levels[index - 1]);
+            pinch = dist;
+          }
+          return;
+        }
+        pinch = null;
+        if (dragging) seekFrom(e.clientX);
       });
+      function forget(e) {
+        pointers.delete(e.pointerId);
+        if (pointers.size < 2) pinch = null;
+        endDrag();
+      }
+      els.timeline.addEventListener("pointerup", forget);
+      els.timeline.addEventListener("pointercancel", forget);
       els.timeline.addEventListener("keydown", (e) => {
-        const step = state.range === "week" ? 3 : 1;
-        if (e.key === "ArrowRight" || e.key === "ArrowUp") { jumpTo(snap(targetHour) + step); e.preventDefault(); }
-        if (e.key === "ArrowLeft" || e.key === "ArrowDown") { jumpTo(snap(targetHour) - step); e.preventDefault(); }
+        const amount = state.range === "week" ? 3 : state.range === "hour" ? 0.25 : 1;
+        if (e.key === "ArrowRight" || e.key === "ArrowUp") {
+          scrubbed = true;
+          jumpTo(snap(targetHour) + amount);
+          e.preventDefault();
+        }
+        if (e.key === "ArrowLeft" || e.key === "ArrowDown") {
+          scrubbed = true;
+          jumpTo(snap(targetHour) - amount);
+          e.preventDefault();
+        }
       });
-      const sub = document.getElementById("subchart");
-      let hold = 0;
-      let subDrag = false;
-      sub.addEventListener("pointerdown", (e) => {
-        sub.setPointerCapture(e.pointerId);
-        hold = performance.now();
-        subDrag = false;
-        sub._x = e.clientX;
-      });
-      sub.addEventListener("pointermove", (e) => {
-        if (!sub.hasPointerCapture(e.pointerId)) return;
-        if (!subDrag && (performance.now() - hold > 180 || Math.abs(e.clientX - sub._x) > 8)) subDrag = true;
-        if (subDrag) seekFrom(e.clientX, sub);
-      });
-      sub.addEventListener("pointerup", () => { if (subDrag) endDrag(); subDrag = false; });
 
       window.__round2 = {
         ready: false,
         state,
-        setHour(h) { targetHour = h; shownHour = h; hourV = 0; disp = null; },
+        setHour(h) {
+          targetHour = h;
+          shownHour = h;
+          hourV = 0;
+          disp = null;
+          scrubbed = Math.abs(h - R.NOW) > 0.45;
+          copyKey = "";
+        },
         valueText: () => valueText(snap(shownHour)),
       };
       requestAnimationFrame(frame);
+
     </script>
   </body>
 </html>

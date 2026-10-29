@@ -150,6 +150,17 @@ if (Round2) {
     }
   }
   if (html.includes("<script src")) fail("prototype must stay a single file");
+  if (!html.includes('id="win-avoid"') || !html.includes('id="win-best"')) {
+    fail("verdict windows missing");
+  }
+  if (!html.includes("font-variation-settings")) fail("variable weight missing");
+  if (!html.includes("--breath")) fail("breathing pace missing");
+  if (html.includes("data-dir=")) fail("direction switch is still in the prototype");
+  if (html.includes('class="chips"') || html.includes('class="ribbon"')) {
+    fail("pills or the 5-day bars are still in the prototype");
+  }
+  if (!html.includes("feGaussianBlur")) fail("confidence band blur missing");
+  if (!html.includes(">5-day<")) fail("5-day horizon mark missing");
 }
 
 if (failures.length) {
