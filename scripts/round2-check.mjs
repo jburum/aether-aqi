@@ -182,6 +182,15 @@ if (Round2) {
   if (hourDrags.length < 8) fail(`hour drag surfaces: ${hourDrags.length}`);
   if (!html.includes('data-drag="pollutant"')) fail("pollutant drag missing");
   if (!html.includes("function beginHour")) fail("shared hour drag missing");
+  if (/still open|or one that warns him/.test(html)) fail("check-or-warn is still an open question");
+  if (!html.includes("Both, equally.")) fail("the brief should call check-it and warns-you equal");
+  if (!html.includes("interactive timeline is the hallmark")) {
+    fail("the home hallmark should stay the interactive timeline");
+  }
+  if (!html.includes("Alerts are first-class")) fail("alerts should be first-class in the brief");
+  if (!html.includes("This pass does not design the notification.")) {
+    fail("this pass should not start the notification design");
+  }
 }
 
 if (failures.length) {
