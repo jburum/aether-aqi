@@ -218,6 +218,14 @@ if (Round2) {
   if (!html.includes("This pass does not design the notification.")) {
     fail("this pass should not start the notification design");
   }
+  if (!html.includes("body.scrubbing #headline")) fail("scrub should hide the essay");
+  if (!html.includes('classList.toggle("scrubbing", scrubbed)')) fail("scrub state should quiet the home screen");
+  if (!html.includes('els.headline.textContent = atLead ? lead.title : ""')) {
+    fail("the drag should keep the forecast headline only at rest");
+  }
+  if (!html.includes("While you drag, keep the number, the level word, and the time.")) {
+    fail("the brief should name the three drag essentials");
+  }
 }
 
 if (failures.length) {

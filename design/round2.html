@@ -188,6 +188,11 @@
       body.ax5 .windows { flex-direction: column; align-items: stretch; gap: 0; }
       .reminder { margin: 0; min-height: 0; font-size: 12px; line-height: 16px; color: var(--ink-soft); }
       .reminder:empty { display: none; }
+      body.scrubbing #headline,
+      body.scrubbing .advice,
+      body.scrubbing .windows,
+      body.scrubbing #dom,
+      body.scrubbing #reminder { display: none; }
       #detail { display: flex; flex-direction: column; gap: 4px; }
       #detail-trend { margin: 0; font-size: 15px; font-weight: 650; }
       #detail-why { margin: 0; font-size: 16px; line-height: 21px; }
@@ -335,6 +340,7 @@
       <p><b>Jason, 29 Oct.</b> Both, equally. A check-it app and a warns-you app. The home screen rewards opening it: the interactive timeline is the hallmark. Alerts are first-class, the same rank as the scrub. This pass does not design the notification.</p>
       <p><b>Jason, 29 Oct.</b> Form. The sky is deeper and more saturated, still no purple. The big number is New York, lining and tabular, so the 1 has a flag. UI text stays a plain sans.</p>
       <p><b>Jason, 29 Oct.</b> The ramp is a natural progression: green, yellow, orange, red, deep maroon. Smooth and saturated, not a pastel and not purple. Good numbers are green.</p>
+      <p><b>Jason, 29 Oct.</b> While you drag, keep the number, the level word, and the time. The chart and the color carry the rest.</p>
       <h2>Accessibility</h2>
       <div class="row">
         <button type="button" id="opt-motion" aria-pressed="false">Reduce Motion</button>
@@ -1067,6 +1073,9 @@
         return next;
       }
 
+      function syncScrub() {
+        document.body.classList.toggle("scrubbing", scrubbed);
+      }
       function renderCopy(hour, catId) {
         const lead = R.forecastLead();
         const atLead = !scrubbed;
@@ -1074,11 +1083,11 @@
         if (key === copyKey) return;
         copyKey = key;
         els.kicker.textContent = atLead ? lead.when : formatWhen(hour);
-        els.headline.textContent = atLead ? lead.title : R.personal(hour);
-        els.advice.textContent = lead.body;
+        els.headline.textContent = atLead ? lead.title : "";
+        els.advice.textContent = atLead ? lead.body : "";
         els.cat.textContent = R.CATS[catId].label;
         els.pat.className = "pat pat-" + catId;
-        els.dom.textContent = R.dominant(hour);
+        els.dom.textContent = atLead ? R.dominant(hour) : "";
         const story = R.pollutantStory(state.pollutant, hour);
         els.detailName.textContent = story.name;
         els.detailValue.textContent = story.value + " · " + story.trend;
@@ -1193,6 +1202,7 @@
         document.getElementById("app-icon").style.background = sky.bot.hex;
 
         const step = snap(hour);
+        syncScrub();
         renderCopy(hour, catId);
         drawDigits(aqi, dt);
         const [t0, t1] = viewBounds();
@@ -1230,6 +1240,7 @@
         dragging = true;
         scrubbed = true;
         colorTau = 0.083;
+        syncScrub();
       }
       function endDrag() {
         sparkPin = null;
@@ -1239,6 +1250,8 @@
         targetHour = snapped;
         colorTau = 0.2;
         scrubbed = Math.abs(snapped - R.NOW) > 0.45;
+        syncScrub();
+        copyKey = "";
         if (state.range === "hour") pinHourSpan(snapped);
         if (snapped === R.NOW) haptic("success", "Released at now");
       }
@@ -1295,6 +1308,7 @@
         const already = state.armed === win.id && Math.abs(snap(targetHour) - win.hour) < 0.6;
         setRange("day");
         scrubbed = true;
+        syncScrub();
         hourSpan = null;
         heroShown = null;
         jumpTo(win.hour);
@@ -1310,6 +1324,7 @@
       document.getElementById("win-best").addEventListener("click", () => openWindow(wins[1]));
       els.backNow.addEventListener("click", () => {
         scrubbed = false;
+        syncScrub();
         hourSpan = null;
         heroShown = null;
         setRange("day");
@@ -1326,6 +1341,7 @@
         dragging = true;
         scrubbed = true;
         colorTau = 0.083;
+        syncScrub();
       }
       function bindDeltaScrub(el, pxPerHour) {
         let active = false;
@@ -1446,6 +1462,8 @@
         const next = Math.max(0, Math.min(R.LAST, Math.round(shownHour) + 1));
         setRange("day");
         scrubbed = Math.abs(next - R.NOW) > 0.45;
+        syncScrub();
+        copyKey = "";
         targetHour = next;
         colorTau = 0.2;
         if (state.reduce || state.frame) {
@@ -1493,11 +1511,13 @@
         const amount = state.range === "week" ? 3 : state.range === "hour" ? 0.25 : 1;
         if (e.key === "ArrowRight" || e.key === "ArrowUp") {
           scrubbed = true;
+          syncScrub();
           jumpTo(snap(targetHour) + amount);
           e.preventDefault();
         }
         if (e.key === "ArrowLeft" || e.key === "ArrowDown") {
           scrubbed = true;
+          syncScrub();
           jumpTo(snap(targetHour) - amount);
           e.preventDefault();
         }
@@ -1513,6 +1533,7 @@
           hourV = 0;
           disp = null;
           scrubbed = Math.abs(h - R.NOW) > 0.45;
+          syncScrub();
           copyKey = "";
         },
         valueText: () => valueText(snap(shownHour)),

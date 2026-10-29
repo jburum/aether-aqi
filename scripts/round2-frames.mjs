@@ -116,6 +116,14 @@ try {
   await page.mouse.down();
   // Hour 18 (the hazardous peak) sits about 78% across Thursday, not at the right edge.
   await page.mouse.move(box.x + box.width * 0.8, box.y + box.height / 2, { steps: 24 });
+  await page.waitForFunction(() => {
+    const scrubbing = document.body.classList.contains("scrubbing");
+    const headline = document.getElementById("headline").textContent || "";
+    const advice = document.getElementById("advice").textContent || "";
+    const cat = document.getElementById("cat").textContent || "";
+    const when = document.getElementById("kicker").textContent || "";
+    return scrubbing && !headline.trim() && !advice.trim() && cat.trim() && /\d/.test(when);
+  });
   await page.mouse.up();
   await page.waitForFunction(() => {
     const text = document.getElementById("timeline").getAttribute("aria-valuetext") || "";
@@ -141,8 +149,12 @@ try {
   await dragAcross("#digits", 0.88, 0.08);
   // Digits already left the hour at Thu 12 AM, so this drag has to run the other way.
   await dragAcross("#forecast", 0.08, 0.88);
+  await page.locator("#back-now").click();
+  await page.waitForFunction(() => !document.body.classList.contains("scrubbing"));
   await page.locator("#win-avoid").click();
   await page.waitForFunction(() => /3 PM/.test(document.getElementById("timeline").getAttribute("aria-valuetext") || ""));
+  await page.locator("#back-now").click();
+  await page.waitForFunction(() => !document.body.classList.contains("scrubbing"));
   await page.locator("#open-review").click();
   await page.locator("#opt-type").click();
   await page.locator("#opt-motion").click();
@@ -168,15 +180,27 @@ try {
     await page.waitForTimeout(80);
     const headline = await page.locator("#headline").textContent();
     const advice = await page.locator("#advice").textContent();
-    if (!/outdoor window/i.test(advice || "")) throw new Error(`${name} lost the forecast line`);
-    if (hour === 7 && !/Hazardous by 6 PM/.test(headline || "")) {
-      throw new Error(`${name} should lead with the forecast, got ${headline}`);
+    const scrubbing = await page.evaluate(() => document.body.classList.contains("scrubbing"));
+    if (hour === 7) {
+      if (scrubbing) throw new Error(`${name} should rest on the forecast`);
+      if (!/outdoor window/i.test(advice || "")) throw new Error(`${name} lost the forecast line`);
+      if (!/Hazardous by 6 PM/.test(headline || "")) {
+        throw new Error(`${name} should lead with the forecast, got ${headline}`);
+      }
+      const windows = await page.locator("#windows").boundingBox();
+      if (!windows || windows.y + windows.height > 844) throw new Error(`${name} verdict windows fall outside the phone`);
+    } else {
+      if (!scrubbing) throw new Error(`${name} should be the quiet scrub`);
+      const cat = (await page.locator("#cat").textContent()) || "";
+      const when = (await page.locator("#kicker").textContent()) || "";
+      if (!cat.trim()) throw new Error(`${name} lost the level word`);
+      if (!/\d/.test(when)) throw new Error(`${name} lost the time`);
+      if ((headline || "").trim() || (advice || "").trim()) {
+        throw new Error(`${name} still has the essay: ${headline} / ${advice}`);
+      }
+      const digits = await page.locator("#digits").boundingBox();
+      if (!digits || digits.height < 20) throw new Error(`${name} lost the number`);
     }
-    if (hour === 18 && !/valley|smoke/i.test(headline || "")) {
-      throw new Error(`${name} copy was ${headline}`);
-    }
-    const windows = await page.locator("#windows").boundingBox();
-    if (!windows || windows.y + windows.height > 844) throw new Error(`${name} verdict windows fall outside the phone`);
     const out = checkedOutputPath(join(frameDir, name), [frameDir]);
     await page.screenshot({ path: out });
     console.log(name);
