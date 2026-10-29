@@ -79,7 +79,10 @@ try {
   await page.waitForFunction(() => window.__round2 && window.__round2.ready);
   const dragAcross = async (selector, x0, x1) => {
     const before = await page.locator("#timeline").getAttribute("aria-valuetext");
-    const box = await page.locator(selector).boundingBox();
+    const target = page.locator(selector);
+    // #w-horizon lays out near y=877, under the 844 fold, so the pointer misses until it scrolls up.
+    await target.evaluate((el) => el.scrollIntoView({ block: "center", inline: "nearest" }));
+    const box = await target.boundingBox();
     if (!box || box.width < 8) throw new Error(`${selector} has no box`);
     const y = box.y + box.height / 2;
     await page.mouse.move(box.x + box.width * x0, y);
@@ -111,7 +114,8 @@ try {
   await dragAcross("#detail", 0.88, 0.08);
   await page.locator("#back").click();
   await dragAcross("#digits", 0.88, 0.08);
-  await dragAcross("#forecast", 0.88, 0.08);
+  // Digits already left the hour at Thu 12 AM, so this drag has to run the other way.
+  await dragAcross("#forecast", 0.08, 0.88);
   await page.locator('[data-poll="o3"]').click();
   await page.waitForFunction(() => document.querySelector("#hero .line")?.getAttribute("stroke-dasharray") === "5 4");
   const smoke = await page.locator('[data-poll="smoke"]').boundingBox();
