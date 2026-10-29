@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Serves design/ on loopback and screenshots a Good → Hazardous → Good scrub.
- * Also drives the timeline, verdict windows, pollutant words, and Review once.
+ * Also drives the timeline, the number, the detail, the widgets, and Review once.
  */
 import { mkdirSync } from "node:fs";
 import { createServer } from "node:http";
@@ -77,6 +77,21 @@ try {
   const live = checkedUrl(`http://127.0.0.1:${port}/round2.html`);
   await page.goto(live, { waitUntil: "load" });
   await page.waitForFunction(() => window.__round2 && window.__round2.ready);
+  const dragAcross = async (selector, x0, x1) => {
+    const before = await page.locator("#timeline").getAttribute("aria-valuetext");
+    const box = await page.locator(selector).boundingBox();
+    if (!box || box.width < 8) throw new Error(`${selector} has no box`);
+    const y = box.y + box.height / 2;
+    await page.mouse.move(box.x + box.width * x0, y);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width * x1, y, { steps: 14 });
+    await page.mouse.up();
+    await page.waitForFunction((prev) => {
+      const text = document.getElementById("timeline").getAttribute("aria-valuetext") || "";
+      return text !== prev && text.length > 0;
+    }, before);
+  };
+
   const lead = await page.locator("#headline").textContent();
   if (!/Hazardous smoke/.test(lead || "")) throw new Error(`home should lead with the forecast, got ${lead}`);
   await page.locator("#range-day").click();
@@ -93,9 +108,20 @@ try {
   });
   await page.locator("#place").click();
   await page.waitForFunction(() => /smoke/i.test(document.getElementById("detail-why").textContent || ""));
+  await dragAcross("#detail", 0.88, 0.08);
   await page.locator("#back").click();
+  await dragAcross("#digits", 0.88, 0.08);
+  await dragAcross("#forecast", 0.88, 0.08);
   await page.locator('[data-poll="o3"]').click();
   await page.waitForFunction(() => document.querySelector("#hero .line")?.getAttribute("stroke-dasharray") === "5 4");
+  const smoke = await page.locator('[data-poll="smoke"]').boundingBox();
+  const row = await page.locator("#pollutant-row").boundingBox();
+  if (!smoke || !row) throw new Error("pollutant row has no box");
+  await page.mouse.move(row.x + 8, row.y + row.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(smoke.x + smoke.width / 2, smoke.y + smoke.height / 2, { steps: 8 });
+  await page.mouse.up();
+  await page.waitForFunction(() => document.querySelector("#hero .line")?.getAttribute("stroke-dasharray") === "10 3");
   await page.locator("#win-avoid").click();
   await page.waitForFunction(() => /3 PM/.test(document.getElementById("timeline").getAttribute("aria-valuetext") || ""));
   await page.locator("#open-review").click();
@@ -111,6 +137,10 @@ try {
   await page.locator("#review-close").click();
   await page.locator("#open-widgets").click();
   await page.locator("#w-small").click();
+  await page.waitForFunction(() => (document.getElementById("w-horizon").textContent || "").includes("Thu"));
+  await dragAcross("#w-med", 0.08, 0.92);
+  await dragAcross("#w-horizon", 0.08, 0.92);
+  await dragAcross(".w-lock", 0.08, 0.92);
 
   for (const [hour, range, name] of frames) {
     const url = checkedUrl(`http://127.0.0.1:${port}/round2.html?frame=1&hour=${hour}&range=${range}`);
