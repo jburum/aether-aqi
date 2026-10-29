@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=390" />
+    <title>Type and VoiceOver — Air Quality Forecast</title>
+    <link rel="stylesheet" href="tokens.css" />
+    <link rel="stylesheet" href="spec.css" />
+  </head>
+  <body>
+    <main class="spec notes">
+      <h1>Type and VoiceOver</h1>
+      <p class="lead">
+        “Air Quality Forecast” is a placeholder, not the App Store name. Screens are default size at 390×844 pt. Numbers are sample data. No map: that is v1.1.
+      </p>
+      <h2>Dynamic Type</h2>
+      <ul>
+        <li>Body wraps. The category name is never cut off with an ellipsis.</li>
+        <li>The index may shrink from 84pt to 44pt. It does not overlap the chip.</li>
+        <li>Hourly chips scroll sideways. Their text stays at least 17pt.</li>
+        <li>At the largest sizes, a day stacks: name, bar, maximum, full category.</li>
+        <li>The alerts row stays at least 44pt tall. The switch does not cover its label.</li>
+      </ul>
+      <h2>VoiceOver, home</h2>
+      <ul>
+        <li>Air Quality Forecast, then Boise, Idaho.</li>
+        <li>Air quality index 42. Then Good. Then Pollutant PM2.5. Then the tip.</li>
+        <li>Hourly: each chip is a button, “9 AM, 38, Good”.</li>
+        <li>5-day maximum: “Saturday, daily maximum 118, Unhealthy for Sensitive Groups.”</li>
+        <li>The colored bar is hidden. The category word is always spoken.</li>
+      </ul>
+      <h2>Other screens</h2>
+      <ul>
+        <li>Search field is “Search cities”. Results and “Use my location” are buttons. Search works if location is denied.</li>
+        <li>Threshold switch is “Threshold alerts, off”. Stepper is “Notify at 100, not used while alerts are off.”</li>
+        <li>Permission is asked only after the switch is turned on. These mockups stay off.</li>
+        <li>Small, medium, and large widgets speak the same place, index, and category.</li>
+      </ul>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=390" />
+    <title>Threshold — Air Quality Forecast</title>
+    <link rel="stylesheet" href="tokens.css" />
+    <link rel="stylesheet" href="screen.css" />
+  </head>
+  <body>
+    <div class="status" aria-hidden="true"><span>9:41</span></div>
+    <main class="screen">
+      <div class="nav">
+        <button type="button" class="back" aria-label="Back">Back</button>
+        <h1>Alerts</h1>
+        <span style="min-width: 44px"></span>
+      </div>
+      <div class="place">
+        <h2>Boise</h2>
+        <p class="region">Air Quality Forecast</p>
+      </div>
+      <div class="switch-row">
+        <p id="alert-label">Threshold alerts</p>
+        <button type="button" class="switch" role="switch" aria-checked="false" aria-labelledby="alert-label">
+          <span class="knob" aria-hidden="true"></span>
+          <span class="sr">Off</span>
+        </button>
+      </div>
+      <p class="help">Off. You will not be notified. The control stays visible.</p>
+      <div class="stepper">
+        <p id="notify-label">Notify at</p>
+        <div class="ctrl">
+          <button type="button" aria-label="Lower threshold">−</button>
+          <span class="n" aria-labelledby="notify-label">100</span>
+          <button type="button" aria-label="Raise threshold">+</button>
+        </div>
+        <p class="help">Not used while alerts are off. Nothing is sent.</p>
+      </div>
+    </main>
+    <div class="home-ind" aria-hidden="true"></div>
+  </body>
+</html>
