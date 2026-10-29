@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=390" />
-    <meta name="theme-color" content="#E1F1FB" />
+    <meta name="theme-color" content="#9DD9E8" />
     <title>Boise — Air Quality Forecast</title>
     <style>
       * { box-sizing: border-box; }
@@ -12,7 +12,7 @@
         width: 390px;
         height: 844px;
         overflow: hidden;
-        background: var(--bg, #e1f1fb);
+        background: var(--bg, #9dd9e8);
         color: var(--ink, #000);
         font-family: "SF Pro Text", "SF Pro", "Segoe UI Variable", system-ui, sans-serif;
         font-variant-numeric: tabular-nums;
@@ -27,7 +27,7 @@
       .sky {
         z-index: 0;
         inset: -28px;
-        background: linear-gradient(180deg, var(--bg-top, #e1f1fb) 0%, var(--bg, #e1f1fb) 46%, var(--bg-bot, #c5dbe8) 100%);
+        background: linear-gradient(180deg, var(--bg-top, #b3ecfb) 0%, var(--bg, #9dd9e8) 46%, var(--bg-bot, #72b3c3) 100%);
         transform-origin: 50% 36%;
         animation: breathe var(--breath, 6s) ease-in-out infinite;
       }
@@ -143,6 +143,13 @@
       body.ax5 .curve { min-height: 132px; flex-basis: 148px; }
       .curve svg { width: 100%; height: 100%; display: block; overflow: visible; }
       .line { fill: none; stroke: currentColor; stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
+      .scrub-aqi {
+        font-family: "SF Pro Text", "SF Pro", "Segoe UI Variable", system-ui, sans-serif;
+        font-size: 13px;
+        font-weight: 750;
+        font-variant-numeric: tabular-nums;
+      }
+      .forecast-band { pointer-events: none; }
       body.more-contrast .line { stroke-width: 3.5; }
       #timeline { position: absolute; inset: 0; z-index: 1; }
       .play-label {
@@ -171,7 +178,8 @@
       #detail { display: flex; flex-direction: column; gap: 4px; }
       #detail-trend { margin: 0; font-size: 15px; font-weight: 650; }
       #detail-why { margin: 0; font-size: 16px; line-height: 21px; }
-      body:not(.view-detail) #detail { display: none; }
+      body:not(.view-detail) #detail,
+      body:not(.view-detail) #pollutant-row { display: none; }
       body.view-detail .home-extra { display: none; }
       #widgets { gap: 6px; }
       body:not(.view-widgets) #widgets { display: none; }
@@ -246,7 +254,7 @@
           <button type="button" class="place" id="place">Boise <span>smoke event</span></button>
           <div class="forecast home-extra" id="forecast" data-drag="hour">
             <p class="kicker" id="kicker">Thu 3–8 PM</p>
-            <h2 id="headline">Hazardous smoke</h2>
+            <h2 id="headline">Hazardous by 6 PM</h2>
             <p class="advice" id="advice">Friday from 4 PM, and the weekend, are your outdoor windows.</p>
           </div>
           <div class="curve" id="curve">
@@ -262,11 +270,6 @@
             <button type="button" id="win-best">Outdoor window Fri 4–8 PM</button>
           </div>
           <p class="reminder home-extra" id="reminder"></p>
-          <div class="words home-extra" role="group" aria-label="Zoom">
-            <button type="button" id="range-week" aria-pressed="true">Week</button>
-            <button type="button" id="range-day" aria-pressed="false">Day</button>
-            <button type="button" id="range-hour" aria-pressed="false">Hour</button>
-          </div>
           <section id="detail" data-drag="hour" aria-label="What is driving the number">
             <p class="kicker" id="detail-name">PM2.5</p>
             <p id="detail-value">—</p>
@@ -323,7 +326,7 @@
         <button type="button" data-cvd="deutan" aria-pressed="false">Deuteranopia</button>
         <button type="button" data-cvd="protan" aria-pressed="false">Protanopia</button>
       </div>
-      <p>The timeline is a slider. Up and down move one step. Spread two fingers to go from the week to the day to the hour. Category text and chart patterns stay with the color.</p>
+      <p>The timeline is a slider. Up and down move one step. Spread two fingers to go from the week to the day to the hour. Category text and the swatch pattern stay with the color. Pollutant words sit on the detail, with the reason the number moved.</p>
       <p><a href="round2-tokens.html">OKLCH scale and contrast</a></p>
       <h2>Haptic stub</h2>
       <ol id="haptic-log"></ol>
@@ -333,14 +336,15 @@
     <script>
       // MODEL-START
       const Round2 = (() => {
-        // Sky scale, not the EPA chips. Blue-white, a gray haze through the green hues,
-        // then amber, ember, oxblood, near-black red. Hue 250–345 is unused.
+        // Sky scale, not the EPA chips. Clean air is a richer sky blue, not pale
+        // blue-white, then a gray haze through the green hues, amber, ember,
+        // oxblood, near-black red. Hue 250–345 is unused.
         // Lightness keeps #000 or #FFF at 4.5:1, including the ember cliff.
         const STOPS = [
-          { aqi: 0, L: 0.948, C: 0.022, H: 236 },
-          { aqi: 45, L: 0.92, C: 0.02, H: 220 },
-          { aqi: 75, L: 0.9, C: 0.014, H: 190 },
-          { aqi: 95, L: 0.885, C: 0.02, H: 98 },
+          { aqi: 0, L: 0.86, C: 0.088, H: 228 },
+          { aqi: 45, L: 0.85, C: 0.07, H: 218 },
+          { aqi: 75, L: 0.845, C: 0.016, H: 190 },
+          { aqi: 95, L: 0.842, C: 0.02, H: 98 },
           { aqi: 120, L: 0.84, C: 0.1, H: 84 },
           { aqi: 155, L: 0.73, C: 0.145, H: 62 },
           { aqi: 185, L: 0.58, C: 0.15, H: 42 },
@@ -446,9 +450,10 @@
           return Math.min(58, band);
         }
         function forecastLead() {
+          const peak = dayPeak(NOW);
           return {
             when: "Thu 3–8 PM",
-            title: "Hazardous smoke",
+            title: CATS[category(aqiAt(peak))].label + " by " + formatHour(peak),
             body: "Friday from 4 PM, and the weekend, are your outdoor windows.",
           };
         }
@@ -797,9 +802,6 @@
         document.body.dataset.cvd = state.cvd;
         document.getElementById("back").hidden = state.view !== "detail";
         document.getElementById("open-widgets").textContent = state.view === "widgets" ? "Home" : "Widgets";
-        for (const name of ["week", "day", "hour"]) {
-          document.getElementById("range-" + name).setAttribute("aria-pressed", String(state.range === name));
-        }
         document.querySelectorAll("[data-cvd]").forEach((b) => {
           b.setAttribute("aria-pressed", String(b.dataset.cvd === state.cvd));
         });
@@ -956,25 +958,9 @@
       }
       function bandDefs(id) {
         return (
-          '<defs><pattern id="' + id + '-dots" width="6" height="6" patternUnits="userSpaceOnUse"><circle cx="1.4" cy="1.4" r="1" fill="currentColor"/></pattern>' +
-          '<pattern id="' + id + '-diag" width="6" height="6" patternUnits="userSpaceOnUse"><path d="M0 6 L6 0" stroke="currentColor" stroke-width="1.2"/></pattern>' +
-          '<pattern id="' + id + '-horiz" width="6" height="5" patternUnits="userSpaceOnUse"><path d="M0 2.5 H6" stroke="currentColor" stroke-width="1.2"/></pattern>' +
-          '<pattern id="' + id + '-cross" width="7" height="7" patternUnits="userSpaceOnUse"><path d="M0 7 L7 0 M7 7 L0 0" stroke="currentColor" stroke-width="1"/></pattern>' +
-          '<pattern id="' + id + '-grid" width="6" height="6" patternUnits="userSpaceOnUse"><path d="M0 3 H6 M3 0 V6" stroke="currentColor" stroke-width="1.2"/></pattern>' +
-          '<filter id="' + id + '-near" x="-15%" y="-40%" width="130%" height="180%"><feGaussianBlur stdDeviation="' + (state.reduce ? 0 : 1.6) + '"/></filter>' +
+          '<defs><filter id="' + id + '-near" x="-15%" y="-40%" width="130%" height="180%"><feGaussianBlur stdDeviation="' + (state.reduce ? 0 : 1.6) + '"/></filter>' +
           '<filter id="' + id + '-far" x="-20%" y="-50%" width="140%" height="200%"><feGaussianBlur stdDeviation="' + (state.reduce ? 0 : 5.5) + '"/></filter></defs>'
         );
-      }
-      function bandFill(id, cat) {
-        const map = {
-          good: "currentColor",
-          moderate: "url(#" + id + "-dots)",
-          usg: "url(#" + id + "-diag)",
-          unhealthy: "url(#" + id + "-horiz)",
-          very: "url(#" + id + "-cross)",
-          hazardous: "url(#" + id + "-grid)",
-        };
-        return map[cat];
       }
       function drawChart(svg, shown, t0, t1, hour, dt) {
         const w = svg.clientWidth || 354;
@@ -1004,12 +990,13 @@
           return "M" + upper.join(" L") + " L" + lower.reverse().join(" L") + " Z";
         }
         let bands = bandDefs(svg.id);
-        for (let i = 0; i < pts.length - 1; i++) {
-          const cat = R.category(R.seriesIndex(key, hours[i]));
-          const op = cat === "good" ? 0.07 : 0.4;
+        const bandStart = Math.max(t0, R.NOW);
+        const bandEnd = Math.min(t1, R.HORIZON);
+        if (bandEnd > bandStart + 0.05) {
           bands +=
-            '<rect x="' + pts[i].x.toFixed(1) + '" y="16" width="' + Math.max(1, pts[i + 1].x - pts[i].x).toFixed(1) +
-            '" height="' + (h - 28) + '" fill="' + bandFill(svg.id, cat) + '" opacity="' + op + '"/>';
+            '<rect class="forecast-band" x="' + xOf(bandStart).toFixed(1) + '" y="16" width="' +
+            Math.max(1, xOf(bandEnd) - xOf(bandStart)).toFixed(1) + '" height="' + (h - 28) +
+            '" fill="currentColor" opacity="0.07"/>';
         }
         for (const win of R.decisionWindows()) {
           const a = Math.max(t0, win.hour);
@@ -1022,8 +1009,8 @@
         const near = envelope((hr) => hr <= R.HORIZON);
         const far = envelope((hr) => hr >= R.HORIZON - step);
         let soft = "";
-        if (near) soft += '<path d="' + near + '" fill="currentColor" opacity="0.22" filter="url(#' + svg.id + '-near)"/>';
-        if (far) soft += '<path d="' + far + '" fill="currentColor" opacity="0.2" filter="url(#' + svg.id + '-far)"/>';
+        if (near) soft += '<path d="' + near + '" fill="currentColor" opacity="0.12" filter="url(#' + svg.id + '-near)"/>';
+        if (far) soft += '<path d="' + far + '" fill="currentColor" opacity="0.1" filter="url(#' + svg.id + '-far)"/>';
         let marks = "";
         if (R.HORIZON >= t0 && R.HORIZON <= t1) {
           const x = xOf(R.HORIZON);
@@ -1042,6 +1029,10 @@
         marks += '<line x1="' + hx.toFixed(1) + '" y1="12" x2="' + hx.toFixed(1) + '" y2="' + (h - 8) + '" stroke="currentColor" stroke-width="1.5" opacity="0.45"/>';
         marks += '<circle cx="' + hx.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="8" fill="currentColor"/>';
         marks += '<circle cx="' + hx.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="3" fill="var(--bg)"/>';
+        const read = String(Math.round(R.aqiAt(hClamp)));
+        const readX = Math.max(18, Math.min(w - 18, hx));
+        const readY = y > 34 ? y - 14 : y + 20;
+        marks += '<text class="scrub-aqi" x="' + readX.toFixed(1) + '" y="' + readY.toFixed(1) + '" text-anchor="middle" fill="currentColor">' + read + "</text>";
         if (R.NOW >= t0 && R.NOW <= t1) {
           marks += '<circle cx="' + xOf(R.NOW).toFixed(1) + '" cy="' + yOf(R.seriesAt(key, R.NOW)).toFixed(1) + '" r="4" fill="none" stroke="currentColor" stroke-width="2"/>';
         }
@@ -1255,9 +1246,6 @@
       document.getElementById("review-close").addEventListener("click", () => {
         els.review.hidden = true;
       });
-      for (const name of ["week", "day", "hour"]) {
-        document.getElementById("range-" + name).addEventListener("click", () => setRange(name));
-      }
       document.querySelectorAll("[data-poll]").forEach((b) =>
         b.addEventListener("click", () => {
           state.pollutant = b.dataset.poll;
@@ -1498,6 +1486,7 @@
       window.__round2 = {
         ready: false,
         state,
+        setRange,
         setHour(h) {
           targetHour = h;
           shownHour = h;

@@ -96,8 +96,8 @@ try {
   };
 
   const lead = await page.locator("#headline").textContent();
-  if (!/Hazardous smoke/.test(lead || "")) throw new Error(`home should lead with the forecast, got ${lead}`);
-  await page.locator("#range-day").click();
+  if (!/Hazardous by 6 PM/.test(lead || "")) throw new Error(`home should lead with the forecast, got ${lead}`);
+  await page.evaluate(() => window.__round2.setRange("day"));
   const box = await page.locator("#timeline").boundingBox();
   if (!box) throw new Error("timeline has no box");
   await page.mouse.move(box.x + 12, box.y + box.height / 2);
@@ -111,21 +111,22 @@ try {
   });
   await page.locator("#place").click();
   await page.waitForFunction(() => /smoke/i.test(document.getElementById("detail-why").textContent || ""));
-  await dragAcross("#detail", 0.88, 0.08);
-  await page.locator("#back").click();
-  await dragAcross("#digits", 0.88, 0.08);
-  // Digits already left the hour at Thu 12 AM, so this drag has to run the other way.
-  await dragAcross("#forecast", 0.08, 0.88);
+  const row = await page.locator("#pollutant-row").boundingBox();
+  if (!row || row.y + row.height > 844) throw new Error("pollutant row falls outside the phone");
   await page.locator('[data-poll="o3"]').click();
   await page.waitForFunction(() => document.querySelector("#hero .line")?.getAttribute("stroke-dasharray") === "5 4");
   const smoke = await page.locator('[data-poll="smoke"]').boundingBox();
-  const row = await page.locator("#pollutant-row").boundingBox();
-  if (!smoke || !row) throw new Error("pollutant row has no box");
+  if (!smoke) throw new Error("smoke chip has no box");
   await page.mouse.move(row.x + 8, row.y + row.height / 2);
   await page.mouse.down();
   await page.mouse.move(smoke.x + smoke.width / 2, smoke.y + smoke.height / 2, { steps: 8 });
   await page.mouse.up();
   await page.waitForFunction(() => document.querySelector("#hero .line")?.getAttribute("stroke-dasharray") === "10 3");
+  await dragAcross("#detail", 0.88, 0.08);
+  await page.locator("#back").click();
+  await dragAcross("#digits", 0.88, 0.08);
+  // Digits already left the hour at Thu 12 AM, so this drag has to run the other way.
+  await dragAcross("#forecast", 0.08, 0.88);
   await page.locator("#win-avoid").click();
   await page.waitForFunction(() => /3 PM/.test(document.getElementById("timeline").getAttribute("aria-valuetext") || ""));
   await page.locator("#open-review").click();
@@ -134,7 +135,7 @@ try {
   const ax5 = await page.evaluate(() => document.body.classList.contains("ax5"));
   const reduce = await page.evaluate(() => document.body.classList.contains("reduce"));
   if (!ax5 || !reduce) throw new Error("Review controls did not apply AX5 and Reduce Motion");
-  for (const id of ["#advice", "#digits", "#pollutant-row"]) {
+  for (const id of ["#advice", "#digits", "#windows"]) {
     const region = await page.locator(id).boundingBox();
     if (!region || region.y + region.height > 844) throw new Error(`${id} falls outside the 844px phone`);
   }
@@ -154,14 +155,14 @@ try {
     const headline = await page.locator("#headline").textContent();
     const advice = await page.locator("#advice").textContent();
     if (!/outdoor window/i.test(advice || "")) throw new Error(`${name} lost the forecast line`);
-    if (hour === 7 && !/Hazardous smoke/.test(headline || "")) {
+    if (hour === 7 && !/Hazardous by 6 PM/.test(headline || "")) {
       throw new Error(`${name} should lead with the forecast, got ${headline}`);
     }
     if (hour === 18 && !/valley|smoke/i.test(headline || "")) {
       throw new Error(`${name} copy was ${headline}`);
     }
-    const row = await page.locator("#pollutant-row").boundingBox();
-    if (!row || row.y + row.height > 844) throw new Error(`${name} pollutant row falls outside the phone`);
+    const windows = await page.locator("#windows").boundingBox();
+    if (!windows || windows.y + windows.height > 844) throw new Error(`${name} verdict windows fall outside the phone`);
     const out = checkedOutputPath(join(frameDir, name), [frameDir]);
     await page.screenshot({ path: out });
     console.log(name);

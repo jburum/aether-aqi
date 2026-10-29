@@ -113,8 +113,14 @@ if (Round2) {
   if (Round2.DAY_NAMES.length !== 7) fail("the scrub curve is 7 days");
   if (Round2.HORIZON !== 120) fail("the 5-day horizon stays at hour 120");
   const goodAir = Round2.paintAqi(0, 4.7);
-  if (goodAir.L < 0.93 || goodAir.C > 0.04 || goodAir.H < 220 || goodAir.H > 248) {
-    fail(`good air ${goodAir.hex} is not blue-white`);
+  if (goodAir.L < 0.84 || goodAir.L > 0.92 || goodAir.C < 0.05 || goodAir.C > 0.1 || goodAir.H < 215 || goodAir.H > 242) {
+    fail(
+      `good air ${goodAir.hex} L${goodAir.L.toFixed(3)} C${goodAir.C.toFixed(3)} H${goodAir.H.toFixed(0)} should be a richer sky blue`,
+    );
+  }
+  const endOfGood = Round2.paintAqi(50, 4.7);
+  if (endOfGood.C < 0.03 || endOfGood.H < 200 || endOfGood.H > 245) {
+    fail(`AQI 50 ${endOfGood.hex} is still pale or off the blue end`);
   }
   const haz = Round2.paintAqi(500, 4.7);
   if (haz.L > 0.22 || haz.H > 30) fail(`hazardous ${haz.hex} is not near-black red`);
@@ -122,7 +128,7 @@ if (Round2) {
   if (Round2.skyAt(500).amp < 0.08) fail("hazardous sky gradient is flat");
   const lead = Round2.forecastLead();
   if (!lead.body.includes("outdoor window")) fail(`forecast lead: ${lead.body}`);
-  if (!/smoke/i.test(lead.title)) fail(`forecast title: ${lead.title}`);
+  if (lead.title !== "Hazardous by 6 PM") fail(`forecast title: ${lead.title}`);
   const wins = Round2.decisionWindows();
   if (wins.length !== 2 || wins[0].hour !== 15 || wins[1].hour !== 40) {
     fail(`decision windows ${JSON.stringify(wins)}`);
@@ -160,6 +166,17 @@ if (Round2) {
     fail("pills or the 5-day bars are still in the prototype");
   }
   if (!html.includes("feGaussianBlur")) fail("confidence band blur missing");
+  if (html.includes("-diag") || html.includes("-grid") || html.includes("bandFill")) {
+    fail("vertical hatching is still on the curve");
+  }
+  if (!html.includes("forecast-band")) fail("faint forecast band missing");
+  if (!html.includes("scrub-aqi")) fail("scrub-point AQI readout missing");
+  if (html.includes('id="range-week"') || html.includes('id="range-day"') || html.includes('id="range-hour"')) {
+    fail("week/day/hour toggles duplicate the pinch");
+  }
+  if (!html.includes("body:not(.view-detail) #pollutant-row")) {
+    fail("pollutant chips should fold into the detail screen");
+  }
   if (!html.includes(">5-day<")) fail("5-day horizon mark missing");
   const hourDrags = html.match(/data-drag="hour"/g) || [];
   if (hourDrags.length < 8) fail(`hour drag surfaces: ${hourDrags.length}`);
