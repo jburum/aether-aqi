@@ -17,6 +17,7 @@ const types = {
   ".css": "text/css; charset=utf-8",
   ".png": "image/png",
   ".svg": "image/svg+xml",
+  ".woff2": "font/woff2",
 };
 
 function safeFile(urlPath) {

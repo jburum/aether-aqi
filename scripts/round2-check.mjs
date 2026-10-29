@@ -180,13 +180,29 @@ if (Round2) {
     fail("verdict windows missing");
   }
   if (!html.includes("font-variation-settings")) fail("variable weight missing");
-  if (!html.includes('local(".New York")') || !html.includes("Aether Display")) {
-    fail("the hero face should be New York");
+  if (!html.includes('url("fonts/source-serif-4-latin.woff2")') || !html.includes('"opsz" 60')) {
+    fail("the hero face should be Source Serif 4 at the display optical size");
+  }
+  if (!html.includes('url("fonts/source-sans-3-latin.woff2")')) {
+    fail("UI text should be Source Sans 3");
+  }
+  if (html.includes('local(".New York")') || html.includes("Aether Display")) {
+    fail("New York is still standing in for the hero");
   }
   if (!html.includes('font-feature-settings: "lnum" 1, "tnum" 1')) {
     fail("the hero 1 should be a lining tabular figure");
   }
-  if (html.includes("SF Pro Display")) fail("SF Pro Display is still on the big number");
+  if (html.includes("SF Pro Display") || html.includes("SF Pro Text")) {
+    fail("SF Pro is still on the prototype");
+  }
+  try {
+    const serif = readFileSync(new URL("../design/fonts/source-serif-4-latin.woff2", import.meta.url));
+    const sans = readFileSync(new URL("../design/fonts/source-sans-3-latin.woff2", import.meta.url));
+    if (serif.length < 20000) fail("Source Serif 4 file is missing its latin cut");
+    if (sans.length < 8000) fail("Source Sans 3 file is missing its latin cut");
+  } catch {
+    fail("the hero and UI font files are missing");
+  }
   if (!html.includes("--breath")) fail("breathing pace missing");
   if (html.includes("data-dir=")) fail("direction switch is still in the prototype");
   if (html.includes('class="chips"') || html.includes('class="ribbon"')) {
