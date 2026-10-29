@@ -89,7 +89,7 @@
       .place { text-align: left; min-height: 20px; font-size: 15px; line-height: 18px; font-weight: 650; }
       .place span, .hint, .meta .soft { color: var(--ink-soft); font-weight: 500; }
       .kicker { margin: 0; font-size: 13px; line-height: 16px; font-weight: 650; }
-      .forecast h2, #detail-value {
+      .forecast h2 {
         margin: 0;
         font-family: "SF Pro Display", "SF Pro", "Segoe UI Variable Display", system-ui, sans-serif;
         font-size: 26px;
@@ -108,8 +108,8 @@
         font-variant-numeric: tabular-nums lining-nums;
         display: flex; overflow: hidden;
       }
-      body.ax5 .forecast h2, body.ax5 #detail-value { font-size: 22px; line-height: 26px; }
-      body.ax5 .advice, body.ax5 .meta, body.ax5 #detail-why { font-size: 18px; line-height: 22px; }
+      body.ax5 .forecast h2 { font-size: 22px; line-height: 26px; }
+      body.ax5 .advice, body.ax5 .meta, body.ax5 .story-context, body.ax5 .story-why { font-size: 18px; line-height: 22px; }
       body.ax5 .digits { font-size: 48px; }
       .wheel { height: 1em; width: 0.62em; overflow: hidden; }
       .wheel.off { width: 0; }
@@ -168,9 +168,12 @@
       body.ax5 .windows { flex-direction: column; align-items: stretch; gap: 0; }
       .reminder { margin: 0; min-height: 0; font-size: 12px; line-height: 16px; color: var(--ink-soft); }
       .reminder:empty { display: none; }
-      #detail { display: flex; flex-direction: column; gap: 4px; }
-      #detail-trend { margin: 0; font-size: 15px; font-weight: 650; }
-      #detail-why { margin: 0; font-size: 16px; line-height: 21px; }
+      #detail { display: flex; flex-direction: column; min-height: 0; }
+      #pollutant-stories { display: flex; flex-direction: column; gap: 8px; }
+      .story p { margin: 0; }
+      .story-context { font-size: 15px; line-height: 18px; font-weight: 650; }
+      .story-why { font-size: 15px; line-height: 19px; }
+      .story.on .kicker { box-shadow: inset 0 -1.5px 0 currentColor; }
       body:not(.view-detail) #detail { display: none; }
       body.view-detail .home-extra { display: none; }
       #widgets { gap: 6px; }
@@ -268,10 +271,7 @@
             <button type="button" id="range-hour" aria-pressed="false">Hour</button>
           </div>
           <section id="detail" data-drag="hour" aria-label="What is driving the number">
-            <p class="kicker" id="detail-name">PM2.5</p>
-            <p id="detail-value">—</p>
-            <p id="detail-trend"></p>
-            <p id="detail-why"></p>
+            <div id="pollutant-stories"></div>
           </section>
           <div class="words" id="pollutant-row" data-drag="pollutant" role="tablist" aria-label="Pollutant">
             <button type="button" role="tab" data-poll="aqi" aria-selected="true">AQI</button>
@@ -489,17 +489,25 @@
           if (d <= -8) return "falling";
           return "holding steady";
         }
+        function trendPhrase(moving) {
+          if (moving === "rising") return "still climbing";
+          if (moving === "falling") return "easing off";
+          return "holding steady";
+        }
         function pollutantStory(key, hour) {
           const h = clampHour(hour);
           const moving = trendOf(key, h);
+          const phrase = trendPhrase(moving);
           const pm = Math.round(pmUgAt(h));
           const o3 = Math.round(o3At(h));
           const no2 = Math.round(no2At(h));
+          const smoke = Math.round(smokeAt(h));
           if (key === "pm") {
             return {
               name: "PM2.5",
               value: pm + " µg/m³",
               trend: moving,
+              context: pm + " µg/m³ in the valley, " + phrase + ".",
               why: pm > 35
                 ? "This is the smoke in the valley, not ozone. It eases once Friday afternoon clears the plume."
                 : "Fine particles are quiet. The smoke is not what you would feel outside right now.",
@@ -510,6 +518,7 @@
               name: "Ozone",
               value: o3 + " index",
               trend: moving,
+              context: o3 + " on the index, " + phrase + " as the sun moves.",
               why: "Ozone follows the sun and peaks in the afternoon. It is not what makes Thursday hazardous.",
             };
           }
@@ -518,14 +527,16 @@
               name: "NO2",
               value: no2 + " index",
               trend: moving,
+              context: no2 + " on the index, " + phrase + " with the commute.",
               why: "Nitrogen dioxide bumps with the commute. Thursday is still a particle event.",
             };
           }
           if (key === "smoke") {
             return {
               name: "Smoke",
-              value: Math.round(smokeAt(h)) + " index",
+              value: smoke + " index",
               trend: moving,
+              context: smoke + " on the smoke index, " + phrase + ".",
               why: "Smoke weights the particle plume once PM2.5 is already high. Thursday evening is the thick of it.",
             };
           }
@@ -534,6 +545,7 @@
             name: "AQI",
             value: String(Math.round(aqiAt(h))),
             trend: moving,
+            context: Math.round(aqiAt(h)) + " on the index, " + phrase + ".",
             why: dom === "PM2.5"
               ? "Fine particles are driving the number. That is the smoke. The clean window is Friday from 4 PM."
               : dom + " is driving the number at this hour. The smoke is not the whole story.",
@@ -781,10 +793,7 @@
         review: document.getElementById("review"),
         log: document.getElementById("haptic-log"),
         pip: document.getElementById("haptic-pip"),
-        detailName: document.getElementById("detail-name"),
-        detailValue: document.getElementById("detail-value"),
-        detailTrend: document.getElementById("detail-trend"),
-        detailWhy: document.getElementById("detail-why"),
+        stories: document.getElementById("pollutant-stories"),
       };
 
       function syncClasses() {
@@ -1068,11 +1077,26 @@
         els.cat.textContent = R.CATS[catId].label;
         els.pat.className = "pat pat-" + catId;
         els.dom.textContent = R.dominant(hour);
-        const story = R.pollutantStory(state.pollutant, hour);
-        els.detailName.textContent = story.name;
-        els.detailValue.textContent = story.value + " · " + story.trend;
-        els.detailTrend.textContent = story.trend === "rising" ? "Still climbing." : story.trend === "falling" ? "Easing off." : "Holding.";
-        els.detailWhy.textContent = story.why;
+        const driving = R.dominant(hour) === "O3" ? "o3" : R.dominant(hour) === "NO2" ? "no2" : "pm";
+        els.stories.replaceChildren();
+        for (const key of ["pm", "o3", "no2", "smoke"]) {
+          const story = R.pollutantStory(key, hour);
+          const on = state.pollutant === "aqi" ? key === driving : state.pollutant === key;
+          const article = document.createElement("article");
+          article.className = "story" + (on ? " on" : "");
+          const name = document.createElement("p");
+          name.className = "kicker";
+          name.textContent = story.name;
+          const context = document.createElement("p");
+          context.className = "story-context";
+          context.textContent = story.context;
+          const why = document.createElement("p");
+          why.className = "story-why";
+          if (key === "pm") why.id = "detail-why";
+          why.textContent = story.why;
+          article.append(name, context, why);
+          els.stories.append(article);
+        }
       }
 
       let widgetKey = "";

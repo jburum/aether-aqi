@@ -130,6 +130,17 @@ if (Round2) {
   if (Round2.dayPeak(7) !== 18) fail(`Thursday peak is ${Round2.dayPeak(7)}`);
   const story = Round2.pollutantStory("pm", 18);
   if (!/smoke/i.test(story.why) || !story.trend) fail(`pollutant story: ${story.why}`);
+  const trendWord = { rising: "climbing", falling: "easing", "holding steady": "holding" };
+  for (const key of ["pm", "o3", "no2", "smoke"]) {
+    const row = Round2.pollutantStory(key, 18);
+    if (!row.context || !row.trend || !row.why) fail(`${key} story needs context, trend, and why`);
+    if (!/\d/.test(row.context)) fail(`${key} context has no measurement: ${row.context}`);
+    if (!row.context.toLowerCase().includes(trendWord[row.trend])) {
+      fail(`${key} context misses the trend: ${row.context}`);
+    }
+  }
+  if (html.includes("<dl") || html.includes('id="detail-list"')) fail("pollutant spreadsheet is still in the prototype");
+  if (!html.includes('id="pollutant-stories"')) fail("pollutant stories missing");
   for (let h = 0; h <= 167; h++) {
     const line = Round2.personal(h);
     if (/Sensitive groups should|Everyone should limit|Emergency\. Stay/.test(line)) {
