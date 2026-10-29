@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Checks the round 2 scale: contrast, hue ban, and the Boise smoke-day story.
+ * Checks the round 2 scale: contrast, the no-purple sky ramp, and the Boise smoke-day story.
  * Reads the model embedded in design/round2.html so the page stays one file.
  */
 import { execFileSync } from "node:child_process";
@@ -73,9 +73,23 @@ if (Round2) {
   let prevInk = null;
   for (let aqi = 0; aqi <= 500; aqi += 0.25) {
     const paint = Round2.paintAqi(aqi, 4.7);
-    if (paint.H < 20 || paint.H > 175) fail(`AQI ${aqi} hue ${paint.H.toFixed(1)} leaves the teal-to-oxblood path`);
+    if (paint.C > 0.02 && paint.H >= 250 && paint.H <= 345) {
+      fail(`AQI ${aqi} hue ${paint.H.toFixed(1)} is violet or magenta`);
+    }
+    if (paint.C > 0.035 && paint.H >= 120 && paint.H <= 185) {
+      fail(`AQI ${aqi} ${paint.hex} is saturated green`);
+    }
+    if (aqi >= 220 && (paint.H < 18 || paint.H > 36)) {
+      fail(`AQI ${aqi} hue ${paint.H.toFixed(1)} leaves ember-to-oxblood`);
+    }
     if (paint.ratio < 4.5) fail(`AQI ${aqi} text contrast ${paint.ratio.toFixed(2)} on ${paint.hex}`);
     if (paint.softRatio < 4.5) fail(`AQI ${aqi} secondary contrast ${paint.softRatio.toFixed(2)}`);
+    const sky = Round2.skyAt(aqi);
+    if (sky.topRatio < 4.5 || sky.botRatio < 4.5) {
+      fail(
+        `AQI ${aqi} sky contrast ${sky.topRatio.toFixed(2)} / ${sky.botRatio.toFixed(2)}`,
+      );
+    }
     if (paint.ratio < worst.ratio) worst = { ...paint, aqi, soft: paint.softRatio };
     if (paint.ink !== prevInk) {
       flip = { aqi, ink: paint.ink, hex: paint.hex, ratio: paint.ratio };
@@ -96,6 +110,34 @@ if (Round2) {
   if (Round2.dominant(13 + 72) !== "O3") fail("Sunday afternoon should be ozone, not smoke");
   if (Round2.smokeAt(18) <= peak) fail("smoke index should rise above the composite at the peak");
   if (Round2.o3At(13) <= Round2.o3At(18)) fail("ozone should peak in the afternoon, not the evening");
+  if (Round2.DAY_NAMES.length !== 7) fail("the scrub curve is 7 days");
+  if (Round2.HORIZON !== 120) fail("the 5-day horizon stays at hour 120");
+  const goodAir = Round2.paintAqi(0, 4.7);
+  if (goodAir.L < 0.93 || goodAir.C > 0.04 || goodAir.H < 220 || goodAir.H > 248) {
+    fail(`good air ${goodAir.hex} is not blue-white`);
+  }
+  const haz = Round2.paintAqi(500, 4.7);
+  if (haz.L > 0.22 || haz.H > 30) fail(`hazardous ${haz.hex} is not near-black red`);
+  if (Round2.skyAt(0).amp < 0.08) fail("good-air sky gradient is flat");
+  if (Round2.skyAt(500).amp < 0.08) fail("hazardous sky gradient is flat");
+  const lead = Round2.forecastLead();
+  if (!lead.body.includes("outdoor window")) fail(`forecast lead: ${lead.body}`);
+  if (!/smoke/i.test(lead.title)) fail(`forecast title: ${lead.title}`);
+  const wins = Round2.decisionWindows();
+  if (wins.length !== 2 || wins[0].hour !== 15 || wins[1].hour !== 40) {
+    fail(`decision windows ${JSON.stringify(wins)}`);
+  }
+  if (Round2.dayPeak(7) !== 18) fail(`Thursday peak is ${Round2.dayPeak(7)}`);
+  const story = Round2.pollutantStory("pm", 18);
+  if (!/smoke/i.test(story.why) || !story.trend) fail(`pollutant story: ${story.why}`);
+  for (let h = 0; h <= 167; h++) {
+    const line = Round2.personal(h);
+    if (/Sensitive groups should|Everyone should limit|Emergency\. Stay/.test(line)) {
+      fail(`boilerplate at hour ${h}: ${line}`);
+    }
+  }
+  if (!/valley|smoke/i.test(Round2.personal(18))) fail("Thursday evening copy should name the smoke");
+  if (Round2.aqiAt(144) > 50) fail("Tuesday, past the horizon, should stay Good");
   const anchors = [0, 50, 100, 150, 175, 200, 300, 500];
   console.log("worst", worst.ratio.toFixed(2), "at AQI", worst.aqi, worst.hex, "ink", worst.inkHex);
   console.log("flip", flip);
