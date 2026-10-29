@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=390" />
-    <meta name="theme-color" content="#9DD9E8" />
+    <meta name="theme-color" content="#27A0D3" />
     <title>Boise — Air Quality Forecast</title>
     <style>
       * { box-sizing: border-box; }
@@ -12,7 +12,7 @@
         width: 390px;
         height: 844px;
         overflow: hidden;
-        background: var(--bg, #9dd9e8);
+        background: var(--bg, #27a0d3);
         color: var(--ink, #000);
         font-family: "SF Pro Text", "SF Pro", "Segoe UI Variable", system-ui, sans-serif;
         font-variant-numeric: tabular-nums;
@@ -27,7 +27,7 @@
       .sky {
         z-index: 0;
         inset: -28px;
-        background: linear-gradient(180deg, var(--bg-top, #b3ecfb) 0%, var(--bg, #9dd9e8) 46%, var(--bg-bot, #72b3c3) 100%);
+        background: linear-gradient(180deg, var(--bg-top, #37abde) 0%, var(--bg, #27a0d3) 46%, var(--bg-bot, #0087b6) 100%);
         transform-origin: 50% 36%;
         animation: breathe var(--breath, 6s) ease-in-out infinite;
       }
@@ -336,21 +336,23 @@
     <script>
       // MODEL-START
       const Round2 = (() => {
-        // Sky scale, not the EPA chips. Clean air is a richer sky blue, not pale
-        // blue-white, then a gray haze through the green hues, amber, ember,
+        // Sky scale, not the EPA chips. Clean air is a deep saturated blue, not a
+        // pastel wash, then a stone haze through the green hues, cadmium, ember,
         // oxblood, near-black red. Hue 250–345 is unused.
         // Lightness keeps #000 or #FFF at 4.5:1, including the ember cliff.
         const STOPS = [
-          { aqi: 0, L: 0.86, C: 0.088, H: 228 },
-          { aqi: 45, L: 0.85, C: 0.07, H: 218 },
-          { aqi: 75, L: 0.845, C: 0.016, H: 190 },
-          { aqi: 95, L: 0.842, C: 0.02, H: 98 },
-          { aqi: 120, L: 0.84, C: 0.1, H: 84 },
-          { aqi: 155, L: 0.73, C: 0.145, H: 62 },
-          { aqi: 185, L: 0.58, C: 0.15, H: 42 },
-          { aqi: 220, L: 0.44, C: 0.135, H: 32 },
-          { aqi: 320, L: 0.28, C: 0.09, H: 24 },
-          { aqi: 500, L: 0.165, C: 0.048, H: 22 },
+          { aqi: 0, L: 0.665, C: 0.125, H: 232 },
+          { aqi: 50, L: 0.648, C: 0.1, H: 216 },
+          { aqi: 66, L: 0.64, C: 0.024, H: 192 },
+          { aqi: 90, L: 0.62, C: 0.016, H: 145 },
+          { aqi: 110, L: 0.655, C: 0.022, H: 92 },
+          { aqi: 128, L: 0.69, C: 0.132, H: 74 },
+          { aqi: 158, L: 0.67, C: 0.145, H: 58 },
+          { aqi: 172, L: 0.64, C: 0.14, H: 48 },
+          { aqi: 182, L: 0.4, C: 0.14, H: 34 },
+          { aqi: 230, L: 0.33, C: 0.118, H: 30 },
+          { aqi: 340, L: 0.235, C: 0.082, H: 24 },
+          { aqi: 500, L: 0.155, C: 0.048, H: 21 },
         ];
         const NOW = 7;
         const HORIZON = 120;
@@ -694,13 +696,14 @@
           const trials = [0.12, 0.09, 0.06, 0.04, 0.02, 0.01, 0];
           let chosen = { amp: 0, top: mid, bot: mid, topRatio: mid.ratio, botRatio: mid.ratio };
           for (const amp of trials) {
+            // Hold chroma on the way up so the top of the sky does not wash out to pastel.
             const top = paintOklch(
-              Math.min(0.97, L + amp * 0.5),
-              Math.max(0, C * (1 - amp * 0.4)),
+              Math.min(0.9, L + amp * 0.28),
+              Math.min(0.155, C),
               H,
               4.7,
             );
-            const bot = paintOklch(Math.max(0.11, L - amp), Math.min(0.17, C + amp * 0.05), H, 4.7);
+            const bot = paintOklch(Math.max(0.1, L - amp * 0.66), Math.min(0.16, C + amp * 0.05), H, 4.7);
             const topRatio = contrast(top.rgb.map((v) => v / 255), ink);
             const botRatio = contrast(bot.rgb.map((v) => v / 255), ink);
             if (topRatio >= 4.5 && botRatio >= 4.5) {

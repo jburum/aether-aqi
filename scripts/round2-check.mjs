@@ -113,14 +113,18 @@ if (Round2) {
   if (Round2.DAY_NAMES.length !== 7) fail("the scrub curve is 7 days");
   if (Round2.HORIZON !== 120) fail("the 5-day horizon stays at hour 120");
   const goodAir = Round2.paintAqi(0, 4.7);
-  if (goodAir.L < 0.84 || goodAir.L > 0.92 || goodAir.C < 0.05 || goodAir.C > 0.1 || goodAir.H < 215 || goodAir.H > 242) {
+  if (goodAir.L < 0.62 || goodAir.L > 0.72 || goodAir.C < 0.11 || goodAir.C > 0.16 || goodAir.H < 220 || goodAir.H > 242) {
     fail(
-      `good air ${goodAir.hex} L${goodAir.L.toFixed(3)} C${goodAir.C.toFixed(3)} H${goodAir.H.toFixed(0)} should be a richer sky blue`,
+      `good air ${goodAir.hex} L${goodAir.L.toFixed(3)} C${goodAir.C.toFixed(3)} H${goodAir.H.toFixed(0)} should be a deep saturated sky blue, not a pastel`,
     );
   }
   const endOfGood = Round2.paintAqi(50, 4.7);
-  if (endOfGood.C < 0.03 || endOfGood.H < 200 || endOfGood.H > 245) {
+  if (endOfGood.L > 0.72 || endOfGood.C < 0.08 || endOfGood.H < 205 || endOfGood.H > 230) {
     fail(`AQI 50 ${endOfGood.hex} is still pale or off the blue end`);
+  }
+  const goodSky = Round2.skyAt(0);
+  if (goodSky.top.L > 0.78 || goodSky.top.C < 0.08) {
+    fail(`good-air sky top ${goodSky.top.hex} is still a pastel wash`);
   }
   const haz = Round2.paintAqi(500, 4.7);
   if (haz.L > 0.22 || haz.H > 30) fail(`hazardous ${haz.hex} is not near-black red`);
