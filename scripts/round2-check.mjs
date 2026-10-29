@@ -76,8 +76,8 @@ if (Round2) {
     if (paint.C > 0.02 && paint.H >= 250 && paint.H <= 345) {
       fail(`AQI ${aqi} hue ${paint.H.toFixed(1)} is violet or magenta`);
     }
-    if (paint.C > 0.035 && paint.H >= 120 && paint.H <= 185) {
-      fail(`AQI ${aqi} ${paint.hex} is saturated green`);
+    if (aqi <= 200 && paint.C < 0.09) {
+      fail(`AQI ${aqi} chroma ${paint.C.toFixed(3)} drops out of the ramp into gray`);
     }
     if (aqi >= 220 && (paint.H < 18 || paint.H > 36)) {
       fail(`AQI ${aqi} hue ${paint.H.toFixed(1)} leaves ember-to-oxblood`);
@@ -112,15 +112,31 @@ if (Round2) {
   if (Round2.o3At(13) <= Round2.o3At(18)) fail("ozone should peak in the afternoon, not the evening");
   if (Round2.DAY_NAMES.length !== 7) fail("the scrub curve is 7 days");
   if (Round2.HORIZON !== 120) fail("the 5-day horizon stays at hour 120");
+  let prevHue = 400;
+  for (const aqi of [0, 50, 100, 150, 200, 300, 500]) {
+    const paint = Round2.paintAqi(aqi, 4.7);
+    if (paint.H > prevHue + 0.4) {
+      fail(`hue leaves the green-to-maroon path at AQI ${aqi} (${paint.H.toFixed(1)} after ${prevHue.toFixed(1)})`);
+    }
+    prevHue = paint.H;
+  }
   const goodAir = Round2.paintAqi(0, 4.7);
-  if (goodAir.L < 0.62 || goodAir.L > 0.72 || goodAir.C < 0.11 || goodAir.C > 0.16 || goodAir.H < 220 || goodAir.H > 242) {
+  if (goodAir.L < 0.58 || goodAir.L > 0.72 || goodAir.C < 0.11 || goodAir.C > 0.16 || goodAir.H < 145 || goodAir.H > 165) {
     fail(
-      `good air ${goodAir.hex} L${goodAir.L.toFixed(3)} C${goodAir.C.toFixed(3)} H${goodAir.H.toFixed(0)} should be a deep saturated sky blue, not a pastel`,
+      `good air ${goodAir.hex} L${goodAir.L.toFixed(3)} C${goodAir.C.toFixed(3)} H${goodAir.H.toFixed(0)} should be a deep green, not a pastel or a blue`,
     );
   }
   const endOfGood = Round2.paintAqi(50, 4.7);
-  if (endOfGood.L > 0.72 || endOfGood.C < 0.08 || endOfGood.H < 205 || endOfGood.H > 230) {
-    fail(`AQI 50 ${endOfGood.hex} is still pale or off the blue end`);
+  if (endOfGood.C < 0.11 || endOfGood.H < 135 || endOfGood.H > 155) {
+    fail(`AQI 50 ${endOfGood.hex} should still be green`);
+  }
+  const yellow = Round2.paintAqi(100, 4.7);
+  if (yellow.C < 0.11 || yellow.H < 88 || yellow.H > 110) {
+    fail(`AQI 100 ${yellow.hex} should be yellow`);
+  }
+  const orange = Round2.paintAqi(150, 4.7);
+  if (orange.C < 0.11 || orange.H < 50 || orange.H > 72) {
+    fail(`AQI 150 ${orange.hex} should be orange`);
   }
   const goodSky = Round2.skyAt(0);
   if (goodSky.top.L > 0.78 || goodSky.top.C < 0.08) {

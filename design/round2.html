@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=390" />
-    <meta name="theme-color" content="#27A0D3" />
+    <meta name="theme-color" content="#3CA366" />
     <title>Boise — Air Quality Forecast</title>
     <style>
       @font-face {
@@ -19,7 +19,7 @@
         width: 390px;
         height: 844px;
         overflow: hidden;
-        background: var(--bg, #27a0d3);
+        background: var(--bg, #3ca366);
         color: var(--ink, #000);
         font-family: "SF Pro Text", "SF Pro", system-ui, "Segoe UI", sans-serif;
         font-variant-numeric: tabular-nums lining-nums;
@@ -34,7 +34,7 @@
       .sky {
         z-index: 0;
         inset: -28px;
-        background: linear-gradient(180deg, var(--bg-top, #37abde) 0%, var(--bg, #27a0d3) 46%, var(--bg-bot, #0087b6) 100%);
+        background: linear-gradient(180deg, var(--bg-top, #48ae70) 0%, var(--bg, #3ca366) 46%, var(--bg-bot, #0d8b4d) 100%);
         transform-origin: 50% 36%;
         animation: breathe var(--breath, 6s) ease-in-out infinite;
       }
@@ -334,6 +334,7 @@
       <p><b>Jason, 29 Oct.</b> Not Boring's hour slider is the model. Drag the forecast, the number, the detail, the pollutant words, or any widget. The sky answers while the finger is down. CARROT and Airpocalypse stay out.</p>
       <p><b>Jason, 29 Oct.</b> Both, equally. A check-it app and a warns-you app. The home screen rewards opening it: the interactive timeline is the hallmark. Alerts are first-class, the same rank as the scrub. This pass does not design the notification.</p>
       <p><b>Jason, 29 Oct.</b> Form. The sky is deeper and more saturated, still no purple. The big number is New York, lining and tabular, so the 1 has a flag. UI text stays a plain sans.</p>
+      <p><b>Jason, 29 Oct.</b> The ramp is a natural progression: green, yellow, orange, red, deep maroon. Smooth and saturated, not a pastel and not purple. Good numbers are green.</p>
       <h2>Accessibility</h2>
       <div class="row">
         <button type="button" id="opt-motion" aria-pressed="false">Reduce Motion</button>
@@ -355,22 +356,19 @@
     <script>
       // MODEL-START
       const Round2 = (() => {
-        // Sky scale, not the EPA chips. Clean air is a deep saturated blue, not a
-        // pastel wash, then a stone haze through the green hues, cadmium, ember,
-        // oxblood, near-black red. Hue 250–345 is unused.
+        // Natural ramp, not the EPA chips and not a pastel. Good air is a deep
+        // green, then yellow, orange, red, and deep maroon. Hue only falls, so
+        // 250–345 (purple, violet, indigo, magenta) stays unused.
         // Lightness keeps #000 or #FFF at 4.5:1, including the ember cliff.
         const STOPS = [
-          { aqi: 0, L: 0.665, C: 0.125, H: 232 },
-          { aqi: 50, L: 0.648, C: 0.1, H: 216 },
-          { aqi: 66, L: 0.64, C: 0.024, H: 192 },
-          { aqi: 90, L: 0.62, C: 0.016, H: 145 },
-          { aqi: 110, L: 0.655, C: 0.022, H: 92 },
-          { aqi: 128, L: 0.69, C: 0.132, H: 74 },
-          { aqi: 158, L: 0.67, C: 0.145, H: 58 },
-          { aqi: 172, L: 0.64, C: 0.14, H: 48 },
-          { aqi: 182, L: 0.4, C: 0.14, H: 34 },
-          { aqi: 230, L: 0.33, C: 0.118, H: 30 },
-          { aqi: 340, L: 0.235, C: 0.082, H: 24 },
+          { aqi: 0, L: 0.64, C: 0.132, H: 154 },
+          { aqi: 50, L: 0.66, C: 0.145, H: 145 },
+          { aqi: 100, L: 0.74, C: 0.15, H: 98 },
+          { aqi: 150, L: 0.675, C: 0.148, H: 60 },
+          { aqi: 170, L: 0.63, C: 0.148, H: 46 },
+          { aqi: 186, L: 0.39, C: 0.142, H: 33 },
+          { aqi: 230, L: 0.32, C: 0.118, H: 28 },
+          { aqi: 340, L: 0.235, C: 0.085, H: 24 },
           { aqi: 500, L: 0.155, C: 0.048, H: 21 },
         ];
         const NOW = 7;
