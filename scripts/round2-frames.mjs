@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Serves design/ on loopback and screenshots a Good → Hazardous → Good scrub.
- * Also drives the timeline, pollutant chips, and Review controls once.
+ * Also drives the timeline, verdict windows, pollutant words, and Review once.
  */
 import { mkdirSync } from "node:fs";
 import { createServer } from "node:http";
@@ -50,17 +50,18 @@ const port = server.address().port;
 mkdirSync(frameDir, { recursive: true });
 
 const frames = [
-  [7, "01-thu-7am-good.png"],
-  [8, "02-thu-8am-moderate.png"],
-  [10, "03-thu-10am-usg.png"],
-  [12, "04-thu-12pm-unhealthy.png"],
-  [14, "05-thu-2pm-very.png"],
-  [16, "06-thu-4pm-hazardous.png"],
-  [18, "07-thu-6pm-peak.png"],
-  [20, "08-thu-8pm-very.png"],
-  [21, "09-thu-9pm-unhealthy.png"],
-  [23, "10-thu-11pm-usg.png"],
-  [7, "11-back-to-now-good.png"],
+  [7, "week", "01-week-forecast.png"],
+  [7, "day", "02-thu-7am-good.png"],
+  [8, "day", "03-thu-8am-moderate.png"],
+  [10, "day", "04-thu-10am-usg.png"],
+  [12, "day", "05-thu-12pm-unhealthy.png"],
+  [14, "day", "06-thu-2pm-very.png"],
+  [16, "day", "07-thu-4pm-hazardous.png"],
+  [18, "day", "08-thu-6pm-peak.png"],
+  [20, "day", "09-thu-8pm-very.png"],
+  [22, "day", "10-thu-10pm-unhealthy.png"],
+  [40, "day", "11-fri-4pm-window.png"],
+  [7, "day", "12-back-to-now.png"],
 ];
 
 const browser = await chromium.launch({
@@ -76,6 +77,9 @@ try {
   const live = checkedUrl(`http://127.0.0.1:${port}/round2.html`);
   await page.goto(live, { waitUntil: "load" });
   await page.waitForFunction(() => window.__round2 && window.__round2.ready);
+  const lead = await page.locator("#headline").textContent();
+  if (!/Hazardous smoke/.test(lead || "")) throw new Error(`home should lead with the forecast, got ${lead}`);
+  await page.locator("#range-day").click();
   const box = await page.locator("#timeline").boundingBox();
   if (!box) throw new Error("timeline has no box");
   await page.mouse.move(box.x + 12, box.y + box.height / 2);
@@ -87,26 +91,43 @@ try {
     const text = document.getElementById("timeline").getAttribute("aria-valuetext") || "";
     return /AQI [23]\d\d/.test(text);
   });
+  await page.locator("#place").click();
+  await page.waitForFunction(() => /smoke/i.test(document.getElementById("detail-why").textContent || ""));
+  await page.locator("#back").click();
   await page.locator('[data-poll="o3"]').click();
-  const dash = await page.locator("#sub .line").getAttribute("stroke-dasharray");
-  if (dash !== "5 4") throw new Error(`O3 chart dash was ${dash}`);
+  await page.waitForFunction(() => document.querySelector("#hero .line")?.getAttribute("stroke-dasharray") === "5 4");
+  await page.locator("#win-avoid").click();
+  await page.waitForFunction(() => /3 PM/.test(document.getElementById("timeline").getAttribute("aria-valuetext") || ""));
   await page.locator("#open-review").click();
-  await page.locator('[data-dir="ribbon"]').click();
   await page.locator("#opt-type").click();
-  const ribbon = await page.evaluate(() => document.body.classList.contains("dir-ribbon"));
+  await page.locator("#opt-motion").click();
   const ax5 = await page.evaluate(() => document.body.classList.contains("ax5"));
-  if (!ribbon || !ax5) throw new Error("Review controls did not apply Ribbon and AX5");
-  const advice = await page.locator("#advice").boundingBox();
-  if (!advice || advice.y + advice.height > 844) throw new Error("advice falls outside the 844px phone");
+  const reduce = await page.evaluate(() => document.body.classList.contains("reduce"));
+  if (!ax5 || !reduce) throw new Error("Review controls did not apply AX5 and Reduce Motion");
+  for (const id of ["#advice", "#digits", "#pollutant-row"]) {
+    const region = await page.locator(id).boundingBox();
+    if (!region || region.y + region.height > 844) throw new Error(`${id} falls outside the 844px phone`);
+  }
   await page.locator("#review-close").click();
   await page.locator("#open-widgets").click();
   await page.locator("#w-small").click();
 
-  for (const [hour, name] of frames) {
-    const url = checkedUrl(`http://127.0.0.1:${port}/round2.html?frame=1&hour=${hour}&dir=field`);
+  for (const [hour, range, name] of frames) {
+    const url = checkedUrl(`http://127.0.0.1:${port}/round2.html?frame=1&hour=${hour}&range=${range}`);
     await page.goto(url, { waitUntil: "load" });
     await page.waitForFunction(() => window.__round2 && window.__round2.ready);
     await page.waitForTimeout(80);
+    const headline = await page.locator("#headline").textContent();
+    const advice = await page.locator("#advice").textContent();
+    if (!/outdoor window/i.test(advice || "")) throw new Error(`${name} lost the forecast line`);
+    if (hour === 7 && !/Hazardous smoke/.test(headline || "")) {
+      throw new Error(`${name} should lead with the forecast, got ${headline}`);
+    }
+    if (hour === 18 && !/valley|smoke/i.test(headline || "")) {
+      throw new Error(`${name} copy was ${headline}`);
+    }
+    const row = await page.locator("#pollutant-row").boundingBox();
+    if (!row || row.y + row.height > 844) throw new Error(`${name} pollutant row falls outside the phone`);
     const out = checkedOutputPath(join(frameDir, name), [frameDir]);
     await page.screenshot({ path: out });
     console.log(name);
