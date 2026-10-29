@@ -227,6 +227,9 @@ if (Round2) {
     fail("the brief should name the three drag essentials");
   }
   if (!html.includes("stroke-width: 5")) fail("the chart line is still thin");
+  if (!html.includes(".line[stroke-dasharray] { stroke-linecap: butt; }")) {
+    fail("dashed pollutant lines should keep an open gap");
+  }
   if (!html.includes('class="chart-field"')) fail("chart ground should be a tint of the level");
   if (!html.includes('fill="var(--chart)"')) fail("chart ground should follow the AQI color");
   if (html.includes("-dots") || html.includes("patternUnits")) fail("the dot grid is back on the chart");

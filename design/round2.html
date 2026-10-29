@@ -155,6 +155,7 @@
       body.ax5 .curve { min-height: 132px; flex-basis: 148px; }
       .curve svg { width: 100%; height: 100%; display: block; overflow: visible; }
       .line { fill: none; stroke: currentColor; stroke-width: 5; stroke-linejoin: round; stroke-linecap: round; }
+      .line[stroke-dasharray] { stroke-linecap: butt; }
       .chart-field { pointer-events: none; }
       .scrub-aqi {
         font-family: "Aether Display", "Iowan Old Style", Palatino, "Palatino Linotype", Georgia, serif;
@@ -1290,6 +1291,12 @@
       });
       document.querySelectorAll("[data-poll]").forEach((b) =>
         b.addEventListener("click", () => {
+          // A drag ends with a click on the chip where the finger went down. That click must not undo the chip under the pointer.
+          const row = document.getElementById("pollutant-row");
+          if (row.dataset.suppressClick === "1") {
+            row.dataset.suppressClick = "0";
+            return;
+          }
           state.pollutant = b.dataset.poll;
           copyKey = "";
           syncClasses();
@@ -1418,13 +1425,17 @@
         el.addEventListener("pointerup", finish);
         el.addEventListener("pointercancel", finish);
       }
-      function pickPollutant(clientX) {
+      function pickPollutant(clientX, clientY) {
         const buttons = document.querySelectorAll("#pollutant-row [data-poll]");
         let best = null;
         let bestDist = Infinity;
         buttons.forEach((b) => {
           const r = b.getBoundingClientRect();
-          const dist = Math.abs(clientX - (r.left + r.right) / 2);
+          const inside =
+            clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom;
+          const dx = clientX - (r.left + r.right) / 2;
+          const dy = clientY - (r.top + r.bottom) / 2;
+          const dist = inside ? -1 : dx * dx + dy * dy;
           if (dist < bestDist) {
             bestDist = dist;
             best = b;
@@ -1439,16 +1450,25 @@
         let active = false;
         el.addEventListener("pointerdown", (e) => {
           if (e.button !== 0) return;
-          el.setPointerCapture(e.pointerId);
           active = true;
-          pickPollutant(e.clientX);
+          el.dataset.suppressClick = "0";
+          pickPollutant(e.clientX, e.clientY);
+          try {
+            el.setPointerCapture(e.pointerId);
+          } catch {
+            // Capture can fail once the pointer is gone. Moves over the row still bubble.
+          }
         });
         el.addEventListener("pointermove", (e) => {
           if (!active) return;
-          pickPollutant(e.clientX);
+          pickPollutant(e.clientX, e.clientY);
         });
-        el.addEventListener("pointerup", () => {
+        el.addEventListener("pointerup", (e) => {
+          if (!active) return;
           active = false;
+          pickPollutant(e.clientX, e.clientY);
+          // pointerdown already chose the chip. The click that follows would snap back to where the gesture began.
+          el.dataset.suppressClick = "1";
         });
         el.addEventListener("pointercancel", () => {
           active = false;
