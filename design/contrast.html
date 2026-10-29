@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=390" />
+    <title>Contrast — Air Quality Forecast</title>
+    <link rel="stylesheet" href="tokens.css" />
+    <link rel="stylesheet" href="spec.css" />
+  </head>
+  <body>
+    <main class="spec">
+      <h1>Contrast</h1>
+      <p class="lead">
+        WCAG relative luminance. Every text pair in the tokens is at least 4.5:1. Borders are not text.
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>Text</th>
+            <th>On</th>
+            <th>Ratio</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>#1A1A1A</td><td>#F4F4F4 background</td><td class="pass">15.82</td></tr>
+          <tr><td>#1A1A1A</td><td>#FFFFFF surface</td><td class="pass">17.40</td></tr>
+          <tr><td>#1A1A1A</td><td>#E8E8E8 surface 2</td><td class="pass">14.20</td></tr>
+          <tr><td>#3F3F3F secondary</td><td>#F4F4F4</td><td class="pass">9.57</td></tr>
+          <tr><td>#3F3F3F secondary</td><td>#FFFFFF</td><td class="pass">10.53</td></tr>
+          <tr><td>#3F3F3F secondary</td><td>#E8E8E8</td><td class="pass">8.59</td></tr>
+          <tr><td>#F4F4F4</td><td>#121212 dark background</td><td class="pass">17.03</td></tr>
+          <tr><td>#F4F4F4</td><td>#1C1C1C dark surface</td><td class="pass">15.49</td></tr>
+          <tr><td>#F4F4F4</td><td>#2A2A2A dark surface 2</td><td class="pass">13.05</td></tr>
+          <tr><td>#C8C8C8 secondary</td><td>#121212</td><td class="pass">11.20</td></tr>
+          <tr><td>#C8C8C8 secondary</td><td>#1C1C1C</td><td class="pass">10.19</td></tr>
+          <tr><td>#C8C8C8 secondary</td><td>#2A2A2A</td><td class="pass">8.58</td></tr>
+          <tr><td>#000000</td><td>#00E400 Good</td><td class="pass">12.10</td></tr>
+          <tr><td>#000000</td><td>#FFFF00 Moderate</td><td class="pass">19.56</td></tr>
+          <tr><td>#000000</td><td>#FF7E00 Sensitive</td><td class="pass">8.24</td></tr>
+          <tr><td>#000000</td><td>#FF0000 Unhealthy</td><td class="pass">5.25</td></tr>
+          <tr><td>#FFFFFF</td><td>#7A3326 Very Unhealthy</td><td class="pass">9.02</td></tr>
+          <tr><td>#FFFFFF</td><td>#7E0023 Hazardous</td><td class="pass">10.99</td></tr>
+        </tbody>
+      </table>
+      <h2>Not used</h2>
+      <p class="lead">
+        White on #FF0000 is 4.00:1. Body text #1A1A1A on #FF0000 is 4.35:1. Unhealthy chips use #000000 (5.25:1). The website's Very Unhealthy purple is not a token.
+      </p>
+      <h2>Hues</h2>
+      <p class="lead">
+        Good 120°, Moderate 60°, Sensitive 30°, Unhealthy 0°, Very Unhealthy 9° (red-brown), Hazardous 343° (maroon). Neutrals are 0% saturation. Nothing sits in 225–330° (indigo, purple, violet, magenta).
+      </p>
+    </main>
+  </body>
+</html>

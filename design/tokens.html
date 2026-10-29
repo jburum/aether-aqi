@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=390" />
+    <title>Color tokens — Air Quality Forecast</title>
+    <link rel="stylesheet" href="tokens.css" />
+    <link rel="stylesheet" href="spec.css" />
+  </head>
+  <body>
+    <main class="spec">
+      <h1>Color tokens</h1>
+      <p class="lead">
+        Placeholder name only. Neutrals are gray (saturation 0). Category color is for readings, not chrome.
+      </p>
+
+      <h2>Light surfaces</h2>
+      <p class="swatch"><i style="background: var(--bg)"></i><b>Background</b><span>#F4F4F4</span></p>
+      <p class="swatch"><i style="background: var(--surface)"></i><b>Surface</b><span>#FFFFFF</span></p>
+      <p class="swatch"><i style="background: var(--surface-2)"></i><b>Surface 2</b><span>#E8E8E8</span></p>
+      <p class="swatch"><i style="background: var(--text)"></i><b>Text</b><span>#1A1A1A</span></p>
+      <p class="swatch"><i style="background: var(--secondary)"></i><b>Secondary text</b><span>#3F3F3F</span></p>
+      <p class="swatch"><i style="background: var(--border)"></i><b>Border</b><span>#D6D6D6</span></p>
+
+      <h2>Dark surfaces</h2>
+      <div class="dark-card">
+        <p class="swatch"><i style="background: var(--dark-bg)"></i><b>Background</b><span>#121212</span></p>
+        <p class="swatch"><i style="background: var(--dark-surface)"></i><b>Surface</b><span>#1C1C1C</span></p>
+        <p class="swatch"><i style="background: var(--dark-surface-2)"></i><b>Surface 2</b><span>#2A2A2A</span></p>
+        <p class="swatch"><i style="background: var(--dark-text)"></i><b>Text</b><span>#F4F4F4</span></p>
+        <p class="swatch"><i style="background: var(--dark-secondary)"></i><b>Secondary text</b><span>#C8C8C8</span></p>
+        <p class="swatch"><i style="background: var(--dark-border)"></i><b>Border</b><span>#3A3A3A</span></p>
+      </div>
+
+      <h2>Data only — EPA scale, no purple</h2>
+      <p class="swatch"><i style="background: var(--good); color: var(--ink-good)"></i><b>Good 0–50</b><span>#00E400 · ink #000 · 120°</span></p>
+      <p class="swatch"><i style="background: var(--moderate)"></i><b>Moderate 51–100</b><span>#FFFF00 · ink #000 · 60°</span></p>
+      <p class="swatch"><i style="background: var(--usg)"></i><b>Sensitive 101–150</b><span>#FF7E00 · ink #000 · 30°</span></p>
+      <p class="swatch"><i style="background: var(--unhealthy)"></i><b>Unhealthy 151–200</b><span>#FF0000 · ink #000 · 0°</span></p>
+      <p class="swatch"><i style="background: var(--very)"></i><b>Very Unhealthy</b><span>#7A3326 · ink #FFF · 9°</span></p>
+      <p class="swatch"><i style="background: var(--hazardous)"></i><b>Hazardous</b><span>#7E0023 · ink #FFF · 343°</span></p>
+      <p class="lead">
+        Very Unhealthy is deep red-brown, not the EPA purple. Hazardous is maroon. Hue 225–330 is unused. Ratios are in contrast.html.
+      </p>
+    </main>
+  </body>
+</html>
