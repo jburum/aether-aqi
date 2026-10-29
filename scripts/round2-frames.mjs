@@ -77,10 +77,22 @@ try {
   const live = checkedUrl(`http://127.0.0.1:${port}/round2.html`);
   await page.goto(live, { waitUntil: "load" });
   await page.waitForFunction(() => window.__round2 && window.__round2.ready);
+  const finishLayout = () =>
+    page.evaluate(() => {
+      for (const el of document.querySelectorAll("*")) {
+        for (const anim of el.getAnimations()) {
+          const iterations = anim.effect?.getTiming?.().iterations;
+          if (iterations === Infinity) continue;
+          anim.finish();
+        }
+      }
+    });
+
   const dragAcross = async (selector, x0, x1) => {
     const before = await page.locator("#timeline").getAttribute("aria-valuetext");
     const target = page.locator(selector);
     // #w-horizon lays out near y=877, under the 844 fold, so the pointer misses until it scrolls up.
+    await finishLayout();
     await target.evaluate((el) => el.scrollIntoView({ block: "center", inline: "nearest" }));
     const box = await target.boundingBox();
     if (!box || box.width < 8) throw new Error(`${selector} has no box`);
@@ -111,11 +123,13 @@ try {
   });
   await page.locator("#place").click();
   await page.waitForFunction(() => /smoke/i.test(document.getElementById("detail-why").textContent || ""));
-  const row = await page.locator("#pollutant-row").boundingBox();
-  if (!row || row.y + row.height > 844) throw new Error("pollutant row falls outside the phone");
+  // The detail curve shrinks on a 600ms flex transition. Finish it before measuring the chips.
+  await finishLayout();
   await page.locator('[data-poll="o3"]').click();
   await page.waitForFunction(() => document.querySelector("#hero .line")?.getAttribute("stroke-dasharray") === "5 4");
+  const row = await page.locator("#pollutant-row").boundingBox();
   const smoke = await page.locator('[data-poll="smoke"]').boundingBox();
+  if (!row || row.y + row.height > 844) throw new Error("pollutant row falls outside the phone");
   if (!smoke) throw new Error("smoke chip has no box");
   await page.mouse.move(row.x + 8, row.y + row.height / 2);
   await page.mouse.down();
