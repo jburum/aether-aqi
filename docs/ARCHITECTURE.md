@@ -1,6 +1,6 @@
 # Architecture
 
-Last updated: 2026-08-06 · **v1.6** · status: [STATUS.md](./STATUS.md)
+Last updated: 2026-10-30 · status: [STATUS.md](./STATUS.md)
 
 ## Pipeline: Local → Git → Vercel
 
@@ -49,7 +49,6 @@ vercel deploy --prod --yes                                        # optional CLI
 | --- | --- | --- |
 | US AQI + pollutants + hourly | Open-Meteo Air Quality (CAMS) | `GET /api/aqi?lat=&lon=` |
 | Place search | Open-Meteo Geocoding | `GET /api/geocode?name=` |
-| Regional map grid | Open-Meteo multi-location | `GET /api/aqi-grid?west&south&east&north` |
 | Reverse geocode | BigDataCloud (browser direct) | `src/lib/open-meteo.ts` |
 
 **Why proxies:** Safari / ITP / blockers often stall third-party XHR to weather hosts. Client calls **same origin**; Vercel server fetches Open-Meteo with timeouts.
@@ -98,17 +97,11 @@ Modeled AQI ≠ AirNow regulatory monitors.
 | Path | Responsibility |
 | --- | --- |
 | `src/components/aqi-components.tsx` | Cards, gestures, charts, add sheet |
-| `src/components/watchlist-map.tsx` | MapLibre map + field paint orchestration |
 | `src/components/install-guide.tsx` | Home Screen install UX |
-| `src/components/app-nav.tsx` | List / Map bottom tabs |
 | `src/lib/locations-store.ts` | localStorage watchlist + reorder |
-| `src/lib/aqi-grid.ts` | Fixed **2°** lattice builder |
-| `src/lib/aqi-field-model.ts` | Pure `aqiAt` + raster PNG (zoom-stable) |
-| `src/lib/aqi-field.ts` | Bounds helpers + EPA palette |
-| `src/lib/open-meteo.ts` | Client fetch to `/api/*` proxies |
+| `src/lib/open-meteo.ts` | Client fetch to `/api/aqi` and `/api/geocode` |
 | `src/routes/api/aqi.ts` | Server proxy → Open-Meteo AQ |
 | `src/routes/api/geocode.ts` | Server proxy → Open-Meteo search |
-| `src/routes/api/aqi-grid.ts` | Server multi-location grid sample |
 | `src/styles.css` + critical CSS in `__root.tsx` | Theme + safe-area shell |
 | `docs/` | Product + architecture + status |
 
@@ -123,15 +116,8 @@ Modeled AQI ≠ AirNow regulatory monitors.
 
 ---
 
-## Map + regional field
+## Map
 
-- Route `/map`, basemap: Carto Dark Matter (MapLibre style JSON, no API key).
-- Markers: DOM pins with AQI number + band color (`aqiHex` in `src/lib/aqi.ts`).
-- List AQI: React Query `["aqi", id, lat, lon]` via `/api/aqi`.
-- **Field model** (`aqi-field-model.ts`):
-  - Samples on **fixed global lattice** (`LATTICE_STEP_DEG = 2`) — never depends on viewport span.
-  - Seed fetch from **watchlist bbox** (device-independent); pan expands coverage by **merge only**.
-  - `aqiAt(lon, lat)` pure IDW (k-NN) of that sample set → same geography ⇒ same color.
-  - Raster = evaluate pure field + light blur; **paint deferred** until camera idle; keep padded image so drag does not freeze.
-- Worker: `public/maplibre/*` stable paths (hashed Vite worker URLs break relative imports).
-- App Store packaging plan (parked): [IOS-APP-STORE.md](./IOS-APP-STORE.md).
+Removed from the website on 2026-10-30. There is no `/map` route, no MapLibre dependency, and no `/api/aqi-grid`. List AQI stays on React Query `["aqi", id, lat, lon]` via `GET /api/aqi`.
+
+iOS map is **v1.1**, not in the first binary. The scope note is [appstore/ROADMAP.md](./appstore/ROADMAP.md), which is on #4 (`keel/appstore-docs-k1`) and updated on this branch. Older Capacitor notes: [IOS-APP-STORE.md](./IOS-APP-STORE.md).

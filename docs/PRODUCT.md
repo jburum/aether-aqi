@@ -1,10 +1,10 @@
 # Product
 
-Last updated: 2026-08-06 · **v1.6** · **Active · closed for development** ([STATUS.md](./STATUS.md))
+Last updated: 2026-10-30 · **Active · closed for development** ([STATUS.md](./STATUS.md))
 
 ## One-liner
 
-Personal **air quality watchlist** PWA: up to **15** places, live US AQI, hour/day forecasts, map with regional coloring, device-local save. Installable to the **iPhone Home Screen**.
+Personal **air quality watchlist** PWA: up to **15** places, live US AQI, hour/day forecasts, device-local save. Installable to the **iPhone Home Screen**. The website has no map.
 
 ## Core UX
 
@@ -56,12 +56,10 @@ Personal **air quality watchlist** PWA: up to **15** places, live US AQI, hour/d
 - [x] Git → Vercel auto-deploy from `~/Projects/AQI`
 - [x] Docs in git
 
-### Phase 1.5–1.6 (shipped)
+### Phase 1.5–1.6 (shipped, then cut)
 
-- [x] **Map tab** — MapLibre, AQI pins, tap sheet, locate, list↔map nav
-- [x] **Regional AQI coloring** — fixed **2° global lattice**, pure `aqiAt(lon,lat)`; pins only numbered
-- [x] Zoom-stable field (desktop ≈ mobile for same seed); deferred paint so pan does not freeze
 - [x] Branded **OG share card** + in-app **Add to Home Screen** guide
+- Website **map removed** 2026-10-30 (Jason, 2026-10-29: cut from iOS v1 and from the website). iOS map is **v1.1**. See [CHANGELOG.md](./CHANGELOG.md).
 
 ### Phase 2 (parked — not backlog)
 
@@ -81,11 +79,9 @@ Ideas only if reopened:
 
 ---
 
-## Map view
+## Map
 
-**Shipped:** `/map` — MapLibre + Carto Dark Matter, numbered pins for watchlist only, soft regional wash from Open-Meteo lattice + IDW, Locate me, fit bounds, List ↔ Map nav.
-
-**Field model:** samples on fixed global lattice (not viewport-dependent step); seed from watchlist bbox; pan/zoom re-rasterizes without redefining AQI.
+Removed from the website. `/map` is not a page. There is no map tab. iOS map is **v1.1**, not v1.
 
 ---
 

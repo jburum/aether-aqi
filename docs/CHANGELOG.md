@@ -2,6 +2,18 @@
 
 Newest first.
 
+## 2026-10-30 — Website map removed
+
+### Product
+
+- The website map is gone. `/map` no longer renders a map (no route; 404). The List / Map tab bar is gone with it.
+- `GET /api/aqi-grid` is removed. `GET /api/aqi` and `GET /api/geocode` are unchanged.
+- MapLibre and the worker-copy postinstall / build step are removed.
+
+### Docs
+
+- iOS map stays **v1.1**. `docs/appstore/ROADMAP.md` is not on `main`; it lives on #4 (`keel/appstore-docs-k1`). This branch carries the updated copy so it no longer says the website map stays.
+
 ## 2026-08-06 — v1.6 (stable close: lattice field, share, install)
 
 ### Product

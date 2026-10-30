@@ -1420,7 +1420,7 @@ function AddLocationModal({ onClose }: { onClose: () => void }) {
     });
   }
 
-  async function useMyLocation() {
+  async function locateHere() {
     if (!navigator.geolocation) {
       setError("Geolocation is not available in this browser.");
       return;
@@ -1507,7 +1507,7 @@ function AddLocationModal({ onClose }: { onClose: () => void }) {
             type="button"
             variant="secondary"
             className="w-full min-w-0"
-            onClick={() => void useMyLocation()}
+            onClick={() => void locateHere()}
             disabled={locating || !canAdd()}
           >
             {locating ? (

@@ -9,7 +9,7 @@ PWA for tracking **US AQI** across up to **15** locations. Live readings and for
 | **Local** | `~/Projects/AQI` |
 | **Master** | `aether-aqi` — **active · closed** (stable, no backlog) |
 | **Docs** | [docs/](./docs/) |
-| **Latest** | **v1.6** |
+| **Latest** | **2026-10-30** — website map removed |
 | **Status** | [docs/STATUS.md](./docs/STATUS.md) |
 
 ## Features
@@ -20,7 +20,6 @@ PWA for tracking **US AQI** across up to **15** locations. Live readings and for
 - Tap a day to drill into that day’s hourly forecast
 - **Trash** or swipe left to delete
 - **Grip drag** (desktop) / hold-drag (phone) to reorder
-- **Map** tab: pins + regional AQI wash (fixed lattice)
 - Installable PWA (Home Screen guide + branded share card)
 - Data stays in the browser (`localStorage`)
 

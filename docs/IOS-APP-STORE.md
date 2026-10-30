@@ -2,6 +2,8 @@
 
 Last updated: 2026-08-05
 
+> Superseded for v1 scope by [appstore/ROADMAP.md](./appstore/ROADMAP.md). That file is not on `main`; it lives on #4 (`keel/appstore-docs-k1`) and the copy on this branch no longer says the website map stays. The website map was removed 2026-10-30. iOS map is **v1.1**. This page is the older Capacitor sketch.
+
 This app is a **PWA** (React / Vite / Vercel). Apple does **not** accept a pure website URL as an App Store app. You ship a thin **native shell** that loads your web app (and optionally offline assets). Recommended path: **Capacitor**.
 
 ---
