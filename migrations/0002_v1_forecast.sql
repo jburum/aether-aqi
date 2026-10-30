@@ -26,11 +26,24 @@ create table if not exists saved_place (
 
 create index if not exists saved_place_user_idx on saved_place (user_id, position);
 
+-- One transaction-scoped lock per user. Held until commit, so the next
+-- statement's count sees rows the waiter was blocked behind. Re-taken by the
+-- trigger in the same transaction (advisory xact locks stack).
+create or replace function saved_place_lock_user(p_user_id text)
+returns void
+language plpgsql
+as $fn$
+begin
+  perform pg_advisory_xact_lock(hashtext('saved_place'), hashtext(p_user_id));
+end;
+$fn$;
+
 create or replace function saved_place_enforce_cap()
 returns trigger
 language plpgsql
 as $fn$
 begin
+  perform saved_place_lock_user(new.user_id);
   if (select count(*) from saved_place where user_id = new.user_id) >= 5 then
     raise exception 'saved places cap is 5';
   end if;
@@ -43,6 +56,42 @@ create trigger saved_place_cap
   before insert on saved_place
   for each row
   execute function saved_place_enforce_cap();
+
+-- App path: lock, count, and insert are one transaction. p_cap is
+-- MAX_SAVED_PLACES. The trigger above is the backstop for raw inserts.
+create or replace function saved_place_add(
+  p_id text,
+  p_user_id text,
+  p_name text,
+  p_latitude double precision,
+  p_longitude double precision,
+  p_valley text,
+  p_alert_at integer,
+  p_cap integer
+) returns saved_place
+language plpgsql
+as $fn$
+declare
+  n integer;
+  pos integer;
+  row saved_place;
+begin
+  perform saved_place_lock_user(p_user_id);
+  select count(*)::int, coalesce(max(position), 0)::int
+    into n, pos
+    from saved_place
+    where user_id = p_user_id;
+  if n >= p_cap then
+    raise exception 'saved places cap is 5';
+  end if;
+  insert into saved_place
+    (id, user_id, name, latitude, longitude, valley, alert_at, position)
+  values
+    (p_id, p_user_id, p_name, p_latitude, p_longitude, p_valley, p_alert_at, pos + 1)
+  returning * into row;
+  return row;
+end;
+$fn$;
 
 create table if not exists forecast_issued (
   id text primary key,

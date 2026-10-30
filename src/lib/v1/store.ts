@@ -215,24 +215,14 @@ export async function addSavedPlace(
   body: unknown,
 ): Promise<SavedPlace> {
   const input = parsePlaceInput(body);
-  const count = await sql.query<{ n: number }>(
-    "select count(*)::int as n from saved_place where user_id = $1",
-    [userId],
-  );
-  if ((count[0]?.n ?? 0) >= MAX_SAVED_PLACES) {
-    throw new V1RuleError("place_cap", "Saved places are capped at 5.", 409);
-  }
-  const positionRows = await sql.query<{ n: number }>(
-    "select coalesce(max(position), 0)::int as n from saved_place where user_id = $1",
-    [userId],
-  );
   const id = randomUUID();
   try {
+    // One statement: saved_place_add locks this user, then counts and inserts
+    // before that lock is released. A pool query() cannot hold a lock across
+    // separate round trips.
     const inserted = await sql.query<PlaceRow>(
-      `insert into saved_place
-         (id, user_id, name, latitude, longitude, valley, alert_at, position)
-       values ($1, $2, $3, $4, $5, $6, $7, $8)
-       returning id, name, latitude, longitude, valley, alert_at, position, created_at`,
+      `select id, name, latitude, longitude, valley, alert_at, position, created_at
+         from saved_place_add($1, $2, $3, $4, $5, $6, $7, $8)`,
       [
         id,
         userId,
@@ -241,7 +231,7 @@ export async function addSavedPlace(
         input.longitude,
         input.valley,
         input.alertAt,
-        (positionRows[0]?.n ?? 0) + 1,
+        MAX_SAVED_PLACES,
       ],
     );
     const row = inserted[0];
