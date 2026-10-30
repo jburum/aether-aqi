@@ -203,6 +203,71 @@ if (Round2) {
     crossWorst.held,
     crossWorst.hex,
   );
+  if (!/const fieldColor = tintHold \? fieldNow\(\) : R\.LEVEL_TINT\[fieldCat\]/.test(html)) {
+    fail("pill accent should use the frozen field color, not only the destination tint");
+  }
+  const fadeEnds = ["#000000", ...levels.map((id) => Round2.LEVEL_TINT[id])];
+  const fadeSeen = new Set();
+  let fadeWorst = { ratio: 99, dest: "", css: "", hex: "" };
+  function pillOf(bytes) {
+    return bytes.map((v) => v / 255).map((v) => v * 0.92 + 0.08);
+  }
+  function checkFrozen(css, bytes) {
+    const parsed = Round2.bytesFromColor(css);
+    if (!parsed || parsed.join(",") !== bytes.join(",")) {
+      fail(`${css} parsed as ${parsed && parsed.join(",")}, expected ${bytes.join(",")}`);
+      return;
+    }
+    const pill = pillOf(bytes);
+    for (const dest of levels) {
+      const accent = Round2.levelAccent(dest, css);
+      const ratio = Round2.contrast(
+        accent.rgb.map((v) => v / 255),
+        pill,
+      );
+      if (ratio < fadeWorst.ratio) fadeWorst = { ratio, dest, css, hex: accent.hex };
+      if (ratio < 4.5) fail(`${dest} on frozen ${css} is ${ratio.toFixed(2)}:1 (${accent.hex})`);
+    }
+  }
+  for (let i = 0; i < fadeEnds.length; i++) {
+    const from = Round2.bytesFromHex(fadeEnds[i]);
+    for (let j = 0; j < fadeEnds.length; j++) {
+      if (i === j) continue;
+      const to = Round2.bytesFromHex(fadeEnds[j]);
+      for (let step = 1; step <= 19; step++) {
+        const t = step / 20;
+        const bytes = from.map((v, channel) => Math.round(v + (to[channel] - v) * t));
+        const key = bytes.join(",");
+        if (fadeSeen.has(key)) continue;
+        fadeSeen.add(key);
+        checkFrozen(`rgb(${bytes[0]}, ${bytes[1]}, ${bytes[2]})`, bytes);
+      }
+    }
+  }
+  // Moderate → hazardous midpoint. Unhealthy tuned for the hazardous tint is 4.17:1 on this field.
+  const midFade = [22, 16, 11];
+  checkFrozen("rgb(22, 16, 11)", midFade);
+  checkFrozen("rgb(22 16 11)", midFade);
+  checkFrozen("rgba(22, 16, 11, 1)", midFade);
+  checkFrozen("rgb(22 16 11 / 1)", midFade);
+  checkFrozen(`color(srgb ${22 / 255} ${16 / 255} ${11 / 255})`, midFade);
+  for (const held of levels) {
+    const bytes = Round2.bytesFromHex(Round2.LEVEL_TINT[held]);
+    const css = `rgb(${bytes[0]}, ${bytes[1]}, ${bytes[2]})`;
+    for (const dest of levels) {
+      const fromHex = Round2.levelAccent(dest, Round2.LEVEL_TINT[held]).hex;
+      const fromRgb = Round2.levelAccent(dest, css).hex;
+      if (fromHex !== fromRgb) fail(`${dest} on ${held} rgb() ${fromRgb} drifted from ${fromHex}`);
+    }
+  }
+  console.log(
+    "interrupted fade",
+    fadeWorst.ratio.toFixed(2),
+    fadeWorst.dest,
+    "on",
+    fadeWorst.css,
+    fadeWorst.hex,
+  );
   if (html.includes("<script src")) fail("prototype must stay a single file");
   if (!html.includes('id="win-avoid"') || !html.includes('id="win-best"')) {
     fail("verdict windows missing");
