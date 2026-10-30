@@ -203,54 +203,81 @@ if (Round2) {
     crossWorst.held,
     crossWorst.hex,
   );
-  if (!/const fieldColor = tintHold \? fieldNow\(\) : R\.LEVEL_TINT\[fieldCat\]/.test(html)) {
-    fail("pill accent should use the frozen field color, not only the destination tint");
+  if (!/const fieldColor = fieldNow\(\)/.test(html)) {
+    fail("pill accent should use the field's actual color through the 600ms fade");
+  }
+  if (/tintHold \? fieldNow\(\)/.test(html)) {
+    fail("the moving fade still tunes the pill to the destination tint");
+  }
+  if (!html.includes("R.soften(fieldBytes, [255, 255, 255], 4.7)")) {
+    fail("secondary text should soften against the actual field color");
   }
   const fadeEnds = ["#000000", ...levels.map((id) => Round2.LEVEL_TINT[id])];
   const fadeSeen = new Set();
-  let fadeWorst = { ratio: 99, dest: "", css: "", hex: "" };
+  let fadeWorst = { ratio: 99, dest: "", css: "", hex: "", ms: 0 };
   function pillOf(bytes) {
     return bytes.map((v) => v / 255).map((v) => v * 0.92 + 0.08);
   }
-  function checkFrozen(css, bytes) {
+  function checkField(css, bytes, ms) {
     const parsed = Round2.bytesFromColor(css);
     if (!parsed || parsed.join(",") !== bytes.join(",")) {
       fail(`${css} parsed as ${parsed && parsed.join(",")}, expected ${bytes.join(",")}`);
       return;
     }
     const pill = pillOf(bytes);
+    let worst = { ratio: 99, dest: "", hex: "" };
     for (const dest of levels) {
       const accent = Round2.levelAccent(dest, css);
       const ratio = Round2.contrast(
         accent.rgb.map((v) => v / 255),
         pill,
       );
-      if (ratio < fadeWorst.ratio) fadeWorst = { ratio, dest, css, hex: accent.hex };
-      if (ratio < 4.5) fail(`${dest} on frozen ${css} is ${ratio.toFixed(2)}:1 (${accent.hex})`);
+      if (ratio < worst.ratio) worst = { ratio, dest, hex: accent.hex };
+      if (ratio < fadeWorst.ratio) fadeWorst = { ratio, dest, css, hex: accent.hex, ms };
+      if (ratio < 4.5) fail(`${dest} at ${ms}ms on ${css} is ${ratio.toFixed(2)}:1 (${accent.hex})`);
     }
+    const soft = Round2.soften(bytes, [255, 255, 255], 4.7);
+    const softRatio = Round2.contrast(
+      bytes.map((v) => v / 255),
+      soft.bytes.map((v) => v / 255),
+    );
+    if (softRatio < 4.5) fail(`secondary at ${ms}ms on ${css} is ${softRatio.toFixed(2)}:1`);
+    return worst;
   }
   for (let i = 0; i < fadeEnds.length; i++) {
     const from = Round2.bytesFromHex(fadeEnds[i]);
     for (let j = 0; j < fadeEnds.length; j++) {
       if (i === j) continue;
       const to = Round2.bytesFromHex(fadeEnds[j]);
-      for (let step = 1; step <= 19; step++) {
-        const t = step / 20;
+      for (let ms = 0; ms <= 600; ms += 10) {
+        const t = ms / 600;
         const bytes = from.map((v, channel) => Math.round(v + (to[channel] - v) * t));
         const key = bytes.join(",");
         if (fadeSeen.has(key)) continue;
         fadeSeen.add(key);
-        checkFrozen(`rgb(${bytes[0]}, ${bytes[1]}, ${bytes[2]})`, bytes);
+        checkField(`rgb(${bytes[0]}, ${bytes[1]}, ${bytes[2]})`, bytes, ms);
       }
     }
   }
-  // Moderate → hazardous midpoint. Unhealthy tuned for the hazardous tint is 4.17:1 on this field.
+  // Moderate → hazardous at 80ms. Tuned to the hazardous tint, Unhealthy was 3.93:1 here.
+  const at80 = Round2.bytesFromHex(Round2.LEVEL_TINT.moderate).map((v, channel) => {
+    const to = Round2.bytesFromHex(Round2.LEVEL_TINT.hazardous);
+    return Math.round(v + (to[channel] - v) * (80 / 600));
+  });
+  const fade80 = checkField(`rgb(${at80[0]}, ${at80[1]}, ${at80[2]})`, at80, 80);
+  console.log(
+    "80ms moderate→hazardous",
+    fade80.ratio.toFixed(2),
+    fade80.dest,
+    fade80.hex,
+    `rgb(${at80[0]}, ${at80[1]}, ${at80[2]})`,
+  );
   const midFade = [22, 16, 11];
-  checkFrozen("rgb(22, 16, 11)", midFade);
-  checkFrozen("rgb(22 16 11)", midFade);
-  checkFrozen("rgba(22, 16, 11, 1)", midFade);
-  checkFrozen("rgb(22 16 11 / 1)", midFade);
-  checkFrozen(`color(srgb ${22 / 255} ${16 / 255} ${11 / 255})`, midFade);
+  checkField("rgb(22, 16, 11)", midFade, 300);
+  checkField("rgb(22 16 11)", midFade, 300);
+  checkField("rgba(22, 16, 11, 1)", midFade, 300);
+  checkField("rgb(22 16 11 / 1)", midFade, 300);
+  checkField(`color(srgb ${22 / 255} ${16 / 255} ${11 / 255})`, midFade, 300);
   for (const held of levels) {
     const bytes = Round2.bytesFromHex(Round2.LEVEL_TINT[held]);
     const css = `rgb(${bytes[0]}, ${bytes[1]}, ${bytes[2]})`;
@@ -261,10 +288,11 @@ if (Round2) {
     }
   }
   console.log(
-    "interrupted fade",
+    "fade",
     fadeWorst.ratio.toFixed(2),
     fadeWorst.dest,
-    "on",
+    "at",
+    `${fadeWorst.ms}ms`,
     fadeWorst.css,
     fadeWorst.hex,
   );

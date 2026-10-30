@@ -365,7 +365,7 @@
       <p><b>Jason, 29 Oct.</b> The ramp is a natural progression: green, yellow, orange, red, deep maroon. Smooth and saturated, not a pastel and not purple. Good numbers are green.</p>
       <p><b>Jason, 29 Oct.</b> While you drag, keep the number, the level word, and the time. The chart and the color carry the rest.</p>
       <p><b>Jason, 29 Oct.</b> The curve is heavier. Its ground is a solid tint of the current level, with no dot grid.</p>
-      <p><b>Jason, 29 Oct.</b> Round 4. The field is one near-black level tint for the whole screen. Good #0E1A14, Moderate #1A180E, USG #1E140C, Unhealthy #1F0E0D, Very Unhealthy #1A0A0A, Hazardous #120707. It crossfades for 600ms on launch, on release, and on Now, and it does not change while the finger is down. The number is 120pt heavy tabular in the level color, with the level pill and one advice line under it.</p>
+      <p><b>Jason, 29 Oct.</b> Round 4. The field is one near-black level tint for the whole screen. Good #0E1A14, Moderate #1A180E, USG #1E140C, Unhealthy #1F0E0D, Very Unhealthy #1A0A0A, Hazardous #120707. It crossfades for 600ms on launch, on release, and on Now, and it does not change while the finger is down. The number is 120pt heavy tabular in the level color, with the level pill and one advice line under it. The level color is fit to the field color on screen through that fade, frozen or still moving, so the pill stays at 4.5:1.</p>
       <p><b>Jason, 29 Oct.</b> The scrub starts after a 120ms hold, so a quick swipe does not. A 12pt dot in that hour's level color and a 1pt rule sit on the finger. The chart to the right of the finger dims to 35%. The number rolls to the scrubbed value.</p>
       <h2>Accessibility</h2>
       <div class="row">
@@ -806,7 +806,7 @@
         }
         function levelAccent(catId, fieldColor) {
           const base = oklchAt(CAT_AQI[catId]);
-          // A held scrub freezes the field mid-fade. The pill sits on that captured color, not the destination tint.
+          // The field is the computed color: mid-fade, frozen, or settled. Not the destination tint.
           const tint = (bytesFromColor(fieldColor) || bytesFromHex(LEVEL_TINT[catId])).map((v) => v / 255);
           // .level-pill is white at 8% over the field. The word has to clear 4.5:1 on that mix.
           const pill = tint.map((v) => v * 0.92 + 0.08);
@@ -1342,12 +1342,13 @@
           tintFade = false;
         }
         const fieldCat = tintCat && R.LEVEL_TINT[tintCat] ? tintCat : catId;
-        // freezeTint stores the in-flight computed color. The destination tint is a different field.
-        const fieldColor = tintHold ? fieldNow() : R.LEVEL_TINT[fieldCat];
+        // Read the computed color while the 600ms fade is moving, not only once it is frozen.
+        const fieldColor = fieldNow();
         const accent = R.levelAccent(catId, fieldColor);
         root.setProperty("--level", accent.hex);
         document.getElementById("app-icon").style.background = accent.hex;
-        const soft = R.soften(R.bytesFromHex(R.LEVEL_TINT[fieldCat]), [255, 255, 255], 4.7);
+        const fieldBytes = R.bytesFromColor(fieldColor) || R.bytesFromHex(R.LEVEL_TINT[fieldCat]);
+        const soft = R.soften(fieldBytes, [255, 255, 255], 4.7);
         root.setProperty("--ink-soft", state.contrast ? "#FFFFFF" : R.hex(soft.bytes));
         const pm = R.pmUgAt(hour);
         root.setProperty("--grain", String(0.05 + Math.min(0.2, pm / 700)));
