@@ -400,6 +400,24 @@ if (Round2) {
     if (C < 0.06) fail(`${held} field chroma ${C.toFixed(3)} is too faint to read as the level`);
     if (C > 0.02 && H >= 250 && H <= 345) fail(`${held} field hue ${H.toFixed(0)} is violet`);
   }
+  if (!html.includes('id="spectrum"') || !html.includes('id="spectrum-dot"')) {
+    fail("the AQI spectrum bar and its marker are missing");
+  }
+  if (!html.includes("#3CA366 0%") || !html.includes("#C4AB11 20%") || !html.includes("#D77D20 30%")) {
+    fail("the spectrum should run from green through yellow and orange");
+  }
+  if (!html.includes("#C84531 40%") || !html.includes("#972E2C 60%") || !html.includes("#6E282A 100%")) {
+    fail("the spectrum should end in deep red and maroon, not purple");
+  }
+  if (!html.includes('class="threshold-line"') || !html.includes('class="threshold-label"')) {
+    fail("forecast chart thresholds missing");
+  }
+  if (!html.includes("[50, 100, 150, 200, 300]")) {
+    fail("threshold marks should sit at 50, 100, 150, 200, and 300");
+  }
+  for (const label of ["Good", "Moderate", "USG", "Unhealthy", "Very Unhealthy", "Hazardous"]) {
+    if (!html.includes('label: "' + label + '"')) fail(`threshold label missing: ${label}`);
+  }
 }
 
 if (failures.length) {

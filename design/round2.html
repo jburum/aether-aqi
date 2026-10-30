@@ -112,6 +112,23 @@
         font-feature-settings: "lnum" 1, "tnum" 1;
       }
       .advice { margin: 2px 0 0; font-size: 15px; line-height: 20px; font-weight: 560; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .spectrum { position: relative; height: 22px; margin-top: 8px; }
+      .spectrum-bar {
+        position: absolute; left: 0; right: 0; top: 6px; height: 10px; border-radius: 5px;
+        background: linear-gradient(90deg,
+          #3CA366 0%,
+          #51A957 10%,
+          #C4AB11 20%,
+          #D77D20 30%,
+          #C84531 40%,
+          #972E2C 60%,
+          #6E282A 100%);
+      }
+      .spectrum-dot {
+        position: absolute; top: 3px; width: 16px; height: 16px; border-radius: 8px;
+        background: #FFFFFF; box-shadow: 0 0 0 1.5px #1A120C;
+        transform: translateX(-50%); pointer-events: none;
+      }
       .digits {
         height: 1em; font-size: 120px; line-height: 1; letter-spacing: 0; gap: 0.02em;
         color: var(--level, #fff);
@@ -161,7 +178,8 @@
       #hero .line { stroke: rgba(255, 255, 255, 0.9); stroke-width: 3.5; }
       body.more-contrast #hero .line { stroke-width: 6.5; }
       .chart-field { pointer-events: none; }
-      .chart-label, .line-fill, .window-shade, .level-band, .horizon-mark, .scrub-dot, .scrub-rule { pointer-events: none; }
+      .chart-label, .line-fill, .window-shade, .level-band, .horizon-mark, .scrub-dot, .scrub-rule,
+      .threshold-line, .threshold-label { pointer-events: none; }
       .chart-label { font-size: 11px; font-weight: 650; }
       .scrub-aqi {
         font-family: "Source Serif 4", "Palatino Linotype", Palatino, Georgia, serif;
@@ -304,6 +322,10 @@
               <span class="soft" id="dom">PM2.5</span>
             </div>
             <p class="advice" id="advice">Friday 4 PM and the weekend: your outdoor window.</p>
+            <div class="spectrum" id="spectrum" role="img" aria-label="AQI scale from Good to Hazardous">
+              <div class="spectrum-bar"></div>
+              <div class="spectrum-dot" id="spectrum-dot"></div>
+            </div>
           </div>
           <div class="curve" id="curve">
             <svg id="hero" role="img" aria-label="7-day air quality curve"></svg>
@@ -367,7 +389,7 @@
       <p><b>Jason, 29 Oct.</b> The curve is heavier. Its ground is a solid tint of the current level, with no dot grid.</p>
       <p><b>Jason, 29 Oct.</b> Round 4. The field is one near-black level tint for the whole screen. Good #0E1A14, Moderate #1A180E, USG #1E140C, Unhealthy #1F0E0D, Very Unhealthy #1A0A0A, Hazardous #120707. It crossfades for 600ms on launch, on release, and on Now, and it does not change while the finger is down. The number is 120pt heavy tabular in the level color, with the level pill and one advice line under it. The level color is fit to the field color on screen through that fade, frozen or still moving, so the pill stays at 4.5:1.</p>
       <p><b>Jason, 29 Oct.</b> The scrub starts after a 120ms hold, so a quick swipe does not. A 12pt dot in that hour's level color and a 1pt rule sit on the finger. The chart to the right of the finger dims to 35%. The number rolls to the scrubbed value.</p>
-      <p><b>Jason, 30 Oct.</b> Round 5. The field is a clear tint of the level, not near-black. Good #005129, Moderate #463D00, USG #653400, Unhealthy #791B0C, Very Unhealthy #651818, Hazardous #50171B. White text stays at 4.5:1, including through the fade.</p>
+      <p><b>Jason, 30 Oct.</b> Round 5. The field is a clear tint of the level, not near-black. Good #005129, Moderate #463D00, USG #653400, Unhealthy #791B0C, Very Unhealthy #651818, Hazardous #50171B. White text stays at 4.5:1, including through the fade. The spectrum is a horizontal bar, green to yellow to orange to red to deep red to maroon, with a dot on the current value. No purple. The forecast chart rules sit at 50, 100, 150, 200, and 300, labeled Good, Moderate, USG, Unhealthy, Very Unhealthy, and Hazardous.</p>
       <h2>Accessibility</h2>
       <div class="row">
         <button type="button" id="opt-motion" aria-pressed="false">Reduce Motion</button>
@@ -906,6 +928,8 @@
         detailValue: document.getElementById("detail-value"),
         detailTrend: document.getElementById("detail-trend"),
         detailWhy: document.getElementById("detail-why"),
+        spectrum: document.getElementById("spectrum"),
+        spectrumDot: document.getElementById("spectrum-dot"),
       };
 
       function syncClasses() {
@@ -1215,7 +1239,38 @@
           labels += '<text class="chart-label horizon-mark" x="' + lx.toFixed(1) +
             '" y="22" text-anchor="start" fill="rgba(255,255,255,0.9)" font-size="11" font-weight="650">5-day</text>';
         }
-        svg.innerHTML = bands + soft + shades + lines + edge + marks + labels;
+        let thresholds = "";
+        if (key === "aqi") {
+          const edges = [50, 100, 150, 200, 300];
+          const bandNames = [
+            { lo: 0, hi: 50, label: "Good" },
+            { lo: 50, hi: 100, label: "Moderate" },
+            { lo: 100, hi: 150, label: "USG" },
+            { lo: 150, hi: 200, label: "Unhealthy" },
+            { lo: 200, hi: 300, label: "Very Unhealthy" },
+            { lo: 300, hi: 500, label: "Hazardous" },
+          ];
+          const gutter = 98;
+          for (const edge of edges) {
+            if (edge >= maxV) continue;
+            const yLine = yOf(edge);
+            thresholds += '<line class="threshold-line" x1="8" y1="' + yLine.toFixed(1) +
+              '" x2="' + Math.max(24, w - gutter).toFixed(1) + '" y2="' + yLine.toFixed(1) +
+              '" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.72"/>';
+          }
+          for (const band of bandNames) {
+            const hi = Math.min(band.hi, maxV);
+            if (hi - band.lo < 8) continue;
+            const yTop = yOf(hi);
+            const yBot = yOf(band.lo);
+            if (yBot - yTop < 12) continue;
+            const yMid = (yTop + yBot) / 2;
+            thresholds += '<text class="threshold-label" x="' + (w - 8).toFixed(1) + '" y="' + yMid.toFixed(1) +
+              '" text-anchor="end" dominant-baseline="middle" fill="#FFFFFF" stroke="var(--field)" stroke-width="2.5" paint-order="stroke" font-family="Source Sans 3, sans-serif" font-size="10" font-weight="650">' +
+              band.label + "</text>";
+          }
+        }
+        svg.innerHTML = bands + soft + shades + thresholds + lines + edge + marks + labels;
         const zoom = state.range === "week" ? "7-day" : state.range === "hour" ? "Hour" : "Day";
         svg.setAttribute("aria-label", zoom + " air quality curve");
         return next;
@@ -1359,6 +1414,14 @@
         root.setProperty("--wght", String(Math.round(460 + (Math.min(500, aqi) / 500) * 320)));
         root.setProperty("--wght-voice", String(Math.round(460 + (Math.min(500, voiceAqi) / 500) * 320)));
         root.setProperty("--breath", (6.4 - Math.min(500, aqi) / 500 * 4).toFixed(2) + "s");
+        const spectrumT = Math.max(0, Math.min(500, aqi)) / 500;
+        const spectrumW = els.spectrum.clientWidth || 0;
+        const spectrumX = spectrumW > 0 ? Math.max(8, Math.min(spectrumW - 8, spectrumT * spectrumW)) : 8;
+        els.spectrumDot.style.left = spectrumX + "px";
+        els.spectrum.setAttribute(
+          "aria-label",
+          "AQI " + Math.round(aqi) + ", " + R.CATS[catId].label + ". Green through maroon, no purple.",
+        );
         root.setProperty("--haze-blur", (aqi < 90 ? 0 : Math.min(5, ((aqi - 90) / 410) * 5)).toFixed(2) + "px");
 
         const step = snap(hour);
