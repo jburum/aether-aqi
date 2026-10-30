@@ -161,7 +161,7 @@
       #hero .line { stroke: rgba(255, 255, 255, 0.9); stroke-width: 3.5; }
       body.more-contrast #hero .line { stroke-width: 6.5; }
       .chart-field { pointer-events: none; }
-      .chart-label, .line-fill, .window-shade, .level-band { pointer-events: none; }
+      .chart-label, .line-fill, .window-shade, .level-band, .scrub-dot, .scrub-rule { pointer-events: none; }
       .chart-label { font-size: 11px; font-weight: 650; }
       .scrub-aqi {
         font-family: "Source Serif 4", "Palatino Linotype", Palatino, Georgia, serif;
@@ -364,6 +364,7 @@
       <p><b>Jason, 29 Oct.</b> While you drag, keep the number, the level word, and the time. The chart and the color carry the rest.</p>
       <p><b>Jason, 29 Oct.</b> The curve is heavier. Its ground is a solid tint of the current level, with no dot grid.</p>
       <p><b>Jason, 29 Oct.</b> Round 4. The field is one near-black level tint for the whole screen. Good #0E1A14, Moderate #1A180E, USG #1E140C, Unhealthy #1F0E0D, Very Unhealthy #1A0A0A, Hazardous #120707. It crossfades for 600ms on launch, on release, and on Now, and it does not change while the finger is down. The number is 120pt heavy tabular in the level color, with the level pill and one advice line under it.</p>
+      <p><b>Jason, 29 Oct.</b> The scrub starts after a 120ms hold, so a quick swipe does not. A 12pt dot in that hour's level color and a 1pt rule sit on the finger. The chart to the right of the finger dims to 35%. The number rolls to the scrubbed value.</p>
       <h2>Accessibility</h2>
       <div class="row">
         <button type="button" id="opt-motion" aria-pressed="false">Reduce Motion</button>
@@ -987,8 +988,6 @@
       function drawDigits(aqi, dt) {
         const n = Math.max(0, Math.min(999, Math.round(aqi)));
         const text = String(n).padStart(3, "0");
-        const response = dragging ? 0.12 : 0.35;
-        const damping = dragging ? 0.92 : 0.85;
         const prev = digits.lastN;
         const dir = prev == null ? 0 : n > prev ? 1 : n < prev ? -1 : 0;
         els.digits.querySelectorAll(".wheel").forEach((wheel, i) => {
@@ -1011,7 +1010,11 @@
             st.goal = st.pos + delta;
             st.digit = desired;
           }
-          if (!state.reduce && !state.frame) stepSpring(st, st.goal || 0, dt, response, damping);
+          if (!state.reduce && !state.frame) {
+            const tau = dragging ? 0.1 : 0.22;
+            st.pos += ((st.goal || 0) - st.pos) * (1 - Math.exp(-dt / tau));
+            st.v = 0;
+          }
           const base = Math.floor(st.pos);
           const frac = st.pos - base;
           const h = wheel.clientHeight || 48;
@@ -1087,14 +1090,20 @@
           '<defs><linearGradient id="' + svg.id + '-fade" x1="0" y1="0" x2="0" y2="1">' +
           '<stop offset="0" stop-color="#ffffff" stop-opacity="0.12"/>' +
           '<stop offset="1" stop-color="#ffffff" stop-opacity="0"/></linearGradient></defs>';
-        const area = pathOf(pts);
+        function areaOf(points, opacity) {
+          if (!points || points.length < 2) return "";
+          const d = pathOf(points) +
+            " L" + points[points.length - 1].x.toFixed(1) + " " + baseY.toFixed(1) +
+            " L" + points[0].x.toFixed(1) + " " + baseY.toFixed(1) + " Z";
+          const fade = opacity ? ' opacity="' + opacity + '"' : "";
+          return '<path class="line-fill" d="' + d + '" fill="url(#' + svg.id + '-fade)"' + fade + "/>";
+        }
+        const hClamp = Math.max(t0, Math.min(t1, hour));
         let soft = "";
-        if (area) {
-          soft =
-            '<path class="line-fill" d="' + area +
-            " L" + pts[pts.length - 1].x.toFixed(1) + " " + baseY.toFixed(1) +
-            " L" + pts[0].x.toFixed(1) + " " + baseY.toFixed(1) +
-            ' Z" fill="url(#' + svg.id + '-fade)"/>';
+        if (scrubbed) {
+          soft = areaOf(sliceLine(t0 - 1, hClamp), "") + areaOf(sliceLine(hClamp, t1 + 1), "0.35");
+        } else {
+          soft = areaOf(pts, "");
         }
         let shades = "";
         for (const win of R.decisionWindows()) {
@@ -1108,15 +1117,24 @@
         }
         const dash = { aqi: "", pm: "2 3", o3: "5 4", no2: "1.5 4", smoke: "10 3" }[key] || "";
         const dashAttr = dash ? ' stroke-dasharray="' + dash + '"' : "";
-        const past = pathOf(sliceLine(t0 - 1, R.NOW));
-        const future = pathOf(sliceLine(R.NOW, t1 + 1));
+        function lineOf(points, cls, opacity) {
+          const d = pathOf(points);
+          if (!d) return "";
+          const fade = opacity ? ' opacity="' + opacity + '"' : "";
+          return '<path class="' + cls + '" d="' + d + '"' + dashAttr + fade + "></path>";
+        }
         let lines = "";
-        if (past) lines += '<path class="line" d="' + past + '"' + dashAttr + "></path>";
-        if (future) lines += '<path class="line forecast-band" opacity="0.55" d="' + future + '"' + dashAttr + "></path>";
+        if (scrubbed) {
+          lines += lineOf(sliceLine(t0 - 1, Math.min(R.NOW, hClamp)), "line", "");
+          if (hClamp > R.NOW) lines += lineOf(sliceLine(R.NOW, hClamp), "line forecast-band", "0.55");
+          lines += lineOf(sliceLine(hClamp, t1 + 1), "line", "0.35");
+        } else {
+          lines += lineOf(sliceLine(t0 - 1, R.NOW), "line", "");
+          lines += lineOf(sliceLine(R.NOW, t1 + 1), "line forecast-band", "0.55");
+        }
         const edge =
           '<rect class="level-band" x="0" y="' + baseY.toFixed(1) + '" width="' + w.toFixed(1) +
           '" height="4" fill="var(--level)"/>';
-        const hClamp = Math.max(t0, Math.min(t1, hour));
         const hx = xOf(hClamp);
         let y = pts.length ? pts[0].y : plotTop;
         for (let i = 0; i < pts.length - 1; i++) {
@@ -1126,8 +1144,16 @@
           }
         }
         let marks = "";
-        marks += '<circle cx="' + hx.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="8" fill="currentColor"/>';
-        marks += '<circle cx="' + hx.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="3" fill="var(--field)"/>';
+        if (scrubbed) {
+          // 12pt across, in the scrubbed hour's level color. The rule is 1pt and stays white.
+          marks += '<line class="scrub-rule" x1="' + hx.toFixed(1) + '" y1="0" x2="' + hx.toFixed(1) +
+            '" y2="' + baseY.toFixed(1) + '" stroke="currentColor" stroke-width="1"/>';
+          marks += '<circle class="scrub-dot" cx="' + hx.toFixed(1) + '" cy="' + y.toFixed(1) +
+            '" r="6" fill="var(--level)"/>';
+        } else {
+          marks += '<circle cx="' + hx.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="8" fill="currentColor"/>';
+          marks += '<circle cx="' + hx.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="3" fill="var(--field)"/>';
+        }
         const read = String(Math.round(R.aqiAt(hClamp)));
         const readX = Math.max(18, Math.min(w - 18, hx));
         const readY = y > 34 ? y - 14 : y + 20;
@@ -1626,15 +1652,43 @@
 
       const pointers = new Map();
       let pinch = null;
+      // A flick ends before this. The scrub starts only if the finger is still down.
+      const SCRUB_HOLD_MS = 120;
+      let scrubArm = null;
+      function clearScrubArm() {
+        if (!scrubArm) return;
+        clearTimeout(scrubArm.timer);
+        scrubArm = null;
+      }
+      function armScrub(pointerId, clientX) {
+        clearScrubArm();
+        scrubArm = {
+          pointerId,
+          x: clientX,
+          timer: setTimeout(() => {
+            const arm = scrubArm;
+            if (!arm || arm.pointerId !== pointerId) return;
+            scrubArm = null;
+            if (!pointers.has(pointerId) || pointers.size !== 1) return;
+            seekFrom(arm.x);
+          }, SCRUB_HOLD_MS),
+        };
+      }
       els.timeline.addEventListener("pointerdown", (e) => {
-        els.timeline.setPointerCapture(e.pointerId);
+        try {
+          els.timeline.setPointerCapture(e.pointerId);
+        } catch {
+          // A pointer can end before capture. The hold still arms.
+        }
         pointers.set(e.pointerId, e.clientX);
-        if (pointers.size === 1) seekFrom(e.clientX);
+        if (pointers.size === 1) armScrub(e.pointerId, e.clientX);
+        else clearScrubArm();
       });
       els.timeline.addEventListener("pointermove", (e) => {
         if (!pointers.has(e.pointerId)) return;
         pointers.set(e.pointerId, e.clientX);
         if (pointers.size === 2) {
+          clearScrubArm();
           const [a, b] = [...pointers.values()];
           const dist = Math.abs(a - b);
           const levels = ["week", "day", "hour"];
@@ -1650,10 +1704,13 @@
           return;
         }
         pinch = null;
+        if (scrubArm && scrubArm.pointerId === e.pointerId) scrubArm.x = e.clientX;
         if (dragging) seekFrom(e.clientX);
       });
       function forget(e) {
+        const armed = scrubArm && scrubArm.pointerId === e.pointerId;
         pointers.delete(e.pointerId);
+        if (armed) clearScrubArm();
         if (pointers.size < 2) pinch = null;
         endDrag();
       }
