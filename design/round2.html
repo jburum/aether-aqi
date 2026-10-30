@@ -1499,6 +1499,8 @@
         syncClasses();
       });
       // One hour drives every screen. These drags write the same shownHour the curve uses.
+      // A flick ends before this. The scrub starts only if the finger is still down.
+      const SCRUB_HOLD_MS = 120;
       function beginHour(hour) {
         shownHour = Math.max(0, Math.min(R.LAST, hour));
         targetHour = shownHour;
@@ -1511,34 +1513,60 @@
       }
       function bindDeltaScrub(el, pxPerHour) {
         let active = false;
+        let held = false;
         let originX = 0;
         let originHour = 0;
+        let lastX = 0;
         let moved = false;
+        let pointerId = null;
+        let holdTimer = null;
+        function clearHold() {
+          if (holdTimer == null) return;
+          clearTimeout(holdTimer);
+          holdTimer = null;
+        }
+        function scrubDelta() {
+          const dx = lastX - originX;
+          if (!moved && Math.abs(dx) < 8) return;
+          moved = true;
+          if (!held) return;
+          beginHour(originHour + dx / pxPerHour);
+        }
         el.addEventListener("pointerdown", (e) => {
           if (e.button !== 0) return;
           el.dataset.suppressClick = "0";
           el.setPointerCapture(e.pointerId);
+          clearHold();
           active = true;
-          originX = e.clientX;
+          held = false;
+          pointerId = e.pointerId;
+          originX = lastX = e.clientX;
           originHour = shownHour;
           moved = false;
+          const id = e.pointerId;
+          holdTimer = setTimeout(() => {
+            holdTimer = null;
+            if (!active || pointerId !== id) return;
+            held = true;
+            scrubDelta();
+          }, SCRUB_HOLD_MS);
         });
         el.addEventListener("pointermove", (e) => {
-          if (!active) return;
-          const dx = e.clientX - originX;
-          if (!moved && Math.abs(dx) < 8) return;
-          moved = true;
-          beginHour(originHour + dx / pxPerHour);
+          if (!active || e.pointerId !== pointerId) return;
+          lastX = e.clientX;
+          scrubDelta();
         });
-        function finish(cancel) {
-          if (!active) return;
+        function finish(e, cancel) {
+          if (!active || e.pointerId !== pointerId) return;
           active = false;
+          held = false;
+          clearHold();
           if (!moved) return;
           if (!cancel) el.dataset.suppressClick = "1";
           endDrag();
         }
-        el.addEventListener("pointerup", () => finish(false));
-        el.addEventListener("pointercancel", () => finish(true));
+        el.addEventListener("pointerup", (e) => finish(e, false));
+        el.addEventListener("pointercancel", (e) => finish(e, true));
         el.addEventListener("click", (e) => {
           if (el.dataset.suppressClick !== "1") return;
           el.dataset.suppressClick = "0";
@@ -1548,27 +1576,51 @@
       }
       function bindSpanScrub(el, boundsFn) {
         let active = false;
+        let held = false;
         let pinned = null;
+        let lastX = 0;
+        let pointerId = null;
+        let holdTimer = null;
+        function clearHold() {
+          if (holdTimer == null) return;
+          clearTimeout(holdTimer);
+          holdTimer = null;
+        }
+        function seekSpan() {
+          if (!held || !pinned) return;
+          const rect = el.getBoundingClientRect();
+          if (rect.width <= 0) return;
+          const t = Math.max(0, Math.min(1, (lastX - rect.left) / rect.width));
+          beginHour(pinned[0] + t * (pinned[1] - pinned[0]));
+        }
         el.addEventListener("pointerdown", (e) => {
           if (e.button !== 0) return;
           el.setPointerCapture(e.pointerId);
+          clearHold();
           active = true;
-          pinned = boundsFn();
-          const rect = el.getBoundingClientRect();
-          if (rect.width <= 0) return;
-          const t = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-          beginHour(pinned[0] + t * (pinned[1] - pinned[0]));
+          held = false;
+          pinned = null;
+          pointerId = e.pointerId;
+          lastX = e.clientX;
+          const id = e.pointerId;
+          holdTimer = setTimeout(() => {
+            holdTimer = null;
+            if (!active || pointerId !== id) return;
+            held = true;
+            pinned = boundsFn();
+            seekSpan();
+          }, SCRUB_HOLD_MS);
         });
         el.addEventListener("pointermove", (e) => {
-          if (!active || !pinned) return;
-          const rect = el.getBoundingClientRect();
-          if (rect.width <= 0) return;
-          const t = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-          beginHour(pinned[0] + t * (pinned[1] - pinned[0]));
+          if (!active || e.pointerId !== pointerId) return;
+          lastX = e.clientX;
+          seekSpan();
         });
-        function finish() {
-          if (!active) return;
+        function finish(e) {
+          if (!active || e.pointerId !== pointerId) return;
           active = false;
+          held = false;
+          clearHold();
           pinned = null;
           endDrag();
         }
@@ -1653,8 +1705,6 @@
 
       const pointers = new Map();
       let pinch = null;
-      // A flick ends before this. The scrub starts only if the finger is still down.
-      const SCRUB_HOLD_MS = 120;
       let scrubArm = null;
       function clearScrubArm() {
         if (!scrubArm) return;
