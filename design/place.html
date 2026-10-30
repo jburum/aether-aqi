@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=390" />
+    <title>Place — Air Quality Forecast</title>
+    <link rel="stylesheet" href="tokens.css" />
+    <link rel="stylesheet" href="screen.css" />
+  </head>
+  <body>
+    <div class="status" aria-hidden="true"><span>9:41</span></div>
+    <main class="screen">
+      <div class="nav">
+        <button type="button" class="back" aria-label="Back">Back</button>
+        <h1>Air Quality Forecast</h1>
+        <span style="min-width: 44px"></span>
+      </div>
+      <div class="place">
+        <h2>Boise</h2>
+        <p class="region">Idaho · updated 9:41 AM</p>
+      </div>
+      <p class="hero" style="font-size: 64px; line-height: 64px" aria-label="Air quality index 42">42</p>
+      <div class="row">
+        <span class="chip good">Good</span>
+        <p class="meta">Pollutant PM2.5</p>
+      </div>
+      <p class="tip">Air quality is satisfactory. Great day for outdoor activity.</p>
+
+      <section class="section" aria-label="Pollutants">
+        <h3>Pollutants</h3>
+        <div class="pollutants">
+          <p class="pollutant"><b>PM2.5</b><span>9 µg/m³</span></p>
+          <p class="pollutant"><b>PM10</b><span>14 µg/m³</span></p>
+          <p class="pollutant"><b>Ozone</b><span>32 ppb</span></p>
+          <p class="pollutant"><b>NO₂</b><span>8 ppb</span></p>
+        </div>
+      </section>
+
+      <button type="button" class="alert-row" aria-label="Threshold alerts, off">
+        <strong>Threshold alerts</strong>
+        <em>Off</em>
+      </button>
+    </main>
+    <div class="home-ind" aria-hidden="true"></div>
+  </body>
+</html>

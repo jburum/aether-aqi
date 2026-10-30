@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=390" />
+    <title>Add place — Air Quality Forecast</title>
+    <link rel="stylesheet" href="tokens.css" />
+    <link rel="stylesheet" href="screen.css" />
+  </head>
+  <body>
+    <div class="status" aria-hidden="true"><span>9:41</span></div>
+    <main class="screen">
+      <div class="nav">
+        <button type="button" class="back" aria-label="Back">Back</button>
+        <h1>Add place</h1>
+        <span style="min-width: 44px"></span>
+      </div>
+      <p class="region">Air Quality Forecast</p>
+      <div class="field">
+        <label for="q">Search cities</label>
+        <input id="q" value="boise" readonly />
+      </div>
+      <button type="button" class="loc-btn">Use my location</button>
+      <p class="help">Location is optional. You can still search if you deny it.</p>
+      <div class="results">
+        <button type="button" class="result" aria-label="Add Boise, Idaho, United States">
+          <strong>Boise</strong>
+          <em>Idaho, United States</em>
+        </button>
+        <button type="button" class="result" aria-label="Add Boise City, Oklahoma, United States">
+          <strong>Boise City</strong>
+          <em>Oklahoma, United States</em>
+        </button>
+        <button type="button" class="result" aria-label="Add Boise County, Idaho, United States">
+          <strong>Boise County</strong>
+          <em>Idaho, United States</em>
+        </button>
+      </div>
+    </main>
+    <div class="home-ind" aria-hidden="true"></div>
+  </body>
+</html>

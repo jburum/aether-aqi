@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=390" />
+    <title>Home — Air Quality Forecast</title>
+    <link rel="stylesheet" href="tokens.css" />
+    <link rel="stylesheet" href="screen.css" />
+  </head>
+  <body>
+    <div class="status" aria-hidden="true"><span>9:41</span></div>
+    <main class="screen">
+      <div class="nav">
+        <h1>Air Quality Forecast</h1>
+      </div>
+      <div class="place">
+        <h2>Boise</h2>
+        <p class="region">Idaho</p>
+      </div>
+      <p class="hero" aria-label="Air quality index 42">42</p>
+      <div class="row">
+        <span class="chip good">Good</span>
+        <p class="meta">Pollutant PM2.5</p>
+      </div>
+      <p class="tip">Air quality is satisfactory. Great day for outdoor activity.</p>
+
+      <section class="section" aria-label="Hourly">
+        <h3>Hourly</h3>
+        <div class="hours">
+          <button type="button" class="hour good" aria-label="9 AM, air quality index 38, Good">
+            <span class="t" aria-hidden="true">9 AM</span>
+            <span class="v" aria-hidden="true">38</span>
+          </button>
+          <button type="button" class="hour good" aria-label="10 AM, air quality index 42, Good">
+            <span class="t" aria-hidden="true">10 AM</span>
+            <span class="v" aria-hidden="true">42</span>
+          </button>
+          <button type="button" class="hour good" aria-label="11 AM, air quality index 48, Good">
+            <span class="t" aria-hidden="true">11 AM</span>
+            <span class="v" aria-hidden="true">48</span>
+          </button>
+          <button type="button" class="hour moderate" aria-label="12 PM, air quality index 55, Moderate">
+            <span class="t" aria-hidden="true">12 PM</span>
+            <span class="v" aria-hidden="true">55</span>
+          </button>
+          <button type="button" class="hour moderate" aria-label="1 PM, air quality index 61, Moderate">
+            <span class="t" aria-hidden="true">1 PM</span>
+            <span class="v" aria-hidden="true">61</span>
+          </button>
+        </div>
+      </section>
+
+      <section class="section" aria-label="5-day maximum">
+        <h3>5-day maximum</h3>
+        <div class="days">
+          <article class="day" aria-label="Thursday, daily maximum 48, Good">
+            <span class="name" aria-hidden="true">Thu</span>
+            <span class="track" aria-hidden="true"><i class="bar good" style="width: 32%"></i></span>
+            <span class="max" aria-hidden="true">48</span>
+            <span class="cat" aria-hidden="true">Good</span>
+          </article>
+          <article class="day" aria-label="Friday, daily maximum 74, Moderate">
+            <span class="name" aria-hidden="true">Fri</span>
+            <span class="track" aria-hidden="true"><i class="bar moderate" style="width: 49%"></i></span>
+            <span class="max" aria-hidden="true">74</span>
+            <span class="cat" aria-hidden="true">Moderate</span>
+          </article>
+          <article class="day" aria-label="Saturday, daily maximum 118, Unhealthy for Sensitive Groups">
+            <span class="name" aria-hidden="true">Sat</span>
+            <span class="track" aria-hidden="true"><i class="bar usg" style="width: 79%"></i></span>
+            <span class="max" aria-hidden="true">118</span>
+            <span class="cat" aria-hidden="true">Unhealthy for Sensitive Groups</span>
+          </article>
+          <article class="day" aria-label="Sunday, daily maximum 86, Moderate">
+            <span class="name" aria-hidden="true">Sun</span>
+            <span class="track" aria-hidden="true"><i class="bar moderate" style="width: 57%"></i></span>
+            <span class="max" aria-hidden="true">86</span>
+            <span class="cat" aria-hidden="true">Moderate</span>
+          </article>
+          <article class="day" aria-label="Monday, daily maximum 41, Good">
+            <span class="name" aria-hidden="true">Mon</span>
+            <span class="track" aria-hidden="true"><i class="bar good" style="width: 27%"></i></span>
+            <span class="max" aria-hidden="true">41</span>
+            <span class="cat" aria-hidden="true">Good</span>
+          </article>
+        </div>
+      </section>
+    </main>
+    <div class="home-ind" aria-hidden="true"></div>
+  </body>
+</html>

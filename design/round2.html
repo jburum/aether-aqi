@@ -1,0 +1,2019 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=390" />
+    <meta name="theme-color" content="#000000" />
+    <title>Boise — Air Quality Forecast</title>
+    <style>
+      @font-face {
+        font-family: "Source Serif 4";
+        src: url("fonts/source-serif-4-latin.woff2") format("woff2");
+        font-weight: 200 900;
+        font-style: normal;
+        font-display: block;
+      }
+      @font-face {
+        font-family: "Source Sans 3";
+        src: url("fonts/source-sans-3-latin.woff2") format("woff2");
+        font-weight: 200 900;
+        font-style: normal;
+        font-display: block;
+      }
+      * { box-sizing: border-box; }
+      @property --field {
+        syntax: "<color>";
+        inherits: true;
+        initial-value: #000000;
+      }
+      html, body {
+        margin: 0;
+        width: 390px;
+        height: 844px;
+        overflow: hidden;
+        overscroll-behavior: none;
+        background: var(--field, #000000);
+        --chart: #0d8b4d;
+        color: #fff;
+        font-family: "Source Sans 3", system-ui, "Segoe UI", sans-serif;
+        font-variant-numeric: tabular-nums lining-nums;
+        -webkit-text-size-adjust: 100%;
+      }
+      html.tint-fade { transition: --field 600ms linear; }
+      button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+      :focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+      .stage { position: relative; width: 390px; height: 844px; overflow: hidden; }
+      .sky, canvas, .grain { position: absolute; pointer-events: none; }
+      .sky { z-index: 0; inset: 0; background: var(--field, #000000); }
+      canvas, .grain { display: none; }
+      .curve, #w-spark { color: var(--ink, #000); }
+      .curve { color: rgba(255, 255, 255, 0.9); }
+      @media (prefers-reduced-motion: reduce) {
+        html.tint-fade { transition: none; }
+      }
+      .screen {
+        position: relative;
+        z-index: 3;
+        height: 844px;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        padding: 52px 18px 20px;
+      }
+      .status, .home-ind { position: absolute; left: 0; right: 0; z-index: 4; }
+      .status {
+        top: 0; height: 48px; display: flex; align-items: flex-end; justify-content: space-between;
+        padding: 0 22px 6px; font-size: 15px; font-weight: 650;
+      }
+      .pip { width: 8px; height: 8px; border-radius: 4px; background: currentColor; opacity: 0.35; }
+      .pip.pulse { animation: pip 280ms ease-out; }
+      @keyframes pip { 0% { transform: scale(1); opacity: 0.9; } 100% { transform: scale(2.2); opacity: 0.2; } }
+      body.reduce .pip.pulse, body.frame .pip.pulse { animation: none; opacity: 0.8; }
+      .home-ind { bottom: 8px; margin: 0 auto; width: 134px; height: 5px; border-radius: 3px; background: currentColor; }
+      .nav { display: flex; align-items: center; gap: 8px; min-height: 28px; }
+      .nav h1 {
+        flex: 1; margin: 0; font-size: 13px; line-height: 16px; font-weight: 650; letter-spacing: -0.2px;
+        display: flex; align-items: center; gap: 6px;
+      }
+      #app-icon {
+        width: 14px; height: 14px; border-radius: 4px;
+        box-shadow: inset 0 0 0 1.5px currentColor; display: block; background: var(--bg-bot, currentColor);
+      }
+      .nav button { min-height: 28px; font-size: 13px; font-weight: 650; }
+      body.frame .nav-tools { display: none; }
+      #home, #widgets { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 2px; }
+      .place { text-align: left; min-height: 20px; font-size: 15px; line-height: 18px; font-weight: 650; }
+      .place span, .hint, .meta .soft { color: var(--ink-soft); font-weight: 500; }
+      .kicker { margin: 0; font-size: 13px; line-height: 16px; font-weight: 650; }
+      .forecast { position: relative; }
+      .level-row { display: flex; align-items: center; gap: 10px; min-width: 0; min-height: 28px; }
+      .level-pill {
+        display: inline-flex; align-items: center; gap: 6px; max-width: 100%; min-width: 0;
+        height: 26px; padding: 0 10px; border-radius: 13px;
+        background: rgba(255, 255, 255, 0.08); color: var(--level, #fff);
+        font-size: 13px; font-weight: 650; white-space: nowrap;
+      }
+      .level-pill span { overflow: hidden; text-overflow: ellipsis; }
+      .level-row .kicker, .level-row #dom { flex: none; color: var(--ink-soft); }
+      #headline {
+        position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden;
+        clip: rect(0, 0, 0, 0); white-space: nowrap;
+      }
+      .forecast h2, #detail-value {
+        margin: 0;
+        font-family: "Source Serif 4", "Palatino Linotype", Palatino, Georgia, serif;
+        font-optical-sizing: none;
+        font-size: 26px;
+        line-height: 30px;
+        letter-spacing: -0.02em;
+        font-weight: var(--wght-voice, var(--wght, 560));
+        font-variation-settings: "opsz" 32, "wght" var(--wght-voice, var(--wght, 560));
+        font-variant-numeric: lining-nums tabular-nums;
+        font-feature-settings: "lnum" 1, "tnum" 1;
+      }
+      .advice { margin: 2px 0 0; font-size: 15px; line-height: 20px; font-weight: 560; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .spectrum { position: relative; height: 22px; margin-top: 8px; }
+      .spectrum-bar {
+        position: absolute; left: 0; right: 0; top: 6px; height: 10px; border-radius: 5px;
+        background: linear-gradient(90deg,
+          #3CA366 0%,
+          #51A957 10%,
+          #C4AB11 20%,
+          #D77D20 30%,
+          #C84531 40%,
+          #972E2C 60%,
+          #6E282A 100%);
+      }
+      .spectrum-dot {
+        position: absolute; top: 3px; width: 16px; height: 16px; border-radius: 8px;
+        background: #FFFFFF; box-shadow: 0 0 0 1.5px #1A120C;
+        transform: translateX(-50%); pointer-events: none;
+      }
+      .digits {
+        height: 1em; font-size: 120px; line-height: 1; letter-spacing: 0; gap: 0.02em;
+        color: var(--level, #fff);
+        font-family: "Source Serif 4", "Palatino Linotype", Palatino, Georgia, serif;
+        font-optical-sizing: none;
+        font-weight: 800;
+        font-variation-settings: "opsz" 60, "wght" 800;
+        font-variant-numeric: lining-nums tabular-nums;
+        font-feature-settings: "lnum" 1, "tnum" 1;
+        display: flex; overflow: hidden;
+      }
+      body.ax5 .forecast h2, body.ax5 #detail-value { font-size: 22px; line-height: 26px; }
+      body.ax5 .advice, body.ax5 .meta, body.ax5 #detail-why { font-size: 18px; line-height: 22px; }
+      .wheel { height: 1em; width: 1ch; overflow: hidden; }
+      .wheel.off { width: 0; }
+      .strip { display: block; will-change: transform; }
+      .strip i { display: block; height: 1em; font-style: normal; text-align: center; }
+      .meta { min-height: 18px; margin: 0; font-size: 14px; line-height: 18px; font-weight: 650; }
+      .pat {
+        display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -1px;
+        margin-right: 4px; box-shadow: inset 0 0 0 1.5px currentColor;
+      }
+      .pat-good { background: currentColor; }
+      .pat-moderate { background: radial-gradient(currentColor 1px, transparent 1.3px) 0 0 / 4px 4px; }
+      .pat-usg { background: repeating-linear-gradient(45deg, currentColor 0 1.5px, transparent 1.5px 4px); }
+      .pat-unhealthy { background: repeating-linear-gradient(currentColor 0 1.5px, transparent 1.5px 4px); }
+      .pat-very {
+        background:
+          repeating-linear-gradient(45deg, currentColor 0 1px, transparent 1px 4px),
+          repeating-linear-gradient(-45deg, currentColor 0 1px, transparent 1px 4px);
+      }
+      .pat-hazardous {
+        background:
+          repeating-linear-gradient(0deg, currentColor 0 1.5px, transparent 1.5px 4px),
+          repeating-linear-gradient(90deg, currentColor 0 1.5px, transparent 1.5px 4px);
+      }
+      .curve {
+        position: relative; flex: 1 1 280px; min-height: 200px; touch-action: none;
+        transition: flex-basis 600ms cubic-bezier(0.2, 0.8, 0.2, 1);
+      }
+      body.reduce .curve, body.frame .curve { transition: none; }
+      body.view-detail .curve { flex: 0 0 188px; min-height: 150px; }
+      body.ax5 .curve { min-height: 132px; flex-basis: 148px; }
+      .curve svg { width: 100%; height: 100%; display: block; overflow: visible; }
+      .line { fill: none; stroke: currentColor; stroke-width: 5; stroke-linejoin: round; stroke-linecap: round; }
+      .line[stroke-dasharray] { stroke-linecap: butt; }
+      #hero .line { stroke: rgba(255, 255, 255, 0.9); stroke-width: 3.5; }
+      body.more-contrast #hero .line { stroke-width: 6.5; }
+      .chart-field { pointer-events: none; }
+      .chart-label, .line-fill, .window-shade, .level-band, .horizon-mark, .scrub-dot, .scrub-rule,
+      .threshold-line, .threshold-label { pointer-events: none; }
+      .chart-label { font-size: 11px; font-weight: 650; }
+      .scrub-aqi {
+        font-family: "Source Serif 4", "Palatino Linotype", Palatino, Georgia, serif;
+        font-optical-sizing: none;
+        font-size: 13px;
+        font-weight: 750;
+        font-variation-settings: "opsz" 14, "wght" 750;
+        font-variant-numeric: lining-nums tabular-nums;
+        font-feature-settings: "lnum" 1, "tnum" 1;
+      }
+      .forecast-band { pointer-events: none; }
+      body.more-contrast .line { stroke-width: 6.5; }
+      #timeline { position: absolute; inset: 0; z-index: 1; }
+      .play-label {
+        position: absolute; top: 0; z-index: 2; font-size: 12px; font-weight: 700;
+        pointer-events: none; transform: translateX(-50%); display: none;
+      }
+      #back-now {
+        position: absolute; top: 0; right: 0; z-index: 2; min-height: 28px;
+        font-size: 12px; font-weight: 650;
+      }
+      #back-now[hidden] { display: none; }
+      .words, .windows { display: flex; gap: 14px; align-items: center; min-height: 30px; }
+      .windows { margin-bottom: 2px; }
+      .words button, .windows button {
+        min-height: 30px; padding: 0; font-size: 14px; font-weight: 650; text-align: left;
+      }
+      .words button { opacity: 0.5; }
+      .words button[aria-pressed="true"], .words button[aria-selected="true"] {
+        opacity: 1; box-shadow: inset 0 -1.5px 0 currentColor;
+      }
+      .windows button { flex: 1; }
+      body.ax5 .words, body.ax5 .windows { min-height: 36px; }
+      body.ax5 .words button, body.ax5 .windows button { font-size: 17px; min-height: 36px; }
+      body.ax5 .windows { flex-direction: column; align-items: stretch; gap: 0; }
+      .reminder { margin: 0; min-height: 0; font-size: 12px; line-height: 16px; color: var(--ink-soft); }
+      .reminder:empty { display: none; }
+      body.scrubbing #headline,
+      body.scrubbing .advice,
+      body.scrubbing #dom,
+      body.scrubbing #reminder { display: none; }
+      /* Stay in flow so the 4px level band does not cross the stage. */
+      body.scrubbing .windows { visibility: hidden; }
+      #detail { display: flex; flex-direction: column; gap: 4px; }
+      #detail-trend { margin: 0; font-size: 15px; font-weight: 650; }
+      #detail-why { margin: 0; font-size: 16px; line-height: 21px; }
+      body:not(.view-detail) #detail,
+      body:not(.view-detail) #pollutant-row { display: none; }
+      body.view-detail .home-extra { display: none; }
+      #widgets { gap: 6px; }
+      body:not(.view-widgets) #widgets { display: none; }
+      body.view-widgets .home-only { display: none; }
+      .w-kicker {
+        margin: 8px 0 0; font-size: 11px; line-height: 14px; font-weight: 650;
+        letter-spacing: 0.4px; text-transform: uppercase; color: var(--ink-soft);
+      }
+      .w-small { text-align: left; display: flex; flex-direction: column; align-items: flex-start; min-height: 64px; }
+      .w-small b, .w-med-top b, .w-live b {
+        font-family: "Source Serif 4", "Palatino Linotype", Palatino, Georgia, serif;
+        font-optical-sizing: none;
+        font-weight: var(--wght, 640);
+        font-variation-settings: "opsz" 48, "wght" var(--wght, 640);
+        font-variant-numeric: lining-nums tabular-nums;
+        font-feature-settings: "lnum" 1, "tnum" 1;
+      }
+      .w-small b {
+        font-size: 52px; line-height: 52px; letter-spacing: -0.02em;
+        font-variation-settings: "opsz" 52, "wght" var(--wght, 640);
+      }
+      .w-lock { display: flex; align-items: center; gap: 12px; }
+      .w-circ {
+        width: 62px; height: 62px; border-radius: 31px; display: flex; align-items: center; justify-content: center;
+        font-family: "Source Serif 4", "Palatino Linotype", Palatino, Georgia, serif;
+        font-optical-sizing: none;
+        font-size: 18px; font-weight: 750; box-shadow: inset 0 0 0 2px currentColor;
+        font-variation-settings: "opsz" 18, "wght" 750;
+        font-variant-numeric: lining-nums tabular-nums;
+        font-feature-settings: "lnum" 1, "tnum" 1;
+      }
+      .w-inline, .w-live, .w-horizon, .w-note { margin: 0; font-size: 14px; line-height: 18px; font-weight: 650; }
+      .w-med-top { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+      .w-med-top b {
+        font-size: 28px; letter-spacing: -0.02em;
+        font-variation-settings: "opsz" 28, "wght" var(--wght, 640);
+      }
+      .w-live b { font-variation-settings: "opsz" 16, "wght" var(--wght, 640); }
+      #w-spark { width: 100%; height: 52px; display: block; }
+      .w-note { font-weight: 500; color: var(--ink-soft); }
+      #review {
+        position: absolute; inset: 0; z-index: 6;
+        background: #141414; color: #f4f4f4; padding: 58px 18px 22px; overflow: auto;
+      }
+      #review[hidden] { display: none; }
+      #review p, #review li { margin: 0 0 8px; font-size: 13px; line-height: 17px; color: #f4f4f4; }
+      #review .row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+      #review button, #review a {
+        min-height: 36px; padding: 0 2px; color: #f4f4f4; font-size: 13px; font-weight: 650;
+        display: inline-flex; align-items: center; margin-right: 12px;
+      }
+      #review button[aria-pressed="true"] { box-shadow: inset 0 -1.5px 0 #f4f4f4; }
+      #review h2 { margin: 10px 0 6px; font-size: 12px; letter-spacing: 0.4px; text-transform: uppercase; }
+      body[data-cvd="deutan"] .stage { filter: url(#cvd-deutan); }
+      body[data-cvd="protan"] .stage { filter: url(#cvd-protan); }
+      [data-drag] { touch-action: none; user-select: none; -webkit-user-select: none; }
+      [data-drag="hour"]:not(button) { cursor: ew-resize; }
+</style>
+  </head>
+  <body>
+    <svg width="0" height="0" aria-hidden="true">
+      <filter id="cvd-deutan" color-interpolation-filters="sRGB">
+        <feColorMatrix type="matrix" values="0.367322 0.860646 -0.227968 0 0  0.280085 0.672501 0.047413 0 0  -0.011820 0.042940 0.968881 0 0  0 0 0 1 0" />
+      </filter>
+      <filter id="cvd-protan" color-interpolation-filters="sRGB">
+        <feColorMatrix type="matrix" values="0.152286 1.052583 -0.204868 0 0  0.114503 0.786281 0.099216 0 0  -0.003882 -0.048116 1.051998 0 0  0 0 0 1 0" />
+      </filter>
+    </svg>
+    <div class="stage" id="stage">
+      <div class="sky" aria-hidden="true"></div>
+      <canvas id="haze"></canvas>
+      <div class="grain" aria-hidden="true"></div>
+      <div class="status"><span>9:41</span><i id="haptic-pip" class="pip" aria-hidden="true"></i></div>
+      <main class="screen">
+        <div class="nav">
+          <button type="button" id="back" hidden>Back</button>
+          <h1><i id="app-icon" aria-hidden="true"></i> Air Quality Forecast</h1>
+          <span class="nav-tools">
+            <button type="button" id="open-widgets">Widgets</button>
+            <button type="button" id="open-review">Review</button>
+          </span>
+        </div>
+
+        <div class="home-only" id="home">
+          <button type="button" class="place" id="place">Boise <span>smoke event</span></button>
+          <div class="digits home-extra" id="digits" data-drag="hour" aria-hidden="true"></div>
+          <div class="forecast home-extra" id="forecast" data-drag="hour">
+            <h2 id="headline">Hazardous by 6 PM</h2>
+            <div class="level-row">
+              <span class="level-pill"><i class="pat pat-good" id="pat"></i><span id="cat">Good</span></span>
+              <p class="kicker" id="kicker">Thu 3–8 PM</p>
+              <span class="soft" id="dom">PM2.5</span>
+            </div>
+            <p class="advice" id="advice">Friday 4 PM and the weekend: your outdoor window.</p>
+            <div class="spectrum" id="spectrum" role="img" aria-label="AQI scale from Good to Hazardous">
+              <div class="spectrum-bar"></div>
+              <div class="spectrum-dot" id="spectrum-dot"></div>
+            </div>
+          </div>
+          <div class="curve" id="curve">
+            <svg id="hero" role="img" aria-label="7-day air quality curve"></svg>
+            <div id="timeline" role="slider" tabindex="0" aria-label="Forecast timeline" aria-orientation="horizontal" aria-valuemin="0" aria-valuemax="165" aria-valuenow="7" aria-valuetext="Thu 7 AM, AQI 48, Good"></div>
+            <div class="play-label" id="play-label">Thu 7 AM</div>
+            <button type="button" id="back-now" hidden>Now</button>
+          </div>
+          <div class="windows home-extra" id="windows">
+            <button type="button" id="win-avoid">Avoid Thu 3–8 PM</button>
+            <button type="button" id="win-best">Outdoor window Fri 4–8 PM</button>
+          </div>
+          <p class="reminder home-extra" id="reminder"></p>
+          <section id="detail" data-drag="hour" aria-label="What is driving the number">
+            <p class="kicker" id="detail-name">PM2.5</p>
+            <p id="detail-value">—</p>
+            <p id="detail-trend"></p>
+            <p id="detail-why"></p>
+          </section>
+          <div class="words" id="pollutant-row" data-drag="pollutant" role="tablist" aria-label="Pollutant">
+            <button type="button" role="tab" data-poll="aqi" aria-selected="true">AQI</button>
+            <button type="button" role="tab" data-poll="pm" aria-selected="false">PM2.5</button>
+            <button type="button" role="tab" data-poll="o3" aria-selected="false">O3</button>
+            <button type="button" role="tab" data-poll="no2" aria-selected="false">NO2</button>
+            <button type="button" role="tab" data-poll="smoke" aria-selected="false">Smoke</button>
+          </div>
+        </div>
+
+        <section id="widgets" aria-label="Widgets and Live Activity">
+          <p class="w-kicker">Lock Screen</p>
+          <div class="w-lock" data-drag="hour">
+            <div class="w-circ" id="w-circ" role="img" aria-label="Lock Screen circular widget">48</div>
+            <p class="w-inline" id="w-inline">Boise · 48 · Good</p>
+          </div>
+          <p class="w-kicker">Small</p>
+          <button type="button" class="w-small" id="w-small" data-drag="hour" aria-label="Small widget. Drag to scrub the hour, or tap to step one hour.">
+            <b id="w-num">48</b>
+            <span id="w-cat">Good</span>
+          </button>
+          <p class="w-kicker">Medium</p>
+          <div id="w-med" data-drag="hour">
+            <div class="w-med-top"><b id="w-med-num">48</b><span id="w-med-best">Outdoor window Fri 4–8 PM</span></div>
+            <svg id="w-spark" aria-hidden="true"></svg>
+          </div>
+          <p class="w-kicker">Live Activity</p>
+          <p class="w-live" id="w-live" data-drag="hour"><b id="w-live-num">48</b> <span id="w-live-trend" aria-hidden="true">↑</span> <span id="w-live-note">Peaks around 6 PM</span></p>
+          <p class="w-kicker">Large · 5-day horizon</p>
+          <p class="w-horizon" id="w-horizon" data-drag="hour"></p>
+          <p class="w-note">Threshold alert is set at Unhealthy. Being warned ranks with opening the forecast. This pass does not design the notification.</p>
+        </section>
+      </main>
+      <div class="home-ind" aria-hidden="true"></div>
+    </div>
+
+    <div id="review" hidden>
+      <p><b>Critic pass.</b> Socrates, 29 Oct. The sky is the forecast. PR #5 stays on hold.</p>
+      <p><b>Jason, 29 Oct.</b> Not Boring's hour slider is the model. Drag the forecast, the number, the detail, the pollutant words, or any widget. The field holds still while the finger is down. CARROT and Airpocalypse stay out.</p>
+      <p><b>Jason, 29 Oct.</b> Both, equally. A check-it app and a warns-you app. The home screen rewards opening it: the interactive timeline is the hallmark. Alerts are first-class, the same rank as the scrub. This pass does not design the notification.</p>
+      <p><b>Jason, 29 Oct.</b> Form. The sky is deeper and more saturated, still no purple. The big number is Source Serif 4 at optical size 60, lining and tabular, so the 1 keeps its flag. UI text is Source Sans 3.</p>
+      <p><b>Jason, 29 Oct.</b> The ramp is a natural progression: green, yellow, orange, red, deep maroon. Smooth and saturated, not a pastel and not purple. Good numbers are green.</p>
+      <p><b>Jason, 29 Oct.</b> While you drag, keep the number, the level word, and the time. The chart and the color carry the rest.</p>
+      <p><b>Jason, 29 Oct.</b> The curve is heavier. Its ground is a solid tint of the current level, with no dot grid.</p>
+      <p><b>Jason, 29 Oct.</b> Round 4. The field is one near-black level tint for the whole screen. Good #0E1A14, Moderate #1A180E, USG #1E140C, Unhealthy #1F0E0D, Very Unhealthy #1A0A0A, Hazardous #120707. It crossfades for 600ms on launch, on release, and on Now, and it does not change while the finger is down. The number is 120pt heavy tabular in the level color, with the level pill and one advice line under it. The level color is fit to the field color on screen through that fade, frozen or still moving, so the pill stays at 4.5:1.</p>
+      <p><b>Jason, 29 Oct.</b> The scrub starts after a 120ms hold, so a quick swipe does not. A 12pt dot in that hour's level color and a 1pt rule sit on the finger. The chart to the right of the finger dims to 35%. The number rolls to the scrubbed value.</p>
+      <p><b>Jason, 30 Oct.</b> Round 5. The field is a clear tint of the level, not near-black. Good #005129, Moderate #463D00, USG #653400, Unhealthy #791B0C, Very Unhealthy #651818, Hazardous #50171B. White text stays at 4.5:1, including through the fade. The spectrum is a horizontal bar, green to yellow to orange to red to deep red to maroon, with a dot on the current value. No purple. The forecast chart rules sit at 50, 100, 150, 200, and 300, labeled Good, Moderate, USG, Unhealthy, Very Unhealthy, and Hazardous.</p>
+      <h2>Accessibility</h2>
+      <div class="row">
+        <button type="button" id="opt-motion" aria-pressed="false">Reduce Motion</button>
+        <button type="button" id="opt-type" aria-pressed="false">Type AX5</button>
+        <button type="button" id="opt-contrast" aria-pressed="false">Increase Contrast</button>
+      </div>
+      <div class="row">
+        <button type="button" data-cvd="off" aria-pressed="true">Color</button>
+        <button type="button" data-cvd="deutan" aria-pressed="false">Deuteranopia</button>
+        <button type="button" data-cvd="protan" aria-pressed="false">Protanopia</button>
+      </div>
+      <p>The timeline is a slider. Up and down move one step. Spread two fingers to go from the week to the day to the hour. Category text and the swatch pattern stay with the color. Pollutant words sit on the detail, with the reason the number moved.</p>
+      <p><a href="round2-tokens.html">OKLCH scale and contrast</a></p>
+      <h2>Haptic stub</h2>
+      <ol id="haptic-log"></ol>
+      <button type="button" id="review-close">Close</button>
+    </div>
+
+    <script>
+      // MODEL-START
+      const Round2 = (() => {
+        // Natural ramp, not the EPA chips and not a pastel. Good air is a deep
+        // green, then yellow, orange, red, and deep maroon. Hue only falls, so
+        // 250–345 (purple, violet, indigo, magenta) stays unused.
+        // Lightness keeps #000 or #FFF at 4.5:1, including the ember cliff.
+        const STOPS = [
+          { aqi: 0, L: 0.64, C: 0.132, H: 154 },
+          { aqi: 50, L: 0.66, C: 0.145, H: 145 },
+          { aqi: 100, L: 0.74, C: 0.15, H: 98 },
+          { aqi: 150, L: 0.675, C: 0.148, H: 60 },
+          { aqi: 170, L: 0.63, C: 0.148, H: 46 },
+          { aqi: 186, L: 0.39, C: 0.142, H: 33 },
+          { aqi: 230, L: 0.32, C: 0.118, H: 28 },
+          { aqi: 340, L: 0.235, C: 0.085, H: 24 },
+          { aqi: 500, L: 0.155, C: 0.048, H: 21 },
+        ];
+        const NOW = 7;
+        const HORIZON = 120;
+        const LAST = 167;
+        const DAY_NAMES = ["Thu", "Fri", "Sat", "Sun", "Mon", "Tue", "Wed"];
+        // Boise, Thu 29 Oct 2026. Now is 7 AM. Thursday climbs into hazardous smoke. Friday stays
+        // under 100 for a full afternoon starting at 4 PM.
+        const PM = [
+          [34, 30, 27, 26, 29, 36, 44, 48, 67, 91, 118, 141, 168, 192, 228, 268, 304, 338, 352, 301, 246, 198, 154, 126],
+          [118, 112, 106, 98, 94, 97, 108, 122, 136, 142, 138, 130, 121, 112, 108, 102, 92, 84, 76, 68, 58, 52, 47, 42],
+          [48, 44, 40, 38, 36, 40, 52, 64, 72, 78, 80, 76, 70, 64, 58, 52, 48, 44, 40, 38, 36, 34, 32, 30],
+          [28, 26, 24, 22, 23, 26, 32, 38, 42, 46, 48, 45, 40, 36, 33, 30, 28, 26, 25, 24, 23, 22, 21, 20],
+          [22, 20, 19, 18, 18, 20, 24, 28, 32, 35, 36, 34, 30, 28, 26, 24, 22, 21, 20, 19, 18, 18, 17, 16],
+          // Past the 5-day horizon. Quiet on purpose: the curve continues, the promise does not.
+          [18, 17, 16, 16, 17, 19, 22, 26, 30, 33, 34, 32, 29, 26, 24, 22, 20, 19, 18, 17, 16, 16, 15, 15],
+          [15, 14, 14, 13, 14, 16, 20, 24, 28, 30, 31, 29, 26, 24, 22, 20, 18, 17, 16, 15, 15, 14, 14, 13],
+        ];
+        const CATS = {
+          good: { label: "Good", advice: "Clean enough for a long run." },
+          moderate: { label: "Moderate", advice: "Fine for most. Ease up if sensitive." },
+          usg: { label: "Unhealthy for Sensitive Groups", advice: "Sensitive groups should cut time outside." },
+          unhealthy: { label: "Unhealthy", advice: "Everyone should limit time outside." },
+          very: { label: "Very Unhealthy", advice: "Stay indoors. The smoke is heavy." },
+          hazardous: { label: "Hazardous", advice: "Emergency. Stay in with filtered air." },
+        };
+        const CAT_AQI = { good: 25, moderate: 75, usg: 125, unhealthy: 175, very: 250, hazardous: 400 };
+
+        function lerp(a, b, t) { return a + (b - a) * t; }
+        function clampHour(hour) { return Math.max(0, Math.min(LAST, hour)); }
+        function sampleTable(table, hourIndex) {
+          const h = clampHour(hourIndex);
+          const i0 = Math.floor(h);
+          const i1 = Math.min(LAST, i0 + 1);
+          const t = h - i0;
+          return lerp(table[Math.floor(i0 / 24)][i0 % 24], table[Math.floor(i1 / 24)][i1 % 24], t);
+        }
+        function pmAqiAt(hour) { return sampleTable(PM, hour); }
+        function o3At(hour) {
+          const h = ((hour % 24) + 24) % 24;
+          const peak = Math.max(0, Math.sin(((h - 7) / 24) * Math.PI * 2));
+          return 12 + peak * 46;
+        }
+        function no2At(hour) {
+          const h = ((hour % 24) + 24) % 24;
+          const morning = Math.exp(-0.5 * ((h - 8) / 1.3) ** 2);
+          const evening = Math.exp(-0.5 * ((h - 18) / 1.6) ** 2);
+          return 12 + morning * 28 + evening * 24;
+        }
+        function aqiAt(hour) { return Math.max(pmAqiAt(hour), o3At(hour), no2At(hour)); }
+        function pmUgAt(hour) {
+          const v = Math.max(0, Math.min(500, pmAqiAt(hour)));
+          const bands = [[0, 50, 0, 12], [51, 100, 12.1, 35.4], [101, 150, 35.5, 55.4], [151, 200, 55.5, 150.4], [201, 300, 150.5, 250.4], [301, 500, 250.5, 500.4]];
+          for (const [aLo, aHi, cLo, cHi] of bands) {
+            if (v <= aHi) return cLo + ((v - aLo) / (aHi - aLo)) * (cHi - cLo);
+          }
+          return 500;
+        }
+        function smokeAt(hour) {
+          const pm = pmAqiAt(hour);
+          const t = Math.max(0, (pm - 40) / 320);
+          return Math.min(500, pm * (1 + 0.18 * t));
+        }
+        function seriesAt(key, hour) {
+          if (key === "pm") return pmUgAt(hour);
+          if (key === "o3") return o3At(hour);
+          if (key === "no2") return no2At(hour);
+          if (key === "smoke") return smokeAt(hour);
+          return aqiAt(hour);
+        }
+        function seriesIndex(key, hour) {
+          if (key === "pm") return pmAqiAt(hour);
+          if (key === "o3") return o3At(hour);
+          if (key === "no2") return no2At(hour);
+          if (key === "smoke") return smokeAt(hour);
+          return aqiAt(hour);
+        }
+        function category(aqi) {
+          if (aqi <= 50) return "good";
+          if (aqi <= 100) return "moderate";
+          if (aqi <= 150) return "usg";
+          if (aqi <= 200) return "unhealthy";
+          if (aqi <= 300) return "very";
+          return "hazardous";
+        }
+        function dominant(hour) {
+          const pm = pmAqiAt(hour);
+          const o3 = o3At(hour);
+          const no2 = no2At(hour);
+          if (pm >= o3 && pm >= no2) return "PM2.5";
+          if (o3 >= no2) return "O3";
+          return "NO2";
+        }
+        function confAt(hour) {
+          const ahead = hour - NOW;
+          let band = ahead <= 0 ? 3 : Math.min(28, 3 + ahead * 0.72);
+          if (hour >= HORIZON) band += 10 + (hour - HORIZON) * 0.2;
+          return Math.min(58, band);
+        }
+        function forecastLead() {
+          const peak = dayPeak(NOW);
+          return {
+            when: "Thu 3–8 PM",
+            title: CATS[category(aqiAt(peak))].label + " by " + formatHour(peak),
+            body: "Friday 4 PM and the weekend: your outdoor window.",
+          };
+        }
+        function personal(hour) {
+          const day = Math.floor(clampHour(hour) / 24);
+          const hod = Math.floor(clampHour(hour) % 24);
+          if (day === 0 && hod < 6) return "Clean air. Get outside before the smoke arrives.";
+          if (day === 0 && hod < 9) return "Still fine. The valley hazes over after 9.";
+          if (day === 0 && hod < 12) return "You'll feel this in your lungs. Finish up outside.";
+          if (day === 0 && hod < 15) return "It's climbing fast. Skip the run.";
+          if (day === 0 && hod < 21) return "The smoke is in the valley. Stay in, windows shut.";
+          if (day === 0) return "Still heavy tonight. It will not clear by morning.";
+          if (day === 1 && hod < 16) return "Leftover smoke. Your window opens at 4.";
+          if (day === 1) return "Friday afternoon is yours. The plume has moved on.";
+          if (day <= 4) return "Clear through Monday. Thursday was the event.";
+          return "Past the 5-day horizon. A hint, not a promise.";
+        }
+        function decisionWindows() {
+          return [
+            { id: "avoid", hour: 15, end: 20, label: "Avoid Thu 3–8 PM" },
+            { id: "best", hour: 40, end: 44, label: "Outdoor window Fri 4–8 PM" },
+          ];
+        }
+        function dayPeak(hour) {
+          const day0 = Math.floor(clampHour(hour) / 24) * 24;
+          let best = day0;
+          let max = -1;
+          for (let h = day0; h < day0 + 24 && h <= LAST; h++) {
+            const v = aqiAt(h);
+            if (v > max) { max = v; best = h; }
+          }
+          return best;
+        }
+        function trendOf(key, hour) {
+          const ahead = Math.min(LAST, hour + 3);
+          const d = seriesIndex(key, ahead) - seriesIndex(key, hour);
+          if (d >= 8) return "rising";
+          if (d <= -8) return "falling";
+          return "holding steady";
+        }
+        function pollutantStory(key, hour) {
+          const h = clampHour(hour);
+          const moving = trendOf(key, h);
+          const pm = Math.round(pmUgAt(h));
+          const o3 = Math.round(o3At(h));
+          const no2 = Math.round(no2At(h));
+          if (key === "pm") {
+            return {
+              name: "PM2.5",
+              value: pm + " µg/m³",
+              trend: moving,
+              why: pm > 35
+                ? "This is the smoke in the valley, not ozone. It eases once Friday afternoon clears the plume."
+                : "Fine particles are quiet. The smoke is not what you would feel outside right now.",
+            };
+          }
+          if (key === "o3") {
+            return {
+              name: "Ozone",
+              value: o3 + " index",
+              trend: moving,
+              why: "Ozone follows the sun and peaks in the afternoon. It is not what makes Thursday hazardous.",
+            };
+          }
+          if (key === "no2") {
+            return {
+              name: "NO2",
+              value: no2 + " index",
+              trend: moving,
+              why: "Nitrogen dioxide bumps with the commute. Thursday is still a particle event.",
+            };
+          }
+          if (key === "smoke") {
+            return {
+              name: "Smoke",
+              value: Math.round(smokeAt(h)) + " index",
+              trend: moving,
+              why: "Smoke weights the particle plume once PM2.5 is already high. Thursday evening is the thick of it.",
+            };
+          }
+          const dom = dominant(h);
+          return {
+            name: "AQI",
+            value: String(Math.round(aqiAt(h))),
+            trend: moving,
+            why: dom === "PM2.5"
+              ? "Fine particles are driving the number. That is the smoke. The clean window is Friday from 4 PM."
+              : dom + " is driving the number at this hour. The smoke is not the whole story.",
+          };
+        }
+        function bestWindow(dayIndex) {
+          const base = dayIndex * 24;
+          let best = null;
+          for (let h = 0; h <= 21; h++) {
+            const mean = (aqiAt(base + h) + aqiAt(base + h + 1) + aqiAt(base + h + 2)) / 3;
+            if (!best || mean < best.mean - 1e-6) best = { start: base + h, end: base + h + 2, mean };
+          }
+          return best;
+        }
+        function formatHour(h) {
+          const hour = ((Math.round(h) % 24) + 24) % 24;
+          const ap = hour < 12 ? "AM" : "PM";
+          const h12 = hour % 12 || 12;
+          return h12 + " " + ap;
+        }
+        function formatSpan(start, end) {
+          const a = formatHour(start).split(" ");
+          const b = formatHour(end).split(" ");
+          if (a[1] === b[1]) return a[0] + "–" + b[0] + " " + b[1];
+          return formatHour(start) + "–" + formatHour(end);
+        }
+        function outlook(hourIndex) {
+          const here = aqiAt(hourIndex);
+          let peak = here;
+          let peakAt = hourIndex;
+          for (let h = Math.ceil(hourIndex); h <= Math.min(119, hourIndex + 48); h++) {
+            const v = aqiAt(h);
+            if (v > peak) { peak = v; peakAt = h; }
+          }
+          const stamp = (h) => {
+            const day = DAY_NAMES[Math.floor(h / 24)];
+            const same = Math.floor(h / 24) === Math.floor(hourIndex / 24);
+            return (same ? "" : day + " ") + formatHour(h);
+          };
+          if (here > 100) {
+            for (let h = Math.floor(peakAt) + 1; h <= 116; h++) {
+              let ok = true;
+              for (let k = 0; k < 4; k++) if (aqiAt(h + k) > 100) ok = false;
+              if (ok) return "Improves around " + stamp(h);
+            }
+          }
+          if (peakAt > hourIndex + 0.5 && peak >= here + 25) return "Peaks around " + stamp(peakAt);
+          return "Steady through the day";
+        }
+        function trend(hour) {
+          const d = aqiAt(Math.min(119, hour + 3)) - aqiAt(hour);
+          if (d >= 8) return "up";
+          if (d <= -8) return "down";
+          return "flat";
+        }
+        function srgbToLin(c) { return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; }
+        function linToSrgb(c) {
+          const x = Math.max(0, c);
+          return x <= 0.0031308 ? 12.92 * x : 1.055 * x ** (1 / 2.4) - 0.055;
+        }
+        function rel(rgb) { return 0.2126 * srgbToLin(rgb[0]) + 0.7152 * srgbToLin(rgb[1]) + 0.0722 * srgbToLin(rgb[2]); }
+        function contrast(a, b) {
+          const L1 = rel(a);
+          const L2 = rel(b);
+          return (Math.max(L1, L2) + 0.05) / (Math.min(L1, L2) + 0.05);
+        }
+        function oklabToLinear(L, C, H) {
+          const h = (H * Math.PI) / 180;
+          const a = C * Math.cos(h);
+          const b = C * Math.sin(h);
+          const l_ = L + 0.3963377774 * a + 0.2158037573 * b;
+          const m_ = L - 0.1055613458 * a - 0.0638541728 * b;
+          const s_ = L - 0.0894841775 * a - 1.291485548 * b;
+          const l = l_ ** 3;
+          const m = m_ ** 3;
+          const s = s_ ** 3;
+          return [
+            4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+            -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+            -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s,
+          ];
+        }
+        function inGamut(rgb) { return rgb.every((v) => v >= -1e-4 && v <= 1 + 1e-4); }
+        function bytesFromOklch(L, C, H) {
+          let best = oklabToLinear(L, 0, H);
+          const full = oklabToLinear(L, C, H);
+          if (inGamut(full)) best = full;
+          else {
+            let lo = 0;
+            let hi = Math.max(0, C);
+            for (let i = 0; i < 24; i++) {
+              const mid = (lo + hi) / 2;
+              const rgb = oklabToLinear(L, mid, H);
+              if (inGamut(rgb)) { lo = mid; best = rgb; } else hi = mid;
+            }
+          }
+          return best.map((v) => Math.round(Math.min(1, Math.max(0, linToSrgb(Math.min(1, Math.max(0, v))))) * 255));
+        }
+        function hex(bytes) { return "#" + bytes.map((v) => v.toString(16).padStart(2, "0")).join("").toUpperCase(); }
+        function oklchAt(aqi) {
+          const v = Math.max(0, Math.min(500, aqi));
+          let i = 0;
+          while (i < STOPS.length - 2 && v > STOPS[i + 1].aqi) i++;
+          const a = STOPS[i];
+          const b = STOPS[i + 1];
+          const t = (v - a.aqi) / (b.aqi - a.aqi);
+          return { L: lerp(a.L, b.L, t), C: lerp(a.C, b.C, t), H: lerp(a.H, b.H, t) };
+        }
+        function soften(bgBytes, inkBytes, goal) {
+          const bg = bgBytes.map((v) => v / 255);
+          const ink = inkBytes.map((v) => v / 255);
+          const pure = contrast(bg, ink);
+          if (pure < goal) return { bytes: inkBytes.slice(), ratio: pure };
+          let lo = 0;
+          let hi = 1;
+          let best = inkBytes.slice();
+          let bestRatio = pure;
+          for (let i = 0; i < 18; i++) {
+            const t = (lo + hi) / 2;
+            const mix = ink.map((v, k) => v * (1 - t) + bg[k] * t);
+            const bytes = mix.map((v) => Math.round(v * 255));
+            const ratio = contrast(bg, bytes.map((v) => v / 255));
+            if (ratio >= goal) { lo = t; best = bytes; bestRatio = ratio; } else hi = t;
+          }
+          return { bytes: best, ratio: bestRatio };
+        }
+        function paintOklch(L, C, H, softGoal) {
+          const bytes = bytesFromOklch(L, C, H);
+          const bg = bytes.map((v) => v / 255);
+          const black = contrast(bg, [0, 0, 0]);
+          const white = contrast(bg, [1, 1, 1]);
+          const inkBytes = black >= white ? [0, 0, 0] : [255, 255, 255];
+          const soft = soften(bytes, inkBytes, softGoal || 4.7);
+          return {
+            hex: hex(bytes),
+            rgb: bytes,
+            ink: black >= white ? "dark" : "light",
+            inkHex: hex(inkBytes),
+            ratio: Math.max(black, white),
+            softHex: hex(soft.bytes),
+            softRatio: soft.ratio,
+            L, C, H,
+            oklch: "oklch(" + L.toFixed(3) + " " + C.toFixed(3) + " " + H.toFixed(1) + ")",
+          };
+        }
+        function paintAqi(aqi, softGoal) {
+          const c = oklchAt(aqi);
+          return paintOklch(c.L, c.C, c.H, softGoal);
+        }
+        function skyFrom(L, C, H) {
+          const mid = paintOklch(L, C, H, 4.7);
+          const ink = mid.ink === "dark" ? [0, 0, 0] : [1, 1, 1];
+          const trials = [0.12, 0.09, 0.06, 0.04, 0.02, 0.01, 0];
+          let chosen = { amp: 0, top: mid, bot: mid, topRatio: mid.ratio, botRatio: mid.ratio };
+          for (const amp of trials) {
+            // Hold chroma on the way up so the top of the sky does not wash out to pastel.
+            const top = paintOklch(
+              Math.min(0.9, L + amp * 0.28),
+              Math.min(0.155, C),
+              H,
+              4.7,
+            );
+            const bot = paintOklch(Math.max(0.1, L - amp * 0.66), Math.min(0.16, C + amp * 0.05), H, 4.7);
+            const topRatio = contrast(top.rgb.map((v) => v / 255), ink);
+            const botRatio = contrast(bot.rgb.map((v) => v / 255), ink);
+            if (topRatio >= 4.5 && botRatio >= 4.5) {
+              chosen = { amp, top, bot, topRatio, botRatio };
+              break;
+            }
+          }
+          return { ...chosen, mid, inkHex: mid.inkHex };
+        }
+        function skyAt(aqi) {
+          const c = oklchAt(aqi);
+          return skyFrom(c.L, c.C, c.H);
+        }
+        // Round 5. One tint per level, dark enough for white text at 4.5:1 and light
+        // enough that the hue reads. Green, gold, orange, red, deep red, maroon.
+        const LEVEL_TINT = {
+          good: "#005129",
+          moderate: "#463D00",
+          usg: "#653400",
+          unhealthy: "#791B0C",
+          very: "#651818",
+          hazardous: "#50171B",
+        };
+        function bytesFromHex(value) {
+          return [1, 3, 5].map((i) => parseInt(value.slice(i, i + 2), 16));
+        }
+        function cssChannel(raw, scale) {
+          if (raw.endsWith("%")) return (parseFloat(raw) / 100) * scale;
+          return parseFloat(raw);
+        }
+        // getComputedStyle serializes a frozen --field as rgb(), rgba(), or color(srgb), not a hex tint.
+        function bytesFromColor(value) {
+          const text = String(value || "").trim();
+          if (text.startsWith("#")) return bytesFromHex(text);
+          const rgb = text.match(/^rgba?\(([^)]+)\)$/i);
+          const srgb = text.match(/^color\(\s*srgb\s+([^)]+)\)$/i);
+          const body = rgb ? rgb[1] : srgb ? srgb[1] : "";
+          if (!body) return null;
+          const parts = body.trim().split(/[/,\s]+/).filter(Boolean);
+          if (parts.length < 3) return null;
+          const scale = rgb ? 255 : 1;
+          let channels = parts.slice(0, 3).map((raw) => cssChannel(raw, scale));
+          if (channels.some((v) => Number.isNaN(v))) return null;
+          if (srgb) channels = channels.map((v) => v * 255);
+          let alpha = 1;
+          if (parts.length >= 4) {
+            alpha = cssChannel(parts[3], 1);
+            if (Number.isNaN(alpha)) return null;
+          }
+          // A translucent field sits on the initial black.
+          if (alpha < 1) channels = channels.map((v) => v * alpha);
+          return channels.map((v) => Math.round(Math.min(255, Math.max(0, v))));
+        }
+        function levelAccent(catId, fieldColor) {
+          const base = oklchAt(CAT_AQI[catId]);
+          // The field is the computed color: mid-fade, frozen, or settled. Not the destination tint.
+          const tint = (bytesFromColor(fieldColor) || bytesFromHex(LEVEL_TINT[catId])).map((v) => v / 255);
+          // .level-pill is white at 8% over the field. The word has to clear 4.5:1 on that mix.
+          const pill = tint.map((v) => v * 0.92 + 0.08);
+          let L = base.L;
+          const C = Math.max(base.C, 0.11);
+          const H = base.H;
+          let paint = paintOklch(L, C, H, 4.5);
+          for (let i = 0; i < 28 && contrast(paint.rgb.map((v) => v / 255), pill) < 4.5; i++) {
+            L = Math.min(0.84, L + 0.025);
+            paint = paintOklch(L, C, H, 4.5);
+          }
+          return paint;
+        }
+        return {
+          STOPS, NOW, HORIZON, LAST, DAY_NAMES, CATS, CAT_AQI, PM, LEVEL_TINT,
+          pmAqiAt, o3At, no2At, aqiAt, pmUgAt, smokeAt, seriesAt, seriesIndex,
+          category, dominant, confAt, bestWindow, formatHour, formatSpan, outlook, trend,
+          forecastLead, personal, decisionWindows, dayPeak, trendOf, pollutantStory,
+          contrast, oklchAt, paintOklch, paintAqi, skyFrom, skyAt, hex, bytesFromHex, bytesFromColor, soften, levelAccent,
+        };
+      })();
+      // MODEL-END
+    </script>
+    <script>
+      const R = Round2;
+      let fontsReady = false;
+      document.fonts.ready.then(() => {
+        fontsReady = true;
+      });
+      const params = new URLSearchParams(location.search);
+      const asked = params.get("range");
+      const state = {
+        range: asked === "day" || asked === "hour" || asked === "week" ? asked : "week",
+        pollutant: "aqi",
+        reduce: matchMedia("(prefers-reduced-motion: reduce)").matches,
+        ax5: false,
+        contrast: false,
+        cvd: "off",
+        view: "home",
+        reminder: "",
+        armed: "",
+        frame: params.get("frame") === "1",
+      };
+      let targetHour = params.has("hour") ? Number(params.get("hour")) : R.NOW;
+      if (!Number.isFinite(targetHour)) targetHour = R.NOW;
+      targetHour = Math.max(0, Math.min(R.LAST, targetHour));
+      let shownHour = targetHour;
+      let scrubbed = params.has("hour") && Math.abs(targetHour - R.NOW) > 0.45;
+      let hourV = 0;
+      let dragging = false;
+      let sparkPin = null;
+      let hourSpan = null;
+      let colorTau = 0.083;
+      let disp = null;
+      let lastStep = null;
+      let lastCat = null;
+      let heroShown = null;
+      let copyKey = "";
+      let tintCat = null;
+      let tintHold = false;
+      let tintFade = !state.frame && !state.reduce;
+      const digits = [0, 1, 2].map(() => ({ pos: 0, v: 0, goal: 0, digit: null }));
+      const canvas = document.getElementById("haze");
+      const ctx = canvas.getContext("2d");
+      const rngState = { s: 20261029 };
+      function rnd() {
+        rngState.s = (rngState.s * 16807) % 2147483647;
+        return rngState.s / 2147483647;
+      }
+      const motes = Array.from({ length: 80 }, () => ({
+        x: rnd(),
+        y: rnd(),
+        s: 0.6 + rnd() * 1.6,
+        p: rnd() * 6.28,
+      }));
+
+      const els = {
+        kicker: document.getElementById("kicker"),
+        headline: document.getElementById("headline"),
+        advice: document.getElementById("advice"),
+        digits: document.getElementById("digits"),
+        cat: document.getElementById("cat"),
+        pat: document.getElementById("pat"),
+        dom: document.getElementById("dom"),
+        hero: document.getElementById("hero"),
+        timeline: document.getElementById("timeline"),
+        play: document.getElementById("play-label"),
+        backNow: document.getElementById("back-now"),
+        reminder: document.getElementById("reminder"),
+        review: document.getElementById("review"),
+        log: document.getElementById("haptic-log"),
+        pip: document.getElementById("haptic-pip"),
+        detailName: document.getElementById("detail-name"),
+        detailValue: document.getElementById("detail-value"),
+        detailTrend: document.getElementById("detail-trend"),
+        detailWhy: document.getElementById("detail-why"),
+        spectrum: document.getElementById("spectrum"),
+        spectrumDot: document.getElementById("spectrum-dot"),
+      };
+
+      function syncClasses() {
+        document.body.classList.toggle("reduce", state.reduce);
+        document.body.classList.toggle("ax5", state.ax5);
+        document.body.classList.toggle("more-contrast", state.contrast);
+        document.body.classList.toggle("view-detail", state.view === "detail");
+        document.body.classList.toggle("view-widgets", state.view === "widgets");
+        document.body.classList.toggle("frame", state.frame);
+        document.body.dataset.cvd = state.cvd;
+        document.getElementById("back").hidden = state.view !== "detail";
+        document.getElementById("open-widgets").textContent = state.view === "widgets" ? "Home" : "Widgets";
+        document.querySelectorAll("[data-cvd]").forEach((b) => {
+          b.setAttribute("aria-pressed", String(b.dataset.cvd === state.cvd));
+        });
+        document.getElementById("opt-motion").setAttribute("aria-pressed", String(state.reduce));
+        document.getElementById("opt-type").setAttribute("aria-pressed", String(state.ax5));
+        document.getElementById("opt-contrast").setAttribute("aria-pressed", String(state.contrast));
+        document.querySelectorAll("[data-poll]").forEach((b) => {
+          b.setAttribute("aria-selected", String(b.dataset.poll === state.pollutant));
+        });
+        els.reminder.textContent = state.reminder ? "Reminder set · " + state.reminder : "";
+      }
+
+      function clampShown() {
+        return Math.max(0, Math.min(R.LAST, shownHour));
+      }
+      function pinHourSpan(hour) {
+        const c = Math.max(0, Math.min(R.LAST, hour));
+        const end = Math.min(R.LAST, Math.max(6, c + 3));
+        hourSpan = [end - 6, end];
+      }
+      function viewBounds() {
+        const hour = clampShown();
+        if (state.range === "week") return [0, 165];
+        if (state.range === "hour") {
+          if (!hourSpan) pinHourSpan(hour);
+          return hourSpan;
+        }
+        const day0 = Math.floor(hour / 24) * 24;
+        return [day0, Math.min(R.LAST, day0 + 23)];
+      }
+      function snap(hour) {
+        const h = Math.max(0, Math.min(R.LAST, hour));
+        if (state.range === "week") return Math.max(0, Math.min(165, Math.round(h / 3) * 3));
+        if (state.range === "hour") return Math.round(h * 4) / 4;
+        const day0 = Math.floor(h / 24) * 24;
+        return Math.max(day0, Math.min(Math.min(R.LAST, day0 + 23), Math.round(h)));
+      }
+      function formatClock(h) {
+        if (state.range !== "hour") return R.formatHour(h);
+        const hour = ((h % 24) + 24) % 24;
+        const whole = Math.floor(hour + 1e-6);
+        const min = Math.round((hour - whole) * 60) % 60;
+        const ap = whole < 12 ? "AM" : "PM";
+        const h12 = whole % 12 || 12;
+        return h12 + ":" + String(min).padStart(2, "0") + " " + ap;
+      }
+      function formatWhen(hour) {
+        const dayIndex = Math.min(6, Math.floor(Math.max(0, hour) / 24));
+        return R.DAY_NAMES[dayIndex] + " " + formatClock(hour);
+      }
+      function valueText(hour) {
+        const aqi = Math.round(R.aqiAt(hour));
+        return formatWhen(hour) + ", AQI " + aqi + ", " + R.CATS[R.category(aqi)].label;
+      }
+      function haptic(kind, label) {
+        if (state.frame) return;
+        const li = document.createElement("li");
+        li.textContent = kind + (label ? " · " + label : "");
+        els.log.prepend(li);
+        while (els.log.children.length > 6) els.log.lastChild.remove();
+        els.pip.classList.remove("pulse");
+        void els.pip.offsetWidth;
+        els.pip.classList.add("pulse");
+        if (navigator.vibrate) navigator.vibrate(kind === "impact" ? 18 : kind === "success" ? 12 : 8);
+      }
+      function setRange(next) {
+        if (state.range === next) return;
+        state.range = next;
+        hourSpan = null;
+        heroShown = null;
+        if (next === "hour") pinHourSpan(targetHour);
+        syncClasses();
+      }
+      function jumpTo(hour) {
+        targetHour = snap(hour);
+        colorTau = 0.2;
+        if (state.range === "hour") pinHourSpan(targetHour);
+        if (state.reduce || state.frame) {
+          shownHour = targetHour;
+          hourV = 0;
+        }
+      }
+      function stepSpring(st, target, dt, response, damping) {
+        const wn = (2 * Math.PI) / response;
+        const k = wn * wn;
+        const c = 2 * damping * wn;
+        st.v += (-k * (st.pos - target) - c * st.v) * dt;
+        st.pos += st.v * dt;
+      }
+
+      function buildWheels() {
+        els.digits.replaceChildren();
+        for (let i = 0; i < 3; i++) {
+          const wheel = document.createElement("div");
+          wheel.className = "wheel";
+          const strip = document.createElement("div");
+          strip.className = "strip";
+          for (let d = 0; d < 4; d++) strip.appendChild(document.createElement("i"));
+          wheel.append(strip);
+          els.digits.append(wheel);
+        }
+      }
+      function drawDigits(aqi, dt) {
+        const n = Math.max(0, Math.min(999, Math.round(aqi)));
+        const text = String(n).padStart(3, "0");
+        const prev = digits.lastN;
+        const dir = prev == null ? 0 : n > prev ? 1 : n < prev ? -1 : 0;
+        els.digits.querySelectorAll(".wheel").forEach((wheel, i) => {
+          const digit = Number(text[i]);
+          const lead = i === 0 ? n < 100 : i === 1 ? n < 10 : false;
+          const desired = lead ? 0 : digit;
+          const st = digits[i];
+          if (state.reduce || state.frame) {
+            st.pos = desired;
+            st.v = 0;
+            st.goal = desired;
+            st.digit = desired;
+          } else if (st.digit !== desired) {
+            const current = ((st.pos % 10) + 10) % 10;
+            let delta = desired - current;
+            if (dir > 0 && delta < 0) delta += 10;
+            if (dir < 0 && delta > 0) delta -= 10;
+            if (dir === 0 && delta > 5) delta -= 10;
+            if (dir === 0 && delta < -5) delta += 10;
+            st.goal = st.pos + delta;
+            st.digit = desired;
+          }
+          if (!state.reduce && !state.frame) {
+            const tau = dragging ? 0.1 : 0.22;
+            st.pos += ((st.goal || 0) - st.pos) * (1 - Math.exp(-dt / tau));
+            st.v = 0;
+          }
+          const base = Math.floor(st.pos);
+          const frac = st.pos - base;
+          const h = wheel.clientHeight || 48;
+          const settled = Math.abs(st.pos - (st.goal || 0)) < 0.2;
+          wheel.querySelectorAll("i").forEach((cell, k) => {
+            const d = ((base - 1 + k) % 10 + 10) % 10;
+            cell.textContent = lead && settled ? "" : String(d);
+          });
+          wheel.querySelector(".strip").style.transform = "translateY(" + -(1 + frac) * h + "px)";
+          wheel.classList.toggle("off", lead && settled);
+        });
+        digits.lastN = n;
+      }
+
+      function pointsFor(t0, t1, step) {
+        const out = [];
+        for (let h = t0; h <= t1 + 1e-6; h += step) out.push(Math.min(t1, h));
+        return out;
+      }
+      function morph(prev, target, dt) {
+        if (!prev || prev.length !== target.length || state.reduce || state.frame) return target.slice();
+        const k = 1 - Math.exp(-dt / 0.16);
+        return prev.map((v, i) => v + (target[i] - v) * k);
+      }
+      // LAYOUT-START
+      // Level names own the right gutter. Advances are Source Sans 3 at 10px weight 650
+      // and Source Serif 4 digits at 13px weight 750, optical size 14. The halo is half
+      // of the 2.5px label stroke, so the curve, rule, dot, and readout stay clear of it.
+      function layoutForecast(spec) {
+        const w = spec.w;
+        const h = spec.h;
+        const t0 = spec.t0;
+        const t1 = spec.t1;
+        const samples = spec.samples;
+        const hours = spec.hours;
+        const scrubbed = !!spec.scrubbed;
+        const thresholds = !!spec.thresholds;
+        const labelAdvance = {
+          Good: 23.05,
+          Moderate: 41.78,
+          USG: 18.43,
+          Unhealthy: 45.49,
+          "Very Unhealthy": 67.01,
+          Hazardous: 46.69,
+        };
+        const digitAdvance = 7.45;
+        const labelInset = 8;
+        const labelHalo = 1.25;
+        const boxPad = 1;
+        const gutterGap = 8;
+        let widest = 0;
+        for (const name in labelAdvance) widest = Math.max(widest, labelAdvance[name]);
+        const readoutReach = (3 * digitAdvance) / 2 + boxPad;
+        const gutter = Math.ceil(labelInset + widest + labelHalo + boxPad + readoutReach + gutterGap);
+        const plotLeft = 10;
+        const plotRight = thresholds ? w - gutter : w - 10;
+        const xOf = (hr) =>
+          plotLeft + ((hr - t0) / Math.max(0.001, t1 - t0)) * Math.max(1, plotRight - plotLeft);
+        const baseY = h - 4;
+        const plotTop = 18;
+        const plotBot = Math.max(plotTop + 48, baseY - 30);
+        const maxV = Math.max(10, ...(samples.length ? samples : [0])) * 1.16;
+        const yOf = (v) => plotTop + (1 - Math.max(0, v) / maxV) * (plotBot - plotTop);
+        const hClamp = Math.max(t0, Math.min(t1, spec.hour));
+        const hx = xOf(hClamp);
+        let pointY = samples.length ? yOf(samples[0]) : plotTop;
+        for (let i = 0; i < samples.length - 1; i++) {
+          if (hClamp >= hours[i] && hClamp <= hours[i + 1]) {
+            const span = hours[i + 1] - hours[i] || 1;
+            const t = (hClamp - hours[i]) / span;
+            pointY = yOf(samples[i]) + (yOf(samples[i + 1]) - yOf(samples[i])) * t;
+          }
+        }
+        const markerR = scrubbed ? 6 : 8;
+        const marker = { l: hx - markerR, t: pointY - markerR, r: hx + markerR, b: pointY + markerR };
+        const rule = scrubbed ? { l: hx - 0.5, t: 0, r: hx + 0.5, b: baseY } : null;
+        const edges = [50, 100, 150, 200, 300];
+        const bandNames = [
+          { lo: 0, hi: 50, label: "Good" },
+          { lo: 50, hi: 100, label: "Moderate" },
+          { lo: 100, hi: 150, label: "USG" },
+          { lo: 150, hi: 200, label: "Unhealthy" },
+          { lo: 200, hi: 300, label: "Very Unhealthy" },
+          { lo: 300, hi: 500, label: "Hazardous" },
+        ];
+        const rules = [];
+        const labels = [];
+        const labelBoxes = [];
+        if (thresholds) {
+          for (const edge of edges) {
+            if (edge >= maxV) continue;
+            rules.push({ y: yOf(edge) });
+          }
+          for (const band of bandNames) {
+            const hi = Math.min(band.hi, maxV);
+            if (hi - band.lo < 8) continue;
+            const yTop = yOf(hi);
+            const yBot = yOf(band.lo);
+            if (yBot - yTop < 12) continue;
+            const yMid = (yTop + yBot) / 2;
+            const anchor = w - labelInset;
+            labels.push({ text: band.label, x: anchor, y: yMid });
+            const adv = labelAdvance[band.label];
+            labelBoxes.push({
+              name: band.label,
+              l: anchor - adv - labelHalo - boxPad,
+              r: anchor + labelHalo + boxPad,
+              t: yMid - 8,
+              b: yMid + 8,
+            });
+          }
+        }
+        const readText = String(Math.round(spec.aqi));
+        const half = (readText.length * digitAdvance) / 2 + boxPad;
+        let readX = hx;
+        if (labelBoxes.length) {
+          let labelLeft = labelBoxes[0].l;
+          for (let i = 1; i < labelBoxes.length; i++) labelLeft = Math.min(labelLeft, labelBoxes[i].l);
+          readX = Math.min(readX, labelLeft - gutterGap - half);
+        }
+        readX = Math.max(18, Math.min(w - 18, readX));
+        const readY = pointY > 34 ? pointY - 14 : pointY + 20;
+        const readout = { l: readX - half, t: readY - 10, r: readX + half, b: readY + 2 };
+        return {
+          xOf,
+          yOf,
+          baseY,
+          plotTop,
+          plotLeft,
+          plotRight,
+          gutter,
+          ruleEnd: Math.max(24, w - gutter),
+          hx,
+          pointY,
+          readX,
+          readY,
+          readText,
+          rules,
+          labels,
+          boxes: { labels: labelBoxes, marker, rule, readout },
+        };
+      }
+      // LAYOUT-END
+
+      function drawChart(svg, shown, t0, t1, hour, dt) {
+        const w = svg.clientWidth || 354;
+        const h = svg.clientHeight || 220;
+        svg.setAttribute("viewBox", "0 0 " + w + " " + h);
+        const step = state.range === "week" ? 3 : state.range === "hour" ? 0.25 : 1;
+        const hours = pointsFor(t0, t1, step);
+        const key = state.pollutant;
+        const values = hours.map((hr) => R.seriesAt(key, hr));
+        const next = morph(shown, values, dt);
+        const hClamp = Math.max(t0, Math.min(t1, hour));
+        const layout = layoutForecast({
+          w,
+          h,
+          t0,
+          t1,
+          hour: hClamp,
+          samples: next,
+          hours,
+          scrubbed,
+          aqi: R.aqiAt(hClamp),
+          thresholds: key === "aqi",
+        });
+        const xOf = layout.xOf;
+        const yOf = layout.yOf;
+        const baseY = layout.baseY;
+        const plotTop = layout.plotTop;
+        if (key === "aqi") {
+          els.timeline.style.left = layout.plotLeft + "px";
+          els.timeline.style.right = w - layout.plotRight + "px";
+        } else {
+          els.timeline.style.left = "0";
+          els.timeline.style.right = "0";
+        }
+        const pts = next.map((v, i) => ({ x: xOf(hours[i]), y: yOf(v), v, hour: hours[i] }));
+        function pathOf(points) {
+          if (points.length < 2) return "";
+          return points.map((p, i) => (i ? "L" : "M") + p.x.toFixed(1) + " " + p.y.toFixed(1)).join("");
+        }
+        function pushPt(out, p) {
+          const last = out[out.length - 1];
+          if (last && Math.abs(last.x - p.x) < 0.05 && Math.abs(last.hour - p.hour) < 1e-4) return;
+          out.push(p);
+        }
+        function atHour(a, b, mark) {
+          const t = (mark - a.hour) / (b.hour - a.hour || 1);
+          return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, v: a.v + (b.v - a.v) * t, hour: mark };
+        }
+        function sliceLine(from, to) {
+          const out = [];
+          for (let i = 0; i < pts.length; i++) {
+            const p = pts[i];
+            const prev = i > 0 ? pts[i - 1] : null;
+            if (prev && prev.hour < from && p.hour > from) pushPt(out, atHour(prev, p, from));
+            if (p.hour >= from - 1e-6 && p.hour <= to + 1e-6) pushPt(out, p);
+            if (prev && prev.hour < to && p.hour > to) pushPt(out, atHour(prev, p, to));
+          }
+          return out;
+        }
+        let bands =
+          '<defs><linearGradient id="' + svg.id + '-fade" x1="0" y1="0" x2="0" y2="1">' +
+          '<stop offset="0" stop-color="#ffffff" stop-opacity="0.12"/>' +
+          '<stop offset="1" stop-color="#ffffff" stop-opacity="0"/></linearGradient></defs>';
+        function areaOf(points, opacity) {
+          if (!points || points.length < 2) return "";
+          const d = pathOf(points) +
+            " L" + points[points.length - 1].x.toFixed(1) + " " + baseY.toFixed(1) +
+            " L" + points[0].x.toFixed(1) + " " + baseY.toFixed(1) + " Z";
+          const fade = opacity ? ' opacity="' + opacity + '"' : "";
+          return '<path class="line-fill" d="' + d + '" fill="url(#' + svg.id + '-fade)"' + fade + "/>";
+        }
+        let soft = "";
+        if (scrubbed) {
+          soft = areaOf(sliceLine(t0 - 1, hClamp), "") + areaOf(sliceLine(hClamp, t1 + 1), "0.35");
+        } else {
+          soft = areaOf(pts, "");
+        }
+        let shades = "";
+        for (const win of R.decisionWindows()) {
+          const a = Math.max(t0, win.hour);
+          const b = Math.min(t1, win.end);
+          if (b <= a) continue;
+          shades +=
+            '<rect class="window-shade" x="' + xOf(a).toFixed(1) + '" y="0" width="' +
+            Math.max(1, xOf(b) - xOf(a)).toFixed(1) + '" height="' + baseY.toFixed(1) +
+            '" fill="rgba(255,255,255,0.08)"/>';
+        }
+        const dash = { aqi: "", pm: "2 3", o3: "5 4", no2: "1.5 4", smoke: "10 3" }[key] || "";
+        const dashAttr = dash ? ' stroke-dasharray="' + dash + '"' : "";
+        function lineOf(points, cls, opacity) {
+          const d = pathOf(points);
+          if (!d) return "";
+          const fade = opacity ? ' opacity="' + opacity + '"' : "";
+          return '<path class="' + cls + '" d="' + d + '"' + dashAttr + fade + "></path>";
+        }
+        let lines = "";
+        if (scrubbed) {
+          lines += lineOf(sliceLine(t0 - 1, Math.min(R.NOW, hClamp)), "line", "");
+          if (hClamp > R.NOW) lines += lineOf(sliceLine(R.NOW, hClamp), "line forecast-band", "0.55");
+          lines += lineOf(sliceLine(hClamp, t1 + 1), "line", "0.35");
+        } else {
+          lines += lineOf(sliceLine(t0 - 1, R.NOW), "line", "");
+          lines += lineOf(sliceLine(R.NOW, t1 + 1), "line forecast-band", "0.55");
+        }
+        const edge =
+          '<rect class="level-band" x="0" y="' + baseY.toFixed(1) + '" width="' + w.toFixed(1) +
+          '" height="4" fill="var(--level)"/>';
+        const hx = layout.hx;
+        const y = layout.pointY;
+        let marks = "";
+        if (scrubbed) {
+          // 12pt across, in the scrubbed hour's level color. The rule is 1pt and stays white.
+          marks += '<line class="scrub-rule" x1="' + hx.toFixed(1) + '" y1="0" x2="' + hx.toFixed(1) +
+            '" y2="' + baseY.toFixed(1) + '" stroke="currentColor" stroke-width="1"/>';
+          marks += '<circle class="scrub-dot" cx="' + hx.toFixed(1) + '" cy="' + y.toFixed(1) +
+            '" r="6" fill="var(--level)"/>';
+        } else {
+          marks += '<circle cx="' + hx.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="8" fill="currentColor"/>';
+          marks += '<circle cx="' + hx.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="3" fill="var(--field)"/>';
+        }
+        const readX = layout.readX;
+        const readY = layout.readY;
+        marks += '<text class="scrub-aqi" x="' + readX.toFixed(1) + '" y="' + readY.toFixed(1) + '" text-anchor="middle" fill="currentColor">' + layout.readText + "</text>";
+        const labelX = Math.max(36, Math.min(w - 72, hx));
+        els.play.style.left = labelX + "px";
+        els.play.textContent = formatWhen(hour);
+        let labels = "";
+        const nowIn = R.NOW >= t0 - 1e-6 && R.NOW <= t1 + 1e-6;
+        const nowX = nowIn ? xOf(R.NOW) : null;
+        let peakI = 0;
+        for (let i = 1; i < pts.length; i++) if (pts[i].v > pts[peakI].v) peakI = i;
+        function axisLabel(text, x, yLabel) {
+          const cx = Math.max(18, Math.min(w - 18, x));
+          return '<text class="chart-label" x="' + cx.toFixed(1) + '" y="' + yLabel.toFixed(1) +
+            '" text-anchor="middle" fill="rgba(255,255,255,0.9)" font-size="11" font-weight="650">' + text + "</text>";
+        }
+        if (pts.length) {
+          const peakX = pts[peakI].x;
+          const yLo = h - 8;
+          const yHi = h - 20;
+          const stack = nowX != null && Math.abs(nowX - peakX) < 42;
+          if (nowX != null) labels += axisLabel("Now", nowX, yLo);
+          labels += axisLabel("Peak", peakX, stack ? yHi : yLo);
+        }
+        if (state.range === "week" && R.HORIZON >= t0 - 1e-6 && R.HORIZON <= t1 + 1e-6) {
+          const x = xOf(R.HORIZON);
+          labels += '<line class="horizon-mark" x1="' + x.toFixed(1) + '" y1="14" x2="' + x.toFixed(1) +
+            '" y2="' + baseY.toFixed(1) + '" stroke="currentColor" stroke-width="1" stroke-dasharray="2 3" opacity="0.55"/>';
+          const lx = Math.max(4, Math.min(w - 42, x + 6));
+          labels += '<text class="chart-label horizon-mark" x="' + lx.toFixed(1) +
+            '" y="22" text-anchor="start" fill="rgba(255,255,255,0.9)" font-size="11" font-weight="650">5-day</text>';
+        }
+        let thresholds = "";
+        if (key === "aqi") {
+          for (const rule of layout.rules) {
+            thresholds += '<line class="threshold-line" x1="8" y1="' + rule.y.toFixed(1) +
+              '" x2="' + layout.ruleEnd.toFixed(1) + '" y2="' + rule.y.toFixed(1) +
+              '" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.72"/>';
+          }
+          for (const label of layout.labels) {
+            thresholds += '<text class="threshold-label" x="' + label.x.toFixed(1) + '" y="' + label.y.toFixed(1) +
+              '" text-anchor="end" dominant-baseline="middle" fill="#FFFFFF" stroke="var(--field)" stroke-width="2.5" paint-order="stroke" font-family="Source Sans 3, sans-serif" font-size="10" font-weight="650">' +
+              label.text + "</text>";
+          }
+        }
+        svg.innerHTML = bands + soft + shades + thresholds + lines + edge + marks + labels;
+        const zoom = state.range === "week" ? "7-day" : state.range === "hour" ? "Hour" : "Day";
+        svg.setAttribute("aria-label", zoom + " air quality curve");
+        return next;
+      }
+
+      function syncScrub() {
+        document.body.classList.toggle("scrubbing", scrubbed);
+      }
+      function renderCopy(hour, catId) {
+        const lead = R.forecastLead();
+        const atLead = !scrubbed;
+        const key = (atLead ? "lead" : Math.round(hour)) + ":" + state.pollutant + ":" + catId;
+        if (key === copyKey) return;
+        copyKey = key;
+        els.kicker.textContent = atLead ? lead.when : formatWhen(hour);
+        els.headline.textContent = atLead ? lead.title : "";
+        els.advice.textContent = atLead ? lead.body : "";
+        els.cat.textContent = R.CATS[catId].label;
+        els.pat.className = "pat pat-" + catId;
+        els.dom.textContent = atLead ? R.dominant(hour) : "";
+        const story = R.pollutantStory(state.pollutant, hour);
+        els.detailName.textContent = story.name;
+        els.detailValue.textContent = story.value + " · " + story.trend;
+        els.detailTrend.textContent = story.trend === "rising" ? "Still climbing." : story.trend === "falling" ? "Easing off." : "Holding.";
+        els.detailWhy.textContent = story.why;
+      }
+
+      let widgetKey = "";
+      function renderWidgets(aqi, hour) {
+        const cat = R.CATS[R.category(aqi)];
+        const n = String(Math.round(aqi));
+        const key = n + cat.label + hour.toFixed(2) + state.pollutant;
+        document.getElementById("w-num").textContent = n;
+        document.getElementById("w-cat").textContent = cat.label;
+        document.getElementById("w-circ").textContent = n;
+        document.getElementById("w-inline").textContent = "Boise · " + n + " · " + cat.label;
+        document.getElementById("w-med-num").textContent = n;
+        document.getElementById("w-med-best").textContent = R.decisionWindows()[1].label;
+        document.getElementById("w-live-num").textContent = n;
+        const arrow = { up: "↑", down: "↓", flat: "→" }[R.trend(hour)];
+        document.getElementById("w-live-trend").textContent = arrow;
+        document.getElementById("w-live-note").textContent = arrow + "  " + R.outlook(hour);
+        if (key === widgetKey) return;
+        widgetKey = key;
+        const parts = [];
+        for (let d = 0; d < 5; d++) {
+          let max = 0;
+          for (let h = 0; h < 24; h++) max = Math.max(max, R.aqiAt(d * 24 + h));
+          parts.push(R.DAY_NAMES[d] + " " + R.CATS[R.category(max)].label);
+        }
+        document.getElementById("w-horizon").textContent = parts.join(" · ");
+        const spark = document.getElementById("w-spark");
+        const t0 = sparkPin != null ? sparkPin : Math.max(0, Math.min(R.LAST - 11, Math.floor(hour) - 2));
+        const vals = Array.from({ length: 12 }, (_, i) => R.aqiAt(Math.min(R.LAST, t0 + i)));
+        const maxV = Math.max(50, ...vals);
+        const d = vals.map((v, i) => (i ? "L" : "M") + (i * 28 + 4) + " " + (48 - (v / maxV) * 40)).join("");
+        const local = Math.max(0, Math.min(11, hour - t0));
+        const px = local * 28 + 4;
+        const py = 48 - (Math.max(0, Math.min(maxV, aqi)) / maxV) * 40;
+        spark.setAttribute("viewBox", "0 0 320 52");
+        spark.innerHTML =
+          '<rect class="chart-field" x="0" y="0" width="320" height="52" rx="8" fill="var(--chart)"/>' +
+          '<path class="line" d="' + d + '" /><circle cx="' + px.toFixed(1) + '" cy="' + py.toFixed(1) + '" r="4" fill="currentColor"/>';
+      }
+
+      function drawHaze(paint, pm) {
+        if (canvas.width !== 390) {
+          canvas.width = 390;
+          canvas.height = 844;
+        }
+        ctx.clearRect(0, 0, 390, 844);
+        if (state.reduce || state.contrast) return;
+        const count = Math.round(8 + Math.min(72, pm / 4));
+        const t = shownHour * 3 + (state.frame ? 0 : performance.now() / 1000);
+        ctx.fillStyle = paint.inkHex;
+        for (let i = 0; i < count; i++) {
+          const p = motes[i];
+          const x = (p.x + t * 0.012 * (1 + (i % 5) * 0.1)) % 1;
+          const y = (p.y + Math.sin(t * 0.25 + p.p) * 0.01 + 1) % 1;
+          ctx.globalAlpha = 0.1 + Math.min(0.32, pm / 420);
+          ctx.beginPath();
+          ctx.arc(x * 390, y * 844, p.s + Math.min(2.4, pm / 180), 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+      }
+
+      let last = performance.now();
+      function frame(now) {
+        const dt = Math.min(0.032, (now - last) / 1000 || 0.016);
+        last = now;
+        if (!dragging) {
+          if (state.reduce || state.frame) {
+            shownHour = targetHour;
+            hourV = 0;
+          } else {
+            const st = { pos: shownHour, v: hourV };
+            stepSpring(st, targetHour, dt, 0.35, 0.85);
+            shownHour = st.pos;
+            hourV = st.v;
+            if (Math.abs(shownHour - targetHour) < 0.002 && Math.abs(hourV) < 0.02) {
+              shownHour = targetHour;
+              hourV = 0;
+            }
+          }
+        }
+        const hour = clampShown();
+        const aqi = R.aqiAt(hour);
+        const catId = R.category(aqi);
+        const targetColor = state.reduce ? R.oklchAt(R.CAT_AQI[catId]) : R.oklchAt(aqi);
+        if (!disp || state.frame) disp = { L: targetColor.L, C: targetColor.C, H: targetColor.H };
+        const tau = state.reduce ? 0.2 : colorTau;
+        const k = 1 - Math.exp(-dt / tau);
+        disp.L += (targetColor.L - disp.L) * k;
+        disp.C += (targetColor.C - disp.C) * k;
+        disp.H += (targetColor.H - disp.H) * k;
+        const sky = R.skyFrom(disp.L, disp.C, disp.H);
+        const paint = sky.mid;
+        const root = document.documentElement.style;
+        root.setProperty("--bg", paint.hex);
+        root.setProperty("--bg-top", sky.top.hex);
+        root.setProperty("--bg-bot", sky.bot.hex);
+        root.setProperty("--chart", sky.bot.hex);
+        root.setProperty("--ink", paint.inkHex);
+        if (!dragging && !tintHold) {
+          commitTint(R.category(R.aqiAt(targetHour)), tintFade);
+          tintFade = false;
+        }
+        const fieldCat = tintCat && R.LEVEL_TINT[tintCat] ? tintCat : catId;
+        // Read the computed color while the 600ms fade is moving, not only once it is frozen.
+        const fieldColor = fieldNow();
+        const accent = R.levelAccent(catId, fieldColor);
+        root.setProperty("--level", accent.hex);
+        document.getElementById("app-icon").style.background = accent.hex;
+        const fieldBytes = R.bytesFromColor(fieldColor) || R.bytesFromHex(R.LEVEL_TINT[fieldCat]);
+        const soft = R.soften(fieldBytes, [255, 255, 255], 4.7);
+        root.setProperty("--ink-soft", state.contrast ? "#FFFFFF" : R.hex(soft.bytes));
+        const pm = R.pmUgAt(hour);
+        root.setProperty("--grain", String(0.05 + Math.min(0.2, pm / 700)));
+        const voiceAqi = scrubbed ? aqi : R.aqiAt(R.dayPeak(R.NOW));
+        root.setProperty("--wght", String(Math.round(460 + (Math.min(500, aqi) / 500) * 320)));
+        root.setProperty("--wght-voice", String(Math.round(460 + (Math.min(500, voiceAqi) / 500) * 320)));
+        root.setProperty("--breath", (6.4 - Math.min(500, aqi) / 500 * 4).toFixed(2) + "s");
+        const spectrumT = Math.max(0, Math.min(500, aqi)) / 500;
+        const spectrumW = els.spectrum.clientWidth || 0;
+        const spectrumX = spectrumW > 0 ? Math.max(8, Math.min(spectrumW - 8, spectrumT * spectrumW)) : 8;
+        els.spectrumDot.style.left = spectrumX + "px";
+        els.spectrum.setAttribute(
+          "aria-label",
+          "AQI " + Math.round(aqi) + ", " + R.CATS[catId].label + ". Green through maroon, no purple.",
+        );
+        root.setProperty("--haze-blur", (aqi < 90 ? 0 : Math.min(5, ((aqi - 90) / 410) * 5)).toFixed(2) + "px");
+
+        const step = snap(hour);
+        syncScrub();
+        renderCopy(hour, catId);
+        drawDigits(aqi, dt);
+        const [t0, t1] = viewBounds();
+        heroShown = drawChart(els.hero, heroShown, t0, t1, hour, dt);
+        els.backNow.hidden = !scrubbed || Math.abs(hour - R.NOW) < 0.45;
+        if (lastStep === null) {
+          lastStep = step;
+          lastCat = catId;
+        } else if (Math.abs(step - lastStep) > 0.01) {
+          const peak = R.dayPeak(step);
+          if (Math.abs(step - peak) < 0.01) haptic("impact", "peak");
+          else if (catId !== lastCat) haptic("impact", R.CATS[catId].label);
+          else haptic("selection", formatWhen(step));
+          lastStep = step;
+          lastCat = catId;
+        }
+        const spoken = Math.round(hour);
+        els.timeline.setAttribute("aria-valuemax", state.range === "week" ? "165" : state.range === "hour" ? "167" : "23");
+        els.timeline.setAttribute("aria-valuenow", String(state.range === "day" ? spoken % 24 : spoken));
+        els.timeline.setAttribute("aria-valuetext", valueText(spoken));
+        if (state.view === "widgets") renderWidgets(aqi, hour);
+        drawHaze(paint, pm);
+        if (!window.__round2.ready && fontsReady && els.hero.clientWidth > 0) window.__round2.ready = true;
+        requestAnimationFrame(frame);
+      }
+
+      function fieldNow() {
+        return getComputedStyle(document.documentElement).getPropertyValue("--field").trim() || "#000000";
+      }
+      function commitTint(catId, fade) {
+        if (dragging || tintHold) return;
+        const hex = R.LEVEL_TINT[catId];
+        if (!hex) return;
+        const root = document.documentElement;
+        if (tintCat === catId && !fade) return;
+        const animate = Boolean(fade) && !state.reduce && !state.frame;
+        if (animate) {
+          root.classList.remove("tint-fade");
+          root.style.setProperty("--field", tintCat == null ? "#000000" : fieldNow());
+          void root.offsetWidth;
+          root.classList.add("tint-fade");
+        } else {
+          root.classList.remove("tint-fade");
+        }
+        root.style.setProperty("--field", hex);
+        tintCat = catId;
+        const theme = document.querySelector('meta[name="theme-color"]');
+        if (theme) theme.content = hex;
+      }
+      function freezeTint() {
+        if (tintHold) return;
+        // The fade is still on, so this is the in-flight color. Dropping the class first snaps to the destination.
+        const now = fieldNow();
+        const root = document.documentElement;
+        root.classList.remove("tint-fade");
+        root.style.setProperty("--field", now);
+        tintHold = true;
+      }
+      function seekFrom(clientX, box) {
+        const rect = (box || els.timeline).getBoundingClientRect();
+        if (rect.width <= 0) return;
+        const t = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+        const [t0, t1] = viewBounds();
+        shownHour = t0 + t * (t1 - t0);
+        targetHour = shownHour;
+        hourV = 0;
+        dragging = true;
+        scrubbed = true;
+        colorTau = 0.083;
+        freezeTint();
+        syncScrub();
+      }
+      function endDrag() {
+        sparkPin = null;
+        if (!dragging) return;
+        dragging = false;
+        tintHold = false;
+        tintFade = !state.reduce && !state.frame;
+        const snapped = snap(shownHour);
+        targetHour = snapped;
+        colorTau = 0.2;
+        scrubbed = Math.abs(snapped - R.NOW) > 0.45;
+        syncScrub();
+        copyKey = "";
+        if (state.range === "hour") pinHourSpan(snapped);
+        if (snapped === R.NOW) haptic("success", "Released at now");
+      }
+
+      buildWheels();
+      if (state.range === "hour") pinHourSpan(targetHour);
+      syncClasses();
+      document.getElementById("place").addEventListener("click", () => {
+        state.view = "detail";
+        copyKey = "";
+        syncClasses();
+      });
+      document.getElementById("back").addEventListener("click", () => {
+        state.view = "home";
+        copyKey = "";
+        syncClasses();
+      });
+      document.getElementById("open-widgets").addEventListener("click", () => {
+        state.view = state.view === "widgets" ? "home" : "widgets";
+        syncClasses();
+      });
+      document.getElementById("open-review").addEventListener("click", () => {
+        els.review.hidden = false;
+      });
+      document.getElementById("review-close").addEventListener("click", () => {
+        els.review.hidden = true;
+      });
+      document.querySelectorAll("[data-poll]").forEach((b) =>
+        b.addEventListener("click", () => {
+          // A drag ends with a click on the chip where the finger went down. That click must not undo the chip under the pointer.
+          const row = document.getElementById("pollutant-row");
+          if (row.dataset.suppressClick === "1") {
+            row.dataset.suppressClick = "0";
+            return;
+          }
+          state.pollutant = b.dataset.poll;
+          copyKey = "";
+          syncClasses();
+        }),
+      );
+      document.querySelectorAll("[data-cvd]").forEach((b) =>
+        b.addEventListener("click", () => {
+          state.cvd = b.dataset.cvd;
+          syncClasses();
+        }),
+      );
+      document.getElementById("opt-motion").addEventListener("click", () => {
+        state.reduce = !state.reduce;
+        syncClasses();
+      });
+      document.getElementById("opt-type").addEventListener("click", () => {
+        state.ax5 = !state.ax5;
+        syncClasses();
+      });
+      document.getElementById("opt-contrast").addEventListener("click", () => {
+        state.contrast = !state.contrast;
+        syncClasses();
+      });
+      function openWindow(win) {
+        const already = state.armed === win.id && Math.abs(snap(targetHour) - win.hour) < 0.6;
+        setRange("day");
+        scrubbed = true;
+        syncScrub();
+        hourSpan = null;
+        heroShown = null;
+        jumpTo(win.hour);
+        state.armed = win.id;
+        if (already) state.reminder = win.label;
+        copyKey = "";
+        syncClasses();
+      }
+      const wins = R.decisionWindows();
+      document.getElementById("win-avoid").textContent = wins[0].label;
+      document.getElementById("win-best").textContent = wins[1].label;
+      document.getElementById("win-avoid").addEventListener("click", () => openWindow(wins[0]));
+      document.getElementById("win-best").addEventListener("click", () => openWindow(wins[1]));
+      els.backNow.addEventListener("click", () => {
+        dragging = false;
+        tintHold = false;
+        tintFade = !state.reduce && !state.frame;
+        scrubbed = false;
+        syncScrub();
+        hourSpan = null;
+        heroShown = null;
+        setRange("day");
+        jumpTo(R.NOW);
+        haptic("success", "Back at now");
+        copyKey = "";
+        syncClasses();
+      });
+      // One hour drives every screen. These drags write the same shownHour the curve uses.
+      // A flick ends before this. The scrub starts only if the finger is still down.
+      const SCRUB_HOLD_MS = 120;
+      function beginHour(hour) {
+        shownHour = Math.max(0, Math.min(R.LAST, hour));
+        targetHour = shownHour;
+        hourV = 0;
+        dragging = true;
+        scrubbed = true;
+        colorTau = 0.083;
+        freezeTint();
+        syncScrub();
+      }
+      function bindDeltaScrub(el, pxPerHour) {
+        let active = false;
+        let held = false;
+        let originX = 0;
+        let originHour = 0;
+        let lastX = 0;
+        let moved = false;
+        let pointerId = null;
+        let holdTimer = null;
+        function clearHold() {
+          if (holdTimer == null) return;
+          clearTimeout(holdTimer);
+          holdTimer = null;
+        }
+        function scrubDelta() {
+          const dx = lastX - originX;
+          if (!moved && Math.abs(dx) < 8) return;
+          moved = true;
+          if (!held) return;
+          beginHour(originHour + dx / pxPerHour);
+        }
+        el.addEventListener("pointerdown", (e) => {
+          if (e.button !== 0) return;
+          el.dataset.suppressClick = "0";
+          el.setPointerCapture(e.pointerId);
+          clearHold();
+          active = true;
+          held = false;
+          pointerId = e.pointerId;
+          originX = lastX = e.clientX;
+          originHour = shownHour;
+          moved = false;
+          const id = e.pointerId;
+          holdTimer = setTimeout(() => {
+            holdTimer = null;
+            if (!active || pointerId !== id) return;
+            held = true;
+            scrubDelta();
+          }, SCRUB_HOLD_MS);
+        });
+        el.addEventListener("pointermove", (e) => {
+          if (!active || e.pointerId !== pointerId) return;
+          lastX = e.clientX;
+          scrubDelta();
+        });
+        function finish(e, cancel) {
+          if (!active || e.pointerId !== pointerId) return;
+          active = false;
+          held = false;
+          clearHold();
+          if (!moved) return;
+          if (!cancel) el.dataset.suppressClick = "1";
+          endDrag();
+        }
+        el.addEventListener("pointerup", (e) => finish(e, false));
+        el.addEventListener("pointercancel", (e) => finish(e, true));
+        el.addEventListener("click", (e) => {
+          if (el.dataset.suppressClick !== "1") return;
+          el.dataset.suppressClick = "0";
+          e.preventDefault();
+          e.stopImmediatePropagation();
+        });
+      }
+      function bindSpanScrub(el, boundsFn) {
+        let active = false;
+        let held = false;
+        let pinned = null;
+        let lastX = 0;
+        let pointerId = null;
+        let holdTimer = null;
+        function clearHold() {
+          if (holdTimer == null) return;
+          clearTimeout(holdTimer);
+          holdTimer = null;
+        }
+        function seekSpan() {
+          if (!held || !pinned) return;
+          const rect = el.getBoundingClientRect();
+          if (rect.width <= 0) return;
+          const t = Math.max(0, Math.min(1, (lastX - rect.left) / rect.width));
+          beginHour(pinned[0] + t * (pinned[1] - pinned[0]));
+        }
+        el.addEventListener("pointerdown", (e) => {
+          if (e.button !== 0) return;
+          el.setPointerCapture(e.pointerId);
+          clearHold();
+          active = true;
+          held = false;
+          pinned = null;
+          pointerId = e.pointerId;
+          lastX = e.clientX;
+          const id = e.pointerId;
+          holdTimer = setTimeout(() => {
+            holdTimer = null;
+            if (!active || pointerId !== id) return;
+            held = true;
+            pinned = boundsFn();
+            seekSpan();
+          }, SCRUB_HOLD_MS);
+        });
+        el.addEventListener("pointermove", (e) => {
+          if (!active || e.pointerId !== pointerId) return;
+          lastX = e.clientX;
+          seekSpan();
+        });
+        function finish(e) {
+          if (!active || e.pointerId !== pointerId) return;
+          active = false;
+          held = false;
+          clearHold();
+          pinned = null;
+          endDrag();
+        }
+        el.addEventListener("pointerup", finish);
+        el.addEventListener("pointercancel", finish);
+      }
+      function pickPollutant(clientX, clientY) {
+        const buttons = document.querySelectorAll("#pollutant-row [data-poll]");
+        let best = null;
+        let bestDist = Infinity;
+        buttons.forEach((b) => {
+          const r = b.getBoundingClientRect();
+          const inside =
+            clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom;
+          const dx = clientX - (r.left + r.right) / 2;
+          const dy = clientY - (r.top + r.bottom) / 2;
+          const dist = inside ? -1 : dx * dx + dy * dy;
+          if (dist < bestDist) {
+            bestDist = dist;
+            best = b;
+          }
+        });
+        if (!best || state.pollutant === best.dataset.poll) return;
+        state.pollutant = best.dataset.poll;
+        copyKey = "";
+        syncClasses();
+      }
+      function bindPollutantDrag(el) {
+        let active = false;
+        el.addEventListener("pointerdown", (e) => {
+          if (e.button !== 0) return;
+          active = true;
+          el.dataset.suppressClick = "0";
+          pickPollutant(e.clientX, e.clientY);
+          try {
+            el.setPointerCapture(e.pointerId);
+          } catch {
+            // Capture can fail once the pointer is gone. Moves over the row still bubble.
+          }
+        });
+        el.addEventListener("pointermove", (e) => {
+          if (!active) return;
+          pickPollutant(e.clientX, e.clientY);
+        });
+        el.addEventListener("pointerup", (e) => {
+          if (!active) return;
+          active = false;
+          pickPollutant(e.clientX, e.clientY);
+          // pointerdown already chose the chip. The click that follows would snap back to where the gesture began.
+          el.dataset.suppressClick = "1";
+        });
+        el.addEventListener("pointercancel", () => {
+          active = false;
+        });
+      }
+      bindDeltaScrub(document.getElementById("forecast"), 32);
+      bindDeltaScrub(els.digits, 32);
+      bindDeltaScrub(document.getElementById("detail"), 32);
+      bindDeltaScrub(document.querySelector(".w-lock"), 28);
+      bindDeltaScrub(document.getElementById("w-small"), 28);
+      bindDeltaScrub(document.getElementById("w-live"), 28);
+      bindSpanScrub(document.getElementById("w-med"), () => {
+        const start = Math.max(0, Math.min(R.LAST - 11, Math.floor(clampShown()) - 2));
+        sparkPin = start;
+        return [start, Math.min(R.LAST, start + 11)];
+      });
+      bindSpanScrub(document.getElementById("w-horizon"), () => [0, R.HORIZON - 1]);
+      bindPollutantDrag(document.getElementById("pollutant-row"));
+      document.getElementById("w-small").addEventListener("click", () => {
+        const next = Math.max(0, Math.min(R.LAST, Math.round(shownHour) + 1));
+        setRange("day");
+        scrubbed = Math.abs(next - R.NOW) > 0.45;
+        syncScrub();
+        copyKey = "";
+        targetHour = next;
+        colorTau = 0.2;
+        if (state.reduce || state.frame) {
+          shownHour = next;
+          hourV = 0;
+        }
+      });
+
+      const pointers = new Map();
+      let pinch = null;
+      let scrubArm = null;
+      function clearScrubArm() {
+        if (!scrubArm) return;
+        clearTimeout(scrubArm.timer);
+        scrubArm = null;
+      }
+      function armScrub(pointerId, clientX) {
+        clearScrubArm();
+        scrubArm = {
+          pointerId,
+          x: clientX,
+          timer: setTimeout(() => {
+            const arm = scrubArm;
+            if (!arm || arm.pointerId !== pointerId) return;
+            scrubArm = null;
+            if (!pointers.has(pointerId) || pointers.size !== 1) return;
+            seekFrom(arm.x);
+          }, SCRUB_HOLD_MS),
+        };
+      }
+      els.timeline.addEventListener("pointerdown", (e) => {
+        try {
+          els.timeline.setPointerCapture(e.pointerId);
+        } catch {
+          // A pointer can end before capture. The hold still arms.
+        }
+        pointers.set(e.pointerId, e.clientX);
+        if (pointers.size === 1) armScrub(e.pointerId, e.clientX);
+        else clearScrubArm();
+      });
+      els.timeline.addEventListener("pointermove", (e) => {
+        if (!pointers.has(e.pointerId)) return;
+        pointers.set(e.pointerId, e.clientX);
+        if (pointers.size === 2) {
+          clearScrubArm();
+          const [a, b] = [...pointers.values()];
+          const dist = Math.abs(a - b);
+          const levels = ["week", "day", "hour"];
+          const index = levels.indexOf(state.range);
+          if (!pinch) pinch = dist;
+          else if (dist > pinch * 1.22 && index < 2) {
+            setRange(levels[index + 1]);
+            pinch = dist;
+          } else if (dist < pinch * 0.82 && index > 0) {
+            setRange(levels[index - 1]);
+            pinch = dist;
+          }
+          return;
+        }
+        pinch = null;
+        if (scrubArm && scrubArm.pointerId === e.pointerId) scrubArm.x = e.clientX;
+        if (dragging) seekFrom(e.clientX);
+      });
+      function forget(e) {
+        const armed = scrubArm && scrubArm.pointerId === e.pointerId;
+        pointers.delete(e.pointerId);
+        if (armed) clearScrubArm();
+        if (pointers.size < 2) pinch = null;
+        endDrag();
+      }
+      els.timeline.addEventListener("pointerup", forget);
+      els.timeline.addEventListener("pointercancel", forget);
+      els.timeline.addEventListener("keydown", (e) => {
+        const amount = state.range === "week" ? 3 : state.range === "hour" ? 0.25 : 1;
+        if (e.key === "ArrowRight" || e.key === "ArrowUp") {
+          scrubbed = true;
+          syncScrub();
+          jumpTo(snap(targetHour) + amount);
+          e.preventDefault();
+        }
+        if (e.key === "ArrowLeft" || e.key === "ArrowDown") {
+          scrubbed = true;
+          syncScrub();
+          jumpTo(snap(targetHour) - amount);
+          e.preventDefault();
+        }
+      });
+
+      window.__round2 = {
+        ready: false,
+        state,
+        setRange,
+        setHour(h) {
+          targetHour = h;
+          shownHour = h;
+          hourV = 0;
+          disp = null;
+          scrubbed = Math.abs(h - R.NOW) > 0.45;
+          syncScrub();
+          copyKey = "";
+        },
+        valueText: () => valueText(snap(shownHour)),
+      };
+      requestAnimationFrame(frame);
+
+    </script>
+  </body>
+</html>
