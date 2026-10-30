@@ -2,6 +2,18 @@
 
 Newest first.
 
+## 2026-10-29 — iOS v1 scope (docs only)
+
+- Company host in the plan is `bbcvc.dev`. Capacitor stays superseded by native SwiftUI.
+- v1 reads existing `GET /api/aqi` and `GET /api/geocode`, and adds location, threshold alerts, and a widget. The map moves to v1.1.
+- App name, bundle ID, data stack, and pricing stay open. See [appstore/ROADMAP.md](./appstore/ROADMAP.md).
+- No production, DNS, or Vercel changes.
+
+## 2026-09-29 — App Store reopen (docs only)
+
+- Audit and iOS plan under [appstore/](./appstore/): SwiftUI client, not a remote Capacitor WebView.
+- No production, DNS, or Vercel changes. PWA behavior unchanged.
+
 ## 2026-08-06 — v1.6 (stable close: lattice field, share, install)
 
 ### Product
