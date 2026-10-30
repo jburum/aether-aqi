@@ -367,6 +367,7 @@
       <p><b>Jason, 29 Oct.</b> The curve is heavier. Its ground is a solid tint of the current level, with no dot grid.</p>
       <p><b>Jason, 29 Oct.</b> Round 4. The field is one near-black level tint for the whole screen. Good #0E1A14, Moderate #1A180E, USG #1E140C, Unhealthy #1F0E0D, Very Unhealthy #1A0A0A, Hazardous #120707. It crossfades for 600ms on launch, on release, and on Now, and it does not change while the finger is down. The number is 120pt heavy tabular in the level color, with the level pill and one advice line under it. The level color is fit to the field color on screen through that fade, frozen or still moving, so the pill stays at 4.5:1.</p>
       <p><b>Jason, 29 Oct.</b> The scrub starts after a 120ms hold, so a quick swipe does not. A 12pt dot in that hour's level color and a 1pt rule sit on the finger. The chart to the right of the finger dims to 35%. The number rolls to the scrubbed value.</p>
+      <p><b>Jason, 30 Oct.</b> Round 5. The field is a clear tint of the level, not near-black. Good #005129, Moderate #463D00, USG #653400, Unhealthy #791B0C, Very Unhealthy #651818, Hazardous #50171B. White text stays at 4.5:1, including through the fade.</p>
       <h2>Accessibility</h2>
       <div class="row">
         <button type="button" id="opt-motion" aria-pressed="false">Reduce Motion</button>
@@ -766,13 +767,15 @@
           const c = oklchAt(aqi);
           return skyFrom(c.L, c.C, c.H);
         }
+        // Round 5. One tint per level, dark enough for white text at 4.5:1 and light
+        // enough that the hue reads. Green, gold, orange, red, deep red, maroon.
         const LEVEL_TINT = {
-          good: "#0E1A14",
-          moderate: "#1A180E",
-          usg: "#1E140C",
-          unhealthy: "#1F0E0D",
-          very: "#1A0A0A",
-          hazardous: "#120707",
+          good: "#005129",
+          moderate: "#463D00",
+          usg: "#653400",
+          unhealthy: "#791B0C",
+          very: "#651818",
+          hazardous: "#50171B",
         };
         function bytesFromHex(value) {
           return [1, 3, 5].map((i) => parseInt(value.slice(i, i + 2), 16));

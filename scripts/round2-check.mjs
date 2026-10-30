@@ -242,6 +242,11 @@ if (Round2) {
       soft.bytes.map((v) => v / 255),
     );
     if (softRatio < 4.5) fail(`secondary at ${ms}ms on ${css} is ${softRatio.toFixed(2)}:1`);
+    const whiteRatio = Round2.contrast(
+      bytes.map((v) => v / 255),
+      [1, 1, 1],
+    );
+    if (whiteRatio < 4.5) fail(`white text at ${ms}ms on ${css} is ${whiteRatio.toFixed(2)}:1`);
     return worst;
   }
   for (let i = 0; i < fadeEnds.length; i++) {
@@ -385,6 +390,15 @@ if (Round2) {
   if (html.includes("-dots") || html.includes("patternUnits")) fail("the dot grid is back on the chart");
   if (!html.includes("Its ground is a solid tint of the current level, with no dot grid.")) {
     fail("the brief should drop the dot grid");
+  }
+  for (const held of levels) {
+    const rgb = Round2.bytesFromHex(Round2.LEVEL_TINT[held]).map((v) => v / 255);
+    const whiteRatio = Round2.contrast(rgb, [1, 1, 1]);
+    if (whiteRatio < 4.5) fail(`${held} field white text is ${whiteRatio.toFixed(2)}:1`);
+    if (whiteRatio > 16) fail(`${held} field ${Round2.LEVEL_TINT[held]} is still near-black`);
+    const { C, H } = srgbToOklch(rgb[0], rgb[1], rgb[2]);
+    if (C < 0.06) fail(`${held} field chroma ${C.toFixed(3)} is too faint to read as the level`);
+    if (C > 0.02 && H >= 250 && H <= 345) fail(`${held} field hue ${H.toFixed(0)} is violet`);
   }
 }
 
