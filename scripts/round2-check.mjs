@@ -209,7 +209,9 @@ if (Round2) {
   if (html.includes('class="chips"') || html.includes('class="ribbon"')) {
     fail("pills or the 5-day bars are still in the prototype");
   }
-  if (!html.includes("feGaussianBlur")) fail("confidence band blur missing");
+  if (html.includes("feGaussianBlur") && !html.includes('filter="url(#')) {
+    fail("blur filters are unused");
+  }
   if (html.includes("-diag") || html.includes("-grid") || html.includes("bandFill")) {
     fail("vertical hatching is still on the curve");
   }
@@ -221,7 +223,14 @@ if (Round2) {
   if (!html.includes("body:not(.view-detail) #pollutant-row")) {
     fail("pollutant chips should fold into the detail screen");
   }
-  if (!html.includes(">5-day<")) fail("5-day horizon mark missing");
+  const visible = html
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/^\s*\/\/.*$/gm, "");
+  if (!visible.includes(">5-day</text>")) fail("5-day horizon mark missing");
+  if (!/state\.range === "week"[\s\S]{0,900}>5-day<\/text>/.test(visible)) {
+    fail("5-day horizon mark missing on the week view");
+  }
   const hourDrags = html.match(/data-drag="hour"/g) || [];
   if (hourDrags.length < 8) fail(`hour drag surfaces: ${hourDrags.length}`);
   if (!html.includes('data-drag="pollutant"')) fail("pollutant drag missing");

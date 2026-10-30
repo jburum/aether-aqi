@@ -161,7 +161,7 @@
       #hero .line { stroke: rgba(255, 255, 255, 0.9); stroke-width: 3.5; }
       body.more-contrast #hero .line { stroke-width: 6.5; }
       .chart-field { pointer-events: none; }
-      .chart-label, .line-fill, .window-shade, .level-band, .scrub-dot, .scrub-rule { pointer-events: none; }
+      .chart-label, .line-fill, .window-shade, .level-band, .horizon-mark, .scrub-dot, .scrub-rule { pointer-events: none; }
       .chart-label { font-size: 11px; font-weight: 650; }
       .scrub-aqi {
         font-family: "Source Serif 4", "Palatino Linotype", Palatino, Georgia, serif;
@@ -1043,12 +1043,6 @@
         const k = 1 - Math.exp(-dt / 0.16);
         return prev.map((v, i) => v + (target[i] - v) * k);
       }
-      function bandDefs(id) {
-        return (
-          '<defs><filter id="' + id + '-near" x="-15%" y="-40%" width="130%" height="180%"><feGaussianBlur stdDeviation="' + (state.reduce ? 0 : 1.6) + '"/></filter>' +
-          '<filter id="' + id + '-far" x="-20%" y="-50%" width="140%" height="200%"><feGaussianBlur stdDeviation="' + (state.reduce ? 0 : 5.5) + '"/></filter></defs>'
-        );
-      }
       function drawChart(svg, shown, t0, t1, hour, dt) {
         const w = svg.clientWidth || 354;
         const h = svg.clientHeight || 220;
@@ -1089,8 +1083,7 @@
           }
           return out;
         }
-        let bands = bandDefs(svg.id);
-        bands +=
+        let bands =
           '<defs><linearGradient id="' + svg.id + '-fade" x1="0" y1="0" x2="0" y2="1">' +
           '<stop offset="0" stop-color="#ffffff" stop-opacity="0.12"/>' +
           '<stop offset="1" stop-color="#ffffff" stop-opacity="0"/></linearGradient></defs>';
@@ -1165,7 +1158,6 @@
         const labelX = Math.max(36, Math.min(w - 72, hx));
         els.play.style.left = labelX + "px";
         els.play.textContent = formatWhen(hour);
-        // Now and Peak are the only chart labels. The horizon is not labeled (>5-day<).
         let labels = "";
         const nowIn = R.NOW >= t0 - 1e-6 && R.NOW <= t1 + 1e-6;
         const nowX = nowIn ? xOf(R.NOW) : null;
@@ -1183,6 +1175,14 @@
           const stack = nowX != null && Math.abs(nowX - peakX) < 42;
           if (nowX != null) labels += axisLabel("Now", nowX, yLo);
           labels += axisLabel("Peak", peakX, stack ? yHi : yLo);
+        }
+        if (state.range === "week" && R.HORIZON >= t0 - 1e-6 && R.HORIZON <= t1 + 1e-6) {
+          const x = xOf(R.HORIZON);
+          labels += '<line class="horizon-mark" x1="' + x.toFixed(1) + '" y1="14" x2="' + x.toFixed(1) +
+            '" y2="' + baseY.toFixed(1) + '" stroke="currentColor" stroke-width="1" stroke-dasharray="2 3" opacity="0.55"/>';
+          const lx = Math.max(4, Math.min(w - 42, x + 6));
+          labels += '<text class="chart-label horizon-mark" x="' + lx.toFixed(1) +
+            '" y="22" text-anchor="start" fill="rgba(255,255,255,0.9)" font-size="11" font-weight="650">5-day</text>';
         }
         svg.innerHTML = bands + soft + shades + lines + edge + marks + labels;
         const zoom = state.range === "week" ? "7-day" : state.range === "hour" ? "Hour" : "Day";
