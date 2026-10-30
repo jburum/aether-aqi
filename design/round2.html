@@ -1377,9 +1377,11 @@
       }
       function freezeTint() {
         if (tintHold) return;
+        // The fade is still on, so this is the in-flight color. Dropping the class first snaps to the destination.
+        const now = fieldNow();
         const root = document.documentElement;
         root.classList.remove("tint-fade");
-        root.style.setProperty("--field", fieldNow());
+        root.style.setProperty("--field", now);
         tintHold = true;
       }
       function seekFrom(clientX, box) {
