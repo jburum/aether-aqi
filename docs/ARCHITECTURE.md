@@ -55,6 +55,8 @@ vercel deploy --prod --yes                                        # optional CLI
 
 Modeled AQI ≠ AirNow regulatory monitors.
 
+The website proxies above are unchanged. The v1 launch feed is the week-1 store in [v1/WEEK1.md](./v1/WEEK1.md): NOAA for the forecast, EPA AirNow for the official reading, saved places capped at 5, and a test push sender. `docs/appstore/ROADMAP.md` line 34 still says the data stack is open. That line is stale against the plan locked on 2026-10-30.
+
 ---
 
 ## PWA / iOS
