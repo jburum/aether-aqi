@@ -24,6 +24,7 @@ Installable PWA for **US AQI** tracking and forecasts across up to **15 location
 | [SHARE-INVITE.md](./SHARE-INVITE.md) | iMessage install copy |
 | [IOS-APP-STORE.md](./IOS-APP-STORE.md) | Future Capacitor App Store plan (not in backlog) |
 | [CHANGELOG.md](./CHANGELOG.md) | Ship history (newest first) |
+| [v1/WEEK1.md](./v1/WEEK1.md) | v1 week-1 forecast store, test push, and doc drift |
 | [../README.md](../README.md) | Repo root overview |
 
 ## Product snapshot (stable)

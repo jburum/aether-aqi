@@ -1,0 +1,26 @@
+{
+  "kind": "aqi.forecast",
+  "placeId": "place_boise",
+  "placeName": "Boise, Idaho",
+  "title": "Boise, Idaho forecast",
+  "body": "Corrected forecast 155 (NOAA smoke, valley scale). Official AirNow 48, preliminary. Observations courtesy of the U.S. EPA AirNow program (airnow.gov). Preliminary and subject to change.",
+  "issuedAt": "2026-10-30T15:00:00.000Z",
+  "validFor": "2026-10-31T15:00:00.000Z",
+  "forecast": {
+    "id": "forecast_boise_day1",
+    "source": "noaa_smoke",
+    "correctedAqi": 155,
+    "horizon": "day_1_2_valley",
+    "spatialScale": "valley",
+    "confidence": "valley"
+  },
+  "official": {
+    "id": "obs_boise_day1",
+    "aqi": 48,
+    "raw": "48",
+    "preliminary": true,
+    "attribution": "Observations courtesy of the U.S. EPA AirNow program (airnow.gov). Preliminary and subject to change.",
+    "source": "airnow",
+    "observedAt": "2026-10-31T15:00:00.000Z"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "kind": "aqi.forecast",
+  "placeId": "place_boise",
+  "placeName": "Boise, Idaho",
+  "title": "Boise, Idaho forecast",
+  "body": "Corrected forecast 80 (regional, low confidence). No official AirNow reading for this hour.",
+  "issuedAt": "2026-10-30T15:00:00.000Z",
+  "validFor": "2026-11-04T15:00:00.000Z",
+  "forecast": {
+    "id": "forecast_boise_day6",
+    "source": "regional",
+    "correctedAqi": 80,
+    "horizon": "day_3_7_regional_low_confidence",
+    "spatialScale": "regional",
+    "confidence": "low"
+  },
+  "official": null
+}

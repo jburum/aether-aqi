@@ -2,6 +2,19 @@
 
 Newest first.
 
+## 2026-10-30 — v1 week 1 forecast store and test push
+
+### Product
+
+- Server saved places, cap 5. Each corrected forecast is stored beside the later official AirNow reading, in separate tables.
+- Push delivery is an in-process test sender and three sample payloads. No APNs key, no paid vendor, and no launchd job.
+- Days 1-2 use the NOAA smoke model at valley scale. Days 3-7 use NOAA's air quality forecast, or a regional low-confidence label. Open-Meteo is rejected as a launch source. PurpleAir is not called.
+
+### Docs
+
+- Schema, drift, and the checkpoint: [v1/WEEK1.md](./v1/WEEK1.md).
+- `docs/appstore/ROADMAP.md` line 34 still says the data stack is open. `docs/appstore/IOS-PLAN.md` line 50 on #4 (`keel/appstore-docs-k1`) still says remote push is not v1. This branch does not edit #4.
+
 ## 2026-10-30 — Website map removed
 
 ### Product
