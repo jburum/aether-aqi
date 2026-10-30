@@ -777,9 +777,10 @@
         function bytesFromHex(value) {
           return [1, 3, 5].map((i) => parseInt(value.slice(i, i + 2), 16));
         }
-        function levelAccent(catId) {
+        function levelAccent(catId, fieldHex) {
           const base = oklchAt(CAT_AQI[catId]);
-          const tint = bytesFromHex(LEVEL_TINT[catId]).map((v) => v / 255);
+          // A held scrub freezes the field. The pill sits on that tint, not the destination.
+          const tint = bytesFromHex(fieldHex || LEVEL_TINT[catId]).map((v) => v / 255);
           // .level-pill is white at 8% over the field. The word has to clear 4.5:1 on that mix.
           const pill = tint.map((v) => v * 0.92 + 0.08);
           let L = base.L;
@@ -1309,14 +1310,14 @@
         root.setProperty("--bg-bot", sky.bot.hex);
         root.setProperty("--chart", sky.bot.hex);
         root.setProperty("--ink", paint.inkHex);
-        const accent = R.levelAccent(catId);
-        root.setProperty("--level", accent.hex);
-        document.getElementById("app-icon").style.background = accent.hex;
         if (!dragging && !tintHold) {
           commitTint(R.category(R.aqiAt(targetHour)), tintFade);
           tintFade = false;
         }
         const fieldCat = tintCat && R.LEVEL_TINT[tintCat] ? tintCat : catId;
+        const accent = R.levelAccent(catId, R.LEVEL_TINT[fieldCat]);
+        root.setProperty("--level", accent.hex);
+        document.getElementById("app-icon").style.background = accent.hex;
         const soft = R.soften(R.bytesFromHex(R.LEVEL_TINT[fieldCat]), [255, 255, 255], 4.7);
         root.setProperty("--ink-soft", state.contrast ? "#FFFFFF" : R.hex(soft.bytes));
         const pm = R.pmUgAt(hour);

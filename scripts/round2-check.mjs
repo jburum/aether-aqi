@@ -176,6 +176,33 @@ if (Round2) {
       fail(`token sheet is missing ${paint.hex} for AQI ${aqi}`);
     }
   }
+  const levels = Object.keys(Round2.LEVEL_TINT);
+  let crossWorst = { ratio: 99, held: "", dest: "", hex: "" };
+  for (const held of levels) {
+    const tint = Round2.bytesFromHex(Round2.LEVEL_TINT[held]).map((v) => v / 255);
+    const pill = tint.map((v) => v * 0.92 + 0.08);
+    for (const dest of levels) {
+      const accent = Round2.levelAccent(dest, Round2.LEVEL_TINT[held]);
+      const ratio = Round2.contrast(
+        accent.rgb.map((v) => v / 255),
+        pill,
+      );
+      if (ratio < crossWorst.ratio) crossWorst = { ratio, held, dest, hex: accent.hex };
+      if (ratio < 4.5) {
+        fail(
+          `${dest} on held ${held} pill is ${ratio.toFixed(2)}:1 (${accent.hex} on ${Round2.LEVEL_TINT[held]})`,
+        );
+      }
+    }
+  }
+  console.log(
+    "cross tint",
+    crossWorst.ratio.toFixed(2),
+    crossWorst.dest,
+    "on held",
+    crossWorst.held,
+    crossWorst.hex,
+  );
   if (html.includes("<script src")) fail("prototype must stay a single file");
   if (!html.includes('id="win-avoid"') || !html.includes('id="win-best"')) {
     fail("verdict windows missing");
