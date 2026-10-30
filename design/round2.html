@@ -111,7 +111,7 @@
         font-variant-numeric: lining-nums tabular-nums;
         font-feature-settings: "lnum" 1, "tnum" 1;
       }
-      .advice { margin: 2px 0 0; font-size: 15px; line-height: 20px; font-weight: 560; }
+      .advice { margin: 2px 0 0; font-size: 15px; line-height: 20px; font-weight: 560; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .digits {
         height: 1em; font-size: 120px; line-height: 1; letter-spacing: 0; gap: 0.02em;
         color: var(--level, #fff);
@@ -302,7 +302,7 @@
               <p class="kicker" id="kicker">Thu 3–8 PM</p>
               <span class="soft" id="dom">PM2.5</span>
             </div>
-            <p class="advice" id="advice">Friday from 4 PM, and the weekend, are your outdoor windows.</p>
+            <p class="advice" id="advice">Friday 4 PM and the weekend: your outdoor window.</p>
           </div>
           <div class="curve" id="curve">
             <svg id="hero" role="img" aria-label="7-day air quality curve"></svg>
@@ -504,7 +504,7 @@
           return {
             when: "Thu 3–8 PM",
             title: CATS[category(aqiAt(peak))].label + " by " + formatHour(peak),
-            body: "Friday from 4 PM, and the weekend, are your outdoor windows.",
+            body: "Friday 4 PM and the weekend: your outdoor window.",
           };
         }
         function personal(hour) {

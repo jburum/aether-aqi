@@ -148,6 +148,7 @@ if (Round2) {
   if (Round2.skyAt(500).amp < 0.08) fail("hazardous sky gradient is flat");
   const lead = Round2.forecastLead();
   if (!lead.body.includes("outdoor window")) fail(`forecast lead: ${lead.body}`);
+  if (!/\.advice \{[^}]*white-space:\s*nowrap/.test(html)) fail("advice should stay one line");
   if (lead.title !== "Hazardous by 6 PM") fail(`forecast title: ${lead.title}`);
   const wins = Round2.decisionWindows();
   if (wins.length !== 2 || wins[0].hour !== 15 || wins[1].hour !== 40) {
