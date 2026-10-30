@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=390" />
-    <meta name="theme-color" content="#3CA366" />
+    <meta name="theme-color" content="#000000" />
     <title>Boise — Air Quality Forecast</title>
     <style>
       @font-face {
@@ -21,54 +21,34 @@
         font-display: block;
       }
       * { box-sizing: border-box; }
+      @property --field {
+        syntax: "<color>";
+        inherits: true;
+        initial-value: #000000;
+      }
       html, body {
         margin: 0;
         width: 390px;
         height: 844px;
         overflow: hidden;
-        background: var(--bg, #3ca366);
+        overscroll-behavior: none;
+        background: var(--field, #000000);
         --chart: #0d8b4d;
-        color: var(--ink, #000);
+        color: #fff;
         font-family: "Source Sans 3", system-ui, "Segoe UI", sans-serif;
         font-variant-numeric: tabular-nums lining-nums;
         -webkit-text-size-adjust: 100%;
       }
+      html.tint-fade { transition: --field 600ms linear; }
       button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
-      :focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+      :focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
       .stage { position: relative; width: 390px; height: 844px; overflow: hidden; }
-      .sky, canvas, .grain {
-        position: absolute; pointer-events: none;
-      }
-      .sky {
-        z-index: 0;
-        inset: -28px;
-        background: linear-gradient(180deg, var(--bg-top, #48ae70) 0%, var(--bg, #3ca366) 46%, var(--bg-bot, #0d8b4d) 100%);
-        transform-origin: 50% 36%;
-        animation: breathe var(--breath, 6s) ease-in-out infinite;
-      }
-      @keyframes breathe {
-        0%, 100% { transform: scale(1); }
-        50% { transform: scale(1.04); }
-      }
-      canvas, .grain { inset: 0; width: 390px; height: 844px; }
-      canvas { z-index: 1; filter: blur(var(--haze-blur, 0px)); }
-      .grain {
-        z-index: 2;
-        opacity: var(--grain, 0.08);
-        mix-blend-mode: overlay;
-        animation: grainbreath var(--breath, 6s) ease-in-out infinite;
-        background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
-      }
-      @keyframes grainbreath {
-        0%, 100% { opacity: calc(var(--grain, 0.08) * 0.65); }
-        50% { opacity: var(--grain, 0.08); }
-      }
-      body.reduce .sky, body.reduce .grain,
-      body.frame .sky, body.frame .grain,
-      body.more-contrast .sky, body.more-contrast .grain { animation: none; }
-      body.frame .grain, body.reduce .grain { opacity: var(--grain, 0.08); }
+      .sky, canvas, .grain { position: absolute; pointer-events: none; }
+      .sky { z-index: 0; inset: 0; background: var(--field, #000000); }
+      canvas, .grain { display: none; }
+      .curve, #w-spark { color: var(--ink, #000); }
       @media (prefers-reduced-motion: reduce) {
-        .sky, .grain { animation: none; }
+        html.tint-fade { transition: none; }
       }
       .screen {
         position: relative;
@@ -104,6 +84,20 @@
       .place { text-align: left; min-height: 20px; font-size: 15px; line-height: 18px; font-weight: 650; }
       .place span, .hint, .meta .soft { color: var(--ink-soft); font-weight: 500; }
       .kicker { margin: 0; font-size: 13px; line-height: 16px; font-weight: 650; }
+      .forecast { position: relative; }
+      .level-row { display: flex; align-items: center; gap: 10px; min-width: 0; min-height: 28px; }
+      .level-pill {
+        display: inline-flex; align-items: center; gap: 6px; max-width: 100%; min-width: 0;
+        height: 26px; padding: 0 10px; border-radius: 13px;
+        background: rgba(255, 255, 255, 0.08); color: var(--level, #fff);
+        font-size: 13px; font-weight: 650; white-space: nowrap;
+      }
+      .level-pill span { overflow: hidden; text-overflow: ellipsis; }
+      .level-row .kicker, .level-row #dom { flex: none; color: var(--ink-soft); }
+      #headline {
+        position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden;
+        clip: rect(0, 0, 0, 0); white-space: nowrap;
+      }
       .forecast h2, #detail-value {
         margin: 0;
         font-family: "Source Serif 4", "Palatino Linotype", Palatino, Georgia, serif;
@@ -116,20 +110,20 @@
         font-variant-numeric: lining-nums tabular-nums;
         font-feature-settings: "lnum" 1, "tnum" 1;
       }
-      .advice { margin: 2px 0 0; font-size: 15px; line-height: 19px; font-weight: 560; }
+      .advice { margin: 2px 0 0; font-size: 15px; line-height: 20px; font-weight: 560; }
       .digits {
-        height: 1em; font-size: 64px; line-height: 1; letter-spacing: 0; gap: 0.03em;
+        height: 1em; font-size: 120px; line-height: 1; letter-spacing: 0; gap: 0.02em;
+        color: var(--level, #fff);
         font-family: "Source Serif 4", "Palatino Linotype", Palatino, Georgia, serif;
         font-optical-sizing: none;
-        font-weight: var(--wght, 560);
-        font-variation-settings: "opsz" 60, "wght" var(--wght, 560);
+        font-weight: 800;
+        font-variation-settings: "opsz" 60, "wght" 800;
         font-variant-numeric: lining-nums tabular-nums;
         font-feature-settings: "lnum" 1, "tnum" 1;
         display: flex; overflow: hidden;
       }
       body.ax5 .forecast h2, body.ax5 #detail-value { font-size: 22px; line-height: 26px; }
       body.ax5 .advice, body.ax5 .meta, body.ax5 #detail-why { font-size: 18px; line-height: 22px; }
-      body.ax5 .digits { font-size: 48px; }
       .wheel { height: 1em; width: 1ch; overflow: hidden; }
       .wheel.off { width: 0; }
       .strip { display: block; will-change: transform; }
@@ -294,9 +288,14 @@
 
         <div class="home-only" id="home">
           <button type="button" class="place" id="place">Boise <span>smoke event</span></button>
+          <div class="digits home-extra" id="digits" data-drag="hour" aria-hidden="true"></div>
           <div class="forecast home-extra" id="forecast" data-drag="hour">
-            <p class="kicker" id="kicker">Thu 3–8 PM</p>
             <h2 id="headline">Hazardous by 6 PM</h2>
+            <div class="level-row">
+              <span class="level-pill"><i class="pat pat-good" id="pat"></i><span id="cat">Good</span></span>
+              <p class="kicker" id="kicker">Thu 3–8 PM</p>
+              <span class="soft" id="dom">PM2.5</span>
+            </div>
             <p class="advice" id="advice">Friday from 4 PM, and the weekend, are your outdoor windows.</p>
           </div>
           <div class="curve" id="curve">
@@ -305,8 +304,6 @@
             <div class="play-label" id="play-label">Thu 7 AM</div>
             <button type="button" id="back-now" hidden>Now</button>
           </div>
-          <div class="digits home-extra" id="digits" data-drag="hour" aria-hidden="true"></div>
-          <p class="meta home-extra" id="meta"><i class="pat pat-good" id="pat"></i><span id="cat">Good</span> <span class="soft" id="dom">PM2.5</span></p>
           <div class="windows home-extra" id="windows">
             <button type="button" id="win-avoid">Avoid Thu 3–8 PM</button>
             <button type="button" id="win-best">Outdoor window Fri 4–8 PM</button>
@@ -355,12 +352,13 @@
 
     <div id="review" hidden>
       <p><b>Critic pass.</b> Socrates, 29 Oct. The sky is the forecast. PR #5 stays on hold.</p>
-      <p><b>Jason, 29 Oct.</b> Not Boring's hour slider is the model. Drag the forecast, the number, the detail, the pollutant words, or any widget. The sky answers while the finger is down. CARROT and Airpocalypse stay out.</p>
+      <p><b>Jason, 29 Oct.</b> Not Boring's hour slider is the model. Drag the forecast, the number, the detail, the pollutant words, or any widget. The field holds still while the finger is down. CARROT and Airpocalypse stay out.</p>
       <p><b>Jason, 29 Oct.</b> Both, equally. A check-it app and a warns-you app. The home screen rewards opening it: the interactive timeline is the hallmark. Alerts are first-class, the same rank as the scrub. This pass does not design the notification.</p>
       <p><b>Jason, 29 Oct.</b> Form. The sky is deeper and more saturated, still no purple. The big number is Source Serif 4 at optical size 60, lining and tabular, so the 1 keeps its flag. UI text is Source Sans 3.</p>
       <p><b>Jason, 29 Oct.</b> The ramp is a natural progression: green, yellow, orange, red, deep maroon. Smooth and saturated, not a pastel and not purple. Good numbers are green.</p>
       <p><b>Jason, 29 Oct.</b> While you drag, keep the number, the level word, and the time. The chart and the color carry the rest.</p>
       <p><b>Jason, 29 Oct.</b> The curve is heavier. Its ground is a solid tint of the current level, with no dot grid.</p>
+      <p><b>Jason, 29 Oct.</b> Round 4. The field is one near-black level tint for the whole screen. Good #0E1A14, Moderate #1A180E, USG #1E140C, Unhealthy #1F0E0D, Very Unhealthy #1A0A0A, Hazardous #120707. It crossfades for 600ms on launch, on release, and on Now, and it does not change while the finger is down. The number is 120pt heavy tabular in the level color, with the level pill and one advice line under it.</p>
       <h2>Accessibility</h2>
       <div class="row">
         <button type="button" id="opt-motion" aria-pressed="false">Reduce Motion</button>
@@ -760,12 +758,36 @@
           const c = oklchAt(aqi);
           return skyFrom(c.L, c.C, c.H);
         }
+        const LEVEL_TINT = {
+          good: "#0E1A14",
+          moderate: "#1A180E",
+          usg: "#1E140C",
+          unhealthy: "#1F0E0D",
+          very: "#1A0A0A",
+          hazardous: "#120707",
+        };
+        function bytesFromHex(value) {
+          return [1, 3, 5].map((i) => parseInt(value.slice(i, i + 2), 16));
+        }
+        function levelAccent(catId) {
+          const base = oklchAt(CAT_AQI[catId]);
+          const tint = bytesFromHex(LEVEL_TINT[catId]).map((v) => v / 255);
+          let L = base.L;
+          const C = Math.max(base.C, 0.11);
+          const H = base.H;
+          let paint = paintOklch(L, C, H, 4.5);
+          for (let i = 0; i < 28 && contrast(paint.rgb.map((v) => v / 255), tint) < 4.5; i++) {
+            L = Math.min(0.84, L + 0.025);
+            paint = paintOklch(L, C, H, 4.5);
+          }
+          return paint;
+        }
         return {
-          STOPS, NOW, HORIZON, LAST, DAY_NAMES, CATS, CAT_AQI, PM,
+          STOPS, NOW, HORIZON, LAST, DAY_NAMES, CATS, CAT_AQI, PM, LEVEL_TINT,
           pmAqiAt, o3At, no2At, aqiAt, pmUgAt, smokeAt, seriesAt, seriesIndex,
           category, dominant, confAt, bestWindow, formatHour, formatSpan, outlook, trend,
           forecastLead, personal, decisionWindows, dayPeak, trendOf, pollutantStory,
-          contrast, oklchAt, paintOklch, paintAqi, skyFrom, skyAt, hex,
+          contrast, oklchAt, paintOklch, paintAqi, skyFrom, skyAt, hex, bytesFromHex, soften, levelAccent,
         };
       })();
       // MODEL-END
@@ -805,6 +827,9 @@
       let lastCat = null;
       let heroShown = null;
       let copyKey = "";
+      let tintCat = null;
+      let tintHold = false;
+      let tintFade = !state.frame && !state.reduce;
       const digits = [0, 1, 2].map(() => ({ pos: 0, v: 0, goal: 0, digit: null }));
       const canvas = document.getElementById("haze");
       const ctx = canvas.getContext("2d");
@@ -1219,7 +1244,16 @@
         root.setProperty("--bg-bot", sky.bot.hex);
         root.setProperty("--chart", sky.bot.hex);
         root.setProperty("--ink", paint.inkHex);
-        root.setProperty("--ink-soft", state.contrast ? paint.inkHex : paint.softHex);
+        const accent = R.levelAccent(catId);
+        root.setProperty("--level", accent.hex);
+        document.getElementById("app-icon").style.background = accent.hex;
+        if (!dragging && !tintHold) {
+          commitTint(R.category(R.aqiAt(targetHour)), tintFade);
+          tintFade = false;
+        }
+        const fieldCat = tintCat && R.LEVEL_TINT[tintCat] ? tintCat : catId;
+        const soft = R.soften(R.bytesFromHex(R.LEVEL_TINT[fieldCat]), [255, 255, 255], 4.7);
+        root.setProperty("--ink-soft", state.contrast ? "#FFFFFF" : R.hex(soft.bytes));
         const pm = R.pmUgAt(hour);
         root.setProperty("--grain", String(0.05 + Math.min(0.2, pm / 700)));
         const voiceAqi = scrubbed ? aqi : R.aqiAt(R.dayPeak(R.NOW));
@@ -1227,9 +1261,6 @@
         root.setProperty("--wght-voice", String(Math.round(460 + (Math.min(500, voiceAqi) / 500) * 320)));
         root.setProperty("--breath", (6.4 - Math.min(500, aqi) / 500 * 4).toFixed(2) + "s");
         root.setProperty("--haze-blur", (aqi < 90 ? 0 : Math.min(5, ((aqi - 90) / 410) * 5)).toFixed(2) + "px");
-        const theme = document.querySelector('meta[name="theme-color"]');
-        if (theme) theme.content = paint.hex;
-        document.getElementById("app-icon").style.background = sky.bot.hex;
 
         const step = snap(hour);
         syncScrub();
@@ -1259,6 +1290,36 @@
         requestAnimationFrame(frame);
       }
 
+      function fieldNow() {
+        return getComputedStyle(document.documentElement).getPropertyValue("--field").trim() || "#000000";
+      }
+      function commitTint(catId, fade) {
+        if (dragging || tintHold) return;
+        const hex = R.LEVEL_TINT[catId];
+        if (!hex) return;
+        const root = document.documentElement;
+        if (tintCat === catId && !fade) return;
+        const animate = Boolean(fade) && !state.reduce && !state.frame;
+        if (animate) {
+          root.classList.remove("tint-fade");
+          root.style.setProperty("--field", tintCat == null ? "#000000" : fieldNow());
+          void root.offsetWidth;
+          root.classList.add("tint-fade");
+        } else {
+          root.classList.remove("tint-fade");
+        }
+        root.style.setProperty("--field", hex);
+        tintCat = catId;
+        const theme = document.querySelector('meta[name="theme-color"]');
+        if (theme) theme.content = hex;
+      }
+      function freezeTint() {
+        if (tintHold) return;
+        const root = document.documentElement;
+        root.classList.remove("tint-fade");
+        root.style.setProperty("--field", fieldNow());
+        tintHold = true;
+      }
       function seekFrom(clientX, box) {
         const rect = (box || els.timeline).getBoundingClientRect();
         if (rect.width <= 0) return;
@@ -1270,12 +1331,15 @@
         dragging = true;
         scrubbed = true;
         colorTau = 0.083;
+        freezeTint();
         syncScrub();
       }
       function endDrag() {
         sparkPin = null;
         if (!dragging) return;
         dragging = false;
+        tintHold = false;
+        tintFade = !state.reduce && !state.frame;
         const snapped = snap(shownHour);
         targetHour = snapped;
         colorTau = 0.2;
@@ -1359,6 +1423,9 @@
       document.getElementById("win-avoid").addEventListener("click", () => openWindow(wins[0]));
       document.getElementById("win-best").addEventListener("click", () => openWindow(wins[1]));
       els.backNow.addEventListener("click", () => {
+        dragging = false;
+        tintHold = false;
+        tintFade = !state.reduce && !state.frame;
         scrubbed = false;
         syncScrub();
         hourSpan = null;
@@ -1377,6 +1444,7 @@
         dragging = true;
         scrubbed = true;
         colorTau = 0.083;
+        freezeTint();
         syncScrub();
       }
       function bindDeltaScrub(el, pxPerHour) {
