@@ -1098,6 +1098,126 @@
         const k = 1 - Math.exp(-dt / 0.16);
         return prev.map((v, i) => v + (target[i] - v) * k);
       }
+      // LAYOUT-START
+      // Level names own the right gutter. Advances are Source Sans 3 at 10px weight 650
+      // and Source Serif 4 digits at 13px weight 750, optical size 14. The halo is half
+      // of the 2.5px label stroke, so the curve, rule, dot, and readout stay clear of it.
+      function layoutForecast(spec) {
+        const w = spec.w;
+        const h = spec.h;
+        const t0 = spec.t0;
+        const t1 = spec.t1;
+        const samples = spec.samples;
+        const hours = spec.hours;
+        const scrubbed = !!spec.scrubbed;
+        const thresholds = !!spec.thresholds;
+        const labelAdvance = {
+          Good: 23.05,
+          Moderate: 41.78,
+          USG: 18.43,
+          Unhealthy: 45.49,
+          "Very Unhealthy": 67.01,
+          Hazardous: 46.69,
+        };
+        const digitAdvance = 7.45;
+        const labelInset = 8;
+        const labelHalo = 1.25;
+        const boxPad = 1;
+        const gutterGap = 8;
+        let widest = 0;
+        for (const name in labelAdvance) widest = Math.max(widest, labelAdvance[name]);
+        const readoutReach = (3 * digitAdvance) / 2 + boxPad;
+        const gutter = Math.ceil(labelInset + widest + labelHalo + boxPad + readoutReach + gutterGap);
+        const plotLeft = 10;
+        const plotRight = thresholds ? w - gutter : w - 10;
+        const xOf = (hr) =>
+          plotLeft + ((hr - t0) / Math.max(0.001, t1 - t0)) * Math.max(1, plotRight - plotLeft);
+        const baseY = h - 4;
+        const plotTop = 18;
+        const plotBot = Math.max(plotTop + 48, baseY - 30);
+        const maxV = Math.max(10, ...(samples.length ? samples : [0])) * 1.16;
+        const yOf = (v) => plotTop + (1 - Math.max(0, v) / maxV) * (plotBot - plotTop);
+        const hClamp = Math.max(t0, Math.min(t1, spec.hour));
+        const hx = xOf(hClamp);
+        let pointY = samples.length ? yOf(samples[0]) : plotTop;
+        for (let i = 0; i < samples.length - 1; i++) {
+          if (hClamp >= hours[i] && hClamp <= hours[i + 1]) {
+            const span = hours[i + 1] - hours[i] || 1;
+            const t = (hClamp - hours[i]) / span;
+            pointY = yOf(samples[i]) + (yOf(samples[i + 1]) - yOf(samples[i])) * t;
+          }
+        }
+        const markerR = scrubbed ? 6 : 8;
+        const marker = { l: hx - markerR, t: pointY - markerR, r: hx + markerR, b: pointY + markerR };
+        const rule = scrubbed ? { l: hx - 0.5, t: 0, r: hx + 0.5, b: baseY } : null;
+        const edges = [50, 100, 150, 200, 300];
+        const bandNames = [
+          { lo: 0, hi: 50, label: "Good" },
+          { lo: 50, hi: 100, label: "Moderate" },
+          { lo: 100, hi: 150, label: "USG" },
+          { lo: 150, hi: 200, label: "Unhealthy" },
+          { lo: 200, hi: 300, label: "Very Unhealthy" },
+          { lo: 300, hi: 500, label: "Hazardous" },
+        ];
+        const rules = [];
+        const labels = [];
+        const labelBoxes = [];
+        if (thresholds) {
+          for (const edge of edges) {
+            if (edge >= maxV) continue;
+            rules.push({ y: yOf(edge) });
+          }
+          for (const band of bandNames) {
+            const hi = Math.min(band.hi, maxV);
+            if (hi - band.lo < 8) continue;
+            const yTop = yOf(hi);
+            const yBot = yOf(band.lo);
+            if (yBot - yTop < 12) continue;
+            const yMid = (yTop + yBot) / 2;
+            const anchor = w - labelInset;
+            labels.push({ text: band.label, x: anchor, y: yMid });
+            const adv = labelAdvance[band.label];
+            labelBoxes.push({
+              name: band.label,
+              l: anchor - adv - labelHalo - boxPad,
+              r: anchor + labelHalo + boxPad,
+              t: yMid - 8,
+              b: yMid + 8,
+            });
+          }
+        }
+        const readText = String(Math.round(spec.aqi));
+        const half = (readText.length * digitAdvance) / 2 + boxPad;
+        let readX = hx;
+        if (labelBoxes.length) {
+          let labelLeft = labelBoxes[0].l;
+          for (let i = 1; i < labelBoxes.length; i++) labelLeft = Math.min(labelLeft, labelBoxes[i].l);
+          readX = Math.min(readX, labelLeft - gutterGap - half);
+        }
+        readX = Math.max(18, Math.min(w - 18, readX));
+        const readY = pointY > 34 ? pointY - 14 : pointY + 20;
+        const readout = { l: readX - half, t: readY - 10, r: readX + half, b: readY + 2 };
+        return {
+          xOf,
+          yOf,
+          baseY,
+          plotTop,
+          plotLeft,
+          plotRight,
+          gutter,
+          ruleEnd: Math.max(24, w - gutter),
+          hx,
+          pointY,
+          readX,
+          readY,
+          readText,
+          rules,
+          labels,
+          boxes: { labels: labelBoxes, marker, rule, readout },
+        };
+      }
+      // LAYOUT-END
+
       function drawChart(svg, shown, t0, t1, hour, dt) {
         const w = svg.clientWidth || 354;
         const h = svg.clientHeight || 220;
@@ -1107,12 +1227,30 @@
         const key = state.pollutant;
         const values = hours.map((hr) => R.seriesAt(key, hr));
         const next = morph(shown, values, dt);
-        const maxV = Math.max(10, ...next) * 1.16;
-        const xOf = (hr) => 10 + ((hr - t0) / Math.max(0.001, t1 - t0)) * (w - 20);
-        const baseY = h - 4;
-        const plotTop = 18;
-        const plotBot = Math.max(plotTop + 48, baseY - 30);
-        const yOf = (v) => plotTop + (1 - Math.max(0, v) / maxV) * (plotBot - plotTop);
+        const hClamp = Math.max(t0, Math.min(t1, hour));
+        const layout = layoutForecast({
+          w,
+          h,
+          t0,
+          t1,
+          hour: hClamp,
+          samples: next,
+          hours,
+          scrubbed,
+          aqi: R.aqiAt(hClamp),
+          thresholds: key === "aqi",
+        });
+        const xOf = layout.xOf;
+        const yOf = layout.yOf;
+        const baseY = layout.baseY;
+        const plotTop = layout.plotTop;
+        if (key === "aqi") {
+          els.timeline.style.left = layout.plotLeft + "px";
+          els.timeline.style.right = w - layout.plotRight + "px";
+        } else {
+          els.timeline.style.left = "0";
+          els.timeline.style.right = "0";
+        }
         const pts = next.map((v, i) => ({ x: xOf(hours[i]), y: yOf(v), v, hour: hours[i] }));
         function pathOf(points) {
           if (points.length < 2) return "";
@@ -1150,7 +1288,6 @@
           const fade = opacity ? ' opacity="' + opacity + '"' : "";
           return '<path class="line-fill" d="' + d + '" fill="url(#' + svg.id + '-fade)"' + fade + "/>";
         }
-        const hClamp = Math.max(t0, Math.min(t1, hour));
         let soft = "";
         if (scrubbed) {
           soft = areaOf(sliceLine(t0 - 1, hClamp), "") + areaOf(sliceLine(hClamp, t1 + 1), "0.35");
@@ -1187,14 +1324,8 @@
         const edge =
           '<rect class="level-band" x="0" y="' + baseY.toFixed(1) + '" width="' + w.toFixed(1) +
           '" height="4" fill="var(--level)"/>';
-        const hx = xOf(hClamp);
-        let y = pts.length ? pts[0].y : plotTop;
-        for (let i = 0; i < pts.length - 1; i++) {
-          if (hClamp >= hours[i] && hClamp <= hours[i + 1]) {
-            const t = (hClamp - hours[i]) / (hours[i + 1] - hours[i] || 1);
-            y = pts[i].y + (pts[i + 1].y - pts[i].y) * t;
-          }
-        }
+        const hx = layout.hx;
+        const y = layout.pointY;
         let marks = "";
         if (scrubbed) {
           // 12pt across, in the scrubbed hour's level color. The rule is 1pt and stays white.
@@ -1206,10 +1337,9 @@
           marks += '<circle cx="' + hx.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="8" fill="currentColor"/>';
           marks += '<circle cx="' + hx.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="3" fill="var(--field)"/>';
         }
-        const read = String(Math.round(R.aqiAt(hClamp)));
-        const readX = Math.max(18, Math.min(w - 18, hx));
-        const readY = y > 34 ? y - 14 : y + 20;
-        marks += '<text class="scrub-aqi" x="' + readX.toFixed(1) + '" y="' + readY.toFixed(1) + '" text-anchor="middle" fill="currentColor">' + read + "</text>";
+        const readX = layout.readX;
+        const readY = layout.readY;
+        marks += '<text class="scrub-aqi" x="' + readX.toFixed(1) + '" y="' + readY.toFixed(1) + '" text-anchor="middle" fill="currentColor">' + layout.readText + "</text>";
         const labelX = Math.max(36, Math.min(w - 72, hx));
         els.play.style.left = labelX + "px";
         els.play.textContent = formatWhen(hour);
@@ -1241,33 +1371,15 @@
         }
         let thresholds = "";
         if (key === "aqi") {
-          const edges = [50, 100, 150, 200, 300];
-          const bandNames = [
-            { lo: 0, hi: 50, label: "Good" },
-            { lo: 50, hi: 100, label: "Moderate" },
-            { lo: 100, hi: 150, label: "USG" },
-            { lo: 150, hi: 200, label: "Unhealthy" },
-            { lo: 200, hi: 300, label: "Very Unhealthy" },
-            { lo: 300, hi: 500, label: "Hazardous" },
-          ];
-          const gutter = 98;
-          for (const edge of edges) {
-            if (edge >= maxV) continue;
-            const yLine = yOf(edge);
-            thresholds += '<line class="threshold-line" x1="8" y1="' + yLine.toFixed(1) +
-              '" x2="' + Math.max(24, w - gutter).toFixed(1) + '" y2="' + yLine.toFixed(1) +
+          for (const rule of layout.rules) {
+            thresholds += '<line class="threshold-line" x1="8" y1="' + rule.y.toFixed(1) +
+              '" x2="' + layout.ruleEnd.toFixed(1) + '" y2="' + rule.y.toFixed(1) +
               '" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.72"/>';
           }
-          for (const band of bandNames) {
-            const hi = Math.min(band.hi, maxV);
-            if (hi - band.lo < 8) continue;
-            const yTop = yOf(hi);
-            const yBot = yOf(band.lo);
-            if (yBot - yTop < 12) continue;
-            const yMid = (yTop + yBot) / 2;
-            thresholds += '<text class="threshold-label" x="' + (w - 8).toFixed(1) + '" y="' + yMid.toFixed(1) +
+          for (const label of layout.labels) {
+            thresholds += '<text class="threshold-label" x="' + label.x.toFixed(1) + '" y="' + label.y.toFixed(1) +
               '" text-anchor="end" dominant-baseline="middle" fill="#FFFFFF" stroke="var(--field)" stroke-width="2.5" paint-order="stroke" font-family="Source Sans 3, sans-serif" font-size="10" font-weight="650">' +
-              band.label + "</text>";
+              label.text + "</text>";
           }
         }
         svg.innerHTML = bands + soft + shades + thresholds + lines + edge + marks + labels;

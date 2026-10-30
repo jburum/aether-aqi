@@ -418,6 +418,106 @@ if (Round2) {
   for (const label of ["Good", "Moderate", "USG", "Unhealthy", "Very Unhealthy", "Hazardous"]) {
     if (!html.includes('label: "' + label + '"')) fail(`threshold label missing: ${label}`);
   }
+  const layoutMatch = html.match(/\/\/ LAYOUT-START\n([\s\S]*?)\/\/ LAYOUT-END/);
+  if (!layoutMatch) fail("chart layout markers missing");
+  if (!html.includes("layout.hx") || !html.includes("layout.readX")) {
+    fail("the scrub marker and readout should use the label gutter");
+  }
+  if (!html.includes("els.timeline.style.right")) {
+    fail("the scrub surface should stop at the label gutter");
+  }
+  const layoutForecast = layoutMatch
+    ? new Function(`${layoutMatch[1]}\nreturn layoutForecast;`)()
+    : null;
+  if (layoutForecast) {
+    function pointsFor(t0, t1, step) {
+      const out = [];
+      for (let h = t0; h <= t1 + 1e-6; h += step) out.push(Math.min(t1, h));
+      return out;
+    }
+    function hitsLabel(mark, label) {
+      return mark.l < label.r && mark.r > label.l && mark.t < label.b && mark.b > label.t;
+    }
+    const views = [];
+    for (let day = 0; day < 7; day++) {
+      const t0 = day * 24;
+      views.push({ name: `day ${day}`, t0, t1: Math.min(Round2.LAST, t0 + 23), step: 1 });
+    }
+    views.push({ name: "week", t0: 0, t1: 165, step: 3 });
+    for (let end = 6; end <= Round2.LAST; end += 1) {
+      views.push({ name: `hour ${end}`, t0: end - 6, t1: end, step: 0.25 });
+    }
+    const sizes = [
+      [354, 220],
+      [354, 360],
+      [354, 480],
+      [354, 148],
+      [340, 420],
+      [368, 420],
+    ];
+    let clearance = Infinity;
+    let hits = 0;
+    const thursday = pointsFor(0, 23, 1);
+    const thursdayValues = thursday.map((hr) => Round2.seriesAt("aqi", hr));
+    const probe = layoutForecast({
+      w: 354,
+      h: 480,
+      t0: 0,
+      t1: 23,
+      hour: 20,
+      samples: thursdayValues,
+      hours: thursday,
+      scrubbed: true,
+      aqi: Round2.aqiAt(20),
+      thresholds: true,
+    });
+    const probeNames = probe.boxes.labels.map((box) => box.name);
+    if (!probeNames.includes("Very Unhealthy") || !probeNames.includes("Unhealthy")) {
+      fail(`Thursday labels dropped: ${probeNames.join(", ")}`);
+    }
+    for (const [w, h] of sizes) {
+      for (const view of views) {
+        const sampleHours = pointsFor(view.t0, view.t1, view.step);
+        const samples = sampleHours.map((hr) => Round2.seriesAt("aqi", hr));
+        for (let hour = view.t0; hour <= view.t1 + 1e-6; hour += 0.25) {
+          const layout = layoutForecast({
+            w,
+            h,
+            t0: view.t0,
+            t1: view.t1,
+            hour,
+            samples,
+            hours: sampleHours,
+            scrubbed: true,
+            aqi: Round2.aqiAt(hour),
+            thresholds: true,
+          });
+          const marks = [
+            ["marker", layout.boxes.marker],
+            ["rule", layout.boxes.rule],
+            ["readout", layout.boxes.readout],
+          ];
+          for (const [kind, mark] of marks) {
+            if (!mark) continue;
+            for (const label of layout.boxes.labels) {
+              const yOverlap = mark.t < label.b && mark.b > label.t;
+              if (yOverlap) clearance = Math.min(clearance, label.l - mark.r);
+              if (!hitsLabel(mark, label)) continue;
+              hits += 1;
+              if (hits <= 6) {
+                fail(
+                  `${view.name} ${hour.toFixed(2)} ${kind} hits ${label.name} at ${w}x${h}`,
+                );
+              }
+            }
+          }
+        }
+      }
+    }
+    if (hits > 6) fail(`${hits} scrub overlaps in total`);
+    if (clearance < 4) fail(`label clearance ${clearance.toFixed(2)}px is under 4`);
+    console.log("label clearance", clearance.toFixed(2));
+  }
 }
 
 if (failures.length) {
