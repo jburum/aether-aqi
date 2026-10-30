@@ -100,6 +100,8 @@ try {
     const y = box.y + box.height / 2;
     await page.mouse.move(box.x + box.width * x0, y);
     await page.mouse.down();
+    // Scrub arms only after the 120ms hold. Move before that and the hour stays put.
+    await page.waitForTimeout(180);
     await page.mouse.move(box.x + box.width * x1, y, { steps: 14 });
     await page.mouse.up();
     await page.waitForFunction((prev) => {
