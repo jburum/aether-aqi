@@ -236,6 +236,10 @@ if (Round2) {
     fail("this pass should not start the notification design");
   }
   if (!html.includes("body.scrubbing #headline")) fail("scrub should hide the essay");
+  if (!html.includes("body.scrubbing .windows { visibility: hidden; }")) {
+    fail("scrub should keep the windows row in place so the level band stays put");
+  }
+  if (/body\.scrubbing \.windows,/.test(html)) fail("scrub must not drop the windows row out of flow");
   if (!html.includes('classList.toggle("scrubbing", scrubbed)')) fail("scrub state should quiet the home screen");
   if (!html.includes('els.headline.textContent = atLead ? lead.title : ""')) {
     fail("the drag should keep the forecast headline only at rest");

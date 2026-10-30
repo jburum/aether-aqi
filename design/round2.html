@@ -201,9 +201,10 @@
       .reminder:empty { display: none; }
       body.scrubbing #headline,
       body.scrubbing .advice,
-      body.scrubbing .windows,
       body.scrubbing #dom,
       body.scrubbing #reminder { display: none; }
+      /* Stay in flow so the 4px level band does not cross the stage. */
+      body.scrubbing .windows { visibility: hidden; }
       #detail { display: flex; flex-direction: column; gap: 4px; }
       #detail-trend { margin: 0; font-size: 15px; font-weight: 650; }
       #detail-why { margin: 0; font-size: 16px; line-height: 21px; }
