@@ -22,6 +22,34 @@ struct EntitlementTests {
         #expect(!free.isPro(at: now))
     }
 
+    @Test("Billing grace stays Pro after expiresAt, as the server's effectiveEntitlement does (Dex, PR 22)")
+    func grace() throws {
+        // #19's GET entitlement body: expired by the clock, but in Apple's billing grace period.
+        let body = #"{"tier":"pro","product":"monthly","priceUsd":"1.99","source":"storekit","expiresAt":"2026-10-30T00:00:00.000Z","state":"grace","pro":true}"#
+        let grace = try decode(body)
+        #expect(grace.state == "grace")
+        #expect(grace.product == "monthly")
+        #expect(grace.expiresAt.map { $0 < now } == true)
+        #expect(grace.isPro(at: now))
+    }
+
+    @Test("The server's states: active only while ahead, expired, revoked and free never Pro")
+    func serverStates() throws {
+        let active = try decode(#"{"tier":"pro","product":"yearly","expiresAt":"2026-12-01T00:00:00Z","state":"active","pro":true}"#)
+        #expect(active.isPro(at: now))
+        // A stale active row whose expiry has passed is not Pro on this clock either.
+        let staleActive = try decode(#"{"tier":"pro","product":"yearly","expiresAt":"2026-10-01T00:00:00Z","state":"active","pro":true}"#)
+        #expect(!staleActive.isPro(at: now))
+        #expect(!(try decode(#"{"tier":"free","product":"monthly","expiresAt":"2026-10-01T00:00:00Z","state":"expired","pro":false}"#)).isPro(at: now))
+        let revoked = try decode(#"{"tier":"free","product":"monthly","expiresAt":"2026-12-01T00:00:00Z","state":"revoked","pro":false}"#)
+        #expect(revoked.revoked)
+        #expect(!revoked.isPro(at: now), "revoked is never Pro, even with a future expiry")
+        #expect(!(try decode(#"{"tier":"free","product":null,"priceUsd":null,"source":null,"expiresAt":null,"state":"free","pro":false}"#)).isPro(at: now))
+        // A state this app doesn't know yet follows the server's own `pro`.
+        #expect(try decode(#"{"tier":"pro","state":"paused","pro":true}"#).isPro(at: now))
+        #expect(!(try decode(#"{"tier":"pro","state":"paused","pro":false}"#)).isPro(at: now))
+    }
+
     @Test("Revoked, expired or unknown tiers are Free; Pro with no expiry is Pro")
     func rules() throws {
         #expect(!(try decode(#"{"tier":"pro","expires_at":"2026-12-01T00:00:00Z","revoked":true}"#)).isPro(at: now))
@@ -29,6 +57,36 @@ struct EntitlementTests {
         #expect(!(try decode(#"{"tier":"gold","revoked":false}"#)).isPro(at: now))
         #expect(try decode(#"{"tier":"pro","revoked":false}"#).isPro(at: now))
         #expect(try decode(#"{"tier":"pro"}"#).isPro(at: now), "a missing revoked reads as false")
+    }
+}
+
+@Suite("Product IDs and server plan keys")
+struct ProductIDMappingTests {
+    @Test("StoreKit product ID to the server plan key, and back (Dex, PR 22)")
+    func bothDirections() {
+        #expect(ProductIDs.planKey(for: ProductIDs.monthly) == "monthly")
+        #expect(ProductIDs.planKey(for: ProductIDs.yearly) == "yearly")
+        #expect(ProductIDs.productId(for: "monthly") == ProductIDs.monthly)
+        #expect(ProductIDs.productId(for: "yearly") == ProductIDs.yearly)
+        for id in ProductIDs.all {
+            #expect(ProductIDs.planKey(for: id).flatMap(ProductIDs.productId(for:)) == id, "\(id) round-trips")
+        }
+        // Only the two plans #19's verifier accepts.
+        #expect(Set(ProductIDs.all.compactMap(ProductIDs.planKey(for:))) == ["monthly", "yearly"])
+        #expect(ProductIDs.planKey(for: "com.example.aetheraqi.pro.lifetime") == nil)
+        #expect(ProductIDs.productId(for: "lifetime") == nil)
+        #expect(ProductIDs.productId(for: ProductIDs.monthly) == nil, "a StoreKit ID is not a plan key")
+    }
+
+    @Test("A fixture purchase reports the server plan key")
+    func purchaseCarriesPlanKey() async throws {
+        let provider = FixturePurchaseProvider(now: { now })
+        guard case .purchased(let entitlement) = try await provider.purchase(ProductIDs.yearly) else {
+            Issue.record("not purchased"); return
+        }
+        #expect(entitlement.product == "yearly")
+        #expect(entitlement.state == "active")
+        #expect(entitlement.isPro(at: now))
     }
 }
 

@@ -205,12 +205,17 @@ Pro is $1.99 a month or $12.99 a year (v1-plan.md). It adds:
 
 **Entitlement:**
 
-- **Where it comes from.** Reads are shaped after the coming entitlement route: `tier` (`free` or `pro`), `expires_at` and `revoked`. Both `expires_at` and `expiresAt` are accepted until the route lands.
-- **When it counts as Pro.** Only when the tier is `pro`, it isn't revoked and it hasn't expired.
+- **Where it comes from.** Reads follow `EntitlementResponse` in `src/lib/v1/entitlements.ts` (#19): `tier`, `product` (the plan key), `expiresAt`, `state` (`free`, `active`, `grace`, `expired` or `revoked`) and `pro`.
+- **When it counts as Pro.** The app uses the server's rule (`effectiveEntitlement`):
+  - `grace` stays Pro after `expiresAt`, for Apple's billing grace period.
+  - `active` is Pro only while `expiresAt` is ahead.
+  - `expired`, `revoked` and `free` are never Pro.
+  - A state the app doesn't know follows the server's own `pro`.
+- **The App Store path.** StoreKit reports a subscription in the billing grace period as `grace`, the same way.
 
 **Placeholders and limits:**
 
-- **Product IDs.** `com.example.aetheraqi.pro.monthly` and `com.example.aetheraqi.pro.yearly` are placeholders, like the bundle ID.
+- **Product IDs.** `com.example.aetheraqi.pro.monthly` and `com.example.aetheraqi.pro.yearly` are placeholders, like the bundle ID. `ProductIDs.planKey(for:)` and `productId(for:)` are the one mapping to the server's plan keys, `monthly` and `yearly`, which are the only products #19's verifier accepts. Real App Store IDs will change only the StoreKit side of that mapping.
 - **Not changed.** There is no App Store Connect setup, no entitlements or capabilities file, and no In-App Purchase capability change.
 
 To try StoreKit purchases in the simulator:

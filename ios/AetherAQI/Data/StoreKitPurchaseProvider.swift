@@ -42,18 +42,48 @@ struct StoreKitPurchaseProvider: PurchaseProvider {
         return try await currentEntitlement()
     }
 
-    /// The best current Pro transaction, or Free.
+    /// The best current Pro transaction, or Free. A subscription in Apple's billing grace period is
+    /// `grace` and stays Pro past its expiry, as the server's rule does (src/lib/v1/entitlements.ts).
     func currentEntitlement() async throws -> EntitlementResponse {
+        let inGrace = await gracePeriodProducts()
         var best: EntitlementResponse = .free
         for await result in Transaction.currentEntitlements {
             guard case .verified(let transaction) = result, productIds.contains(transaction.productID) else { continue }
-            let next = Self.entitlement(from: transaction)
+            let next = Self.entitlement(from: transaction, inGracePeriod: inGrace.contains(transaction.productID))
             if next.isPro(at: Date()) { best = next }
         }
         return best
     }
 
-    static func entitlement(from transaction: Transaction) -> EntitlementResponse {
-        EntitlementResponse(tier: "pro", expiresAt: transaction.expirationDate, revoked: transaction.revocationDate != nil)
+    /// Product IDs whose subscription status is in the billing grace period.
+    private func gracePeriodProducts() async -> Set<String> {
+        guard let products = try? await Product.products(for: productIds) else { return [] }
+        var ids = Set<String>()
+        for product in products {
+            guard let statuses = try? await product.subscription?.status else { continue }
+            for status in statuses where status.state == .inGracePeriod {
+                if case .verified(let transaction) = status.transaction { ids.insert(transaction.productID) }
+            }
+        }
+        return ids
+    }
+
+    /// The state follows the server's `decideState`: revoked, then grace, then expired by the clock, else active.
+    static func entitlement(from transaction: Transaction, inGracePeriod: Bool = false, now: Date = Date()) -> EntitlementResponse {
+        let state: String
+        if transaction.revocationDate != nil {
+            state = "revoked"
+        } else if inGracePeriod {
+            state = "grace"
+        } else if let expires = transaction.expirationDate, expires <= now {
+            state = "expired"
+        } else {
+            state = "active"
+        }
+        let pro = state == "active" || state == "grace"
+        return EntitlementResponse(
+            tier: pro ? "pro" : "free", expiresAt: transaction.expirationDate, revoked: state == "revoked",
+            state: state, pro: pro, product: ProductIDs.planKey(for: transaction.productID)
+        )
     }
 }

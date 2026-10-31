@@ -5,40 +5,69 @@ import Observation
 // up to 5 saved places, and the alert share card. Purchases go through `PurchaseProvider`: StoreKit 2 in
 // the app, a fixture in tests and sample runs. No App Store Connect setup, no entitlement files.
 
-/// What the server says about the person's plan. Shaped after the coming GET entitlement route:
-/// `tier` free or pro, `expires_at`, `revoked`. Both `expires_at` and `expiresAt` are read, because the
-/// route isn't merged yet and the v1 routes so far use camelCase.
+/// The person's plan, shaped after `EntitlementResponse` in src/lib/v1/entitlements.ts (#19):
+/// `tier`, `product` (the plan key), `expiresAt`, `state` (free, active, grace, expired, revoked) and `pro`.
+/// `expires_at` and a `revoked` flag are also read, for a payload that carries them.
 struct EntitlementResponse: Decodable, Equatable, Sendable {
     let tier: String
     let expiresAt: Date?
     let revoked: Bool
+    /// `free`, `active`, `grace`, `expired` or `revoked`. Nil when the source has no state (an older payload).
+    var state: String? = nil
+    /// The server's own answer, at its clock.
+    var pro: Bool? = nil
+    /// The server plan key, `monthly` or `yearly` (ProductIDs.planKey).
+    var product: String? = nil
 
-    static let free = EntitlementResponse(tier: "free", expiresAt: nil, revoked: false)
+    static let free = EntitlementResponse(tier: "free", expiresAt: nil, revoked: false, state: "free", pro: false)
 
-    init(tier: String, expiresAt: Date?, revoked: Bool) {
+    init(tier: String, expiresAt: Date?, revoked: Bool, state: String? = nil, pro: Bool? = nil, product: String? = nil) {
         self.tier = tier
         self.expiresAt = expiresAt
         self.revoked = revoked
+        self.state = state
+        self.pro = pro
+        self.product = product
     }
 
     private enum Keys: String, CodingKey {
-        case tier, revoked, expiresAt
+        case tier, revoked, expiresAt, state, pro, product
         case expiresAtSnake = "expires_at"
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: Keys.self)
         tier = try container.decode(String.self, forKey: .tier)
-        revoked = try container.decodeIfPresent(Bool.self, forKey: .revoked) ?? false
+        state = try container.decodeIfPresent(String.self, forKey: .state)
+        pro = try container.decodeIfPresent(Bool.self, forKey: .pro)
+        product = try container.decodeIfPresent(String.self, forKey: .product)
+        revoked = try container.decodeIfPresent(Bool.self, forKey: .revoked) ?? (state == "revoked")
         expiresAt = try container.decodeIfPresent(Date.self, forKey: .expiresAt)
             ?? container.decodeIfPresent(Date.self, forKey: .expiresAtSnake)
     }
 
-    /// Pro only when the tier says so, it isn't revoked, and it hasn't run out. Anything else is Free.
+    /// The server's rule (`effectiveEntitlement`): grace stays Pro after `expiresAt` (Apple's billing grace
+    /// period); active is Pro only while `expiresAt` is ahead; expired, revoked and free are never Pro.
+    /// Revoked is never Pro, whatever else the payload says.
     func isPro(at now: Date) -> Bool {
-        guard tier == "pro", !revoked else { return false }
-        if let expiresAt { return expiresAt > now }
-        return true
+        if revoked { return false }
+        switch state {
+        case "grace":
+            return true
+        case "active":
+            if let expiresAt { return expiresAt > now }
+            return pro ?? (tier == "pro")
+        case "expired", "revoked", "free":
+            return false
+        case nil:
+            // No state: the tier and expiry decide, as before.
+            guard tier == "pro" else { return false }
+            if let expiresAt { return expiresAt > now }
+            return pro ?? true
+        default:
+            // A state this app doesn't know yet: trust the server's own answer.
+            return pro ?? false
+        }
     }
 }
 
@@ -57,10 +86,24 @@ struct ProProduct: Codable, Equatable, Identifiable, Sendable {
 }
 
 enum ProductIDs {
-    /// Placeholders until the app has a bundle ID (docs/appstore/ROADMAP.md).
+    /// StoreKit product IDs. Placeholders until the app has a bundle ID (docs/appstore/ROADMAP.md).
     static let monthly = "com.example.aetheraqi.pro.monthly"
     static let yearly = "com.example.aetheraqi.pro.yearly"
     static let all = [monthly, yearly]
+
+    /// The one mapping between StoreKit product IDs and the server's plan keys (`monthly`, `yearly`,
+    /// the only products src/lib/v1/storekit.ts accepts). Real App Store IDs change only the left side.
+    private static let planKeys: [String: String] = [monthly: "monthly", yearly: "yearly"]
+
+    /// StoreKit product ID → server plan key. Nil for a product the server doesn't sell.
+    static func planKey(for productId: String) -> String? {
+        planKeys[productId]
+    }
+
+    /// Server plan key → StoreKit product ID. Nil for a key this app doesn't sell.
+    static func productId(for planKey: String) -> String? {
+        planKeys.first { $0.value == planKey }?.key
+    }
 }
 
 enum PurchaseOutcome: Equatable, Sendable {
@@ -107,7 +150,9 @@ actor FixturePurchaseProvider: PurchaseProvider {
         now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.now = now
-        entitlement = startingPro ? EntitlementResponse(tier: "pro", expiresAt: nil, revoked: false) : .free
+        entitlement = startingPro
+            ? EntitlementResponse(tier: "pro", expiresAt: nil, revoked: false, state: "active", pro: true, product: "monthly")
+            : .free
         self.restorable = restorable
         self.next = next
     }
@@ -125,7 +170,10 @@ actor FixturePurchaseProvider: PurchaseProvider {
         case .buy:
             let length: Calendar.Component = product.period == .monthly ? .month : .year
             let expires = Calendar(identifier: .gregorian).date(byAdding: length, value: 1, to: now())
-            entitlement = EntitlementResponse(tier: "pro", expiresAt: expires, revoked: false)
+            entitlement = EntitlementResponse(
+                tier: "pro", expiresAt: expires, revoked: false, state: "active", pro: true,
+                product: ProductIDs.planKey(for: product.id)
+            )
             return .purchased(entitlement)
         }
     }
