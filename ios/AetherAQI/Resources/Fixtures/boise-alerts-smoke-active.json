@@ -13,7 +13,8 @@
       "severity": "high",
       "source": "noaa_smoke",
       "confidence": "valley",
-      "reason": "Smoke alert from the NOAA smoke model: corrected AQI peaks at 168, valley confidence, across 7 hours."
+      "reason": "Smoke alert from the NOAA smoke model: corrected AQI peaks at 168, valley confidence, across 7 hours.",
+      "peakAqi": 168
     }
   ]
 }

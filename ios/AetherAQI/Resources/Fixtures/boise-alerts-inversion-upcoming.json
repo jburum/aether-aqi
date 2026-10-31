@@ -13,7 +13,8 @@
       "severity": "elevated",
       "source": "noaa_smoke",
       "confidence": "valley",
-      "reason": "Smoke alert from the NOAA smoke model: corrected AQI peaks at 120, valley confidence, across 6 hours."
+      "reason": "Smoke alert from the NOAA smoke model: corrected AQI peaks at 120, valley confidence, across 6 hours.",
+      "peakAqi": 120
     },
     {
       "kind": "inversion",
@@ -24,7 +25,8 @@
       "severity": "elevated",
       "source": "noaa_hrrr",
       "confidence": "valley",
-      "reason": "Winter inversion across 8 hours: mixing height is 180 m, wind is 1.1 m/s, and PM2.5 corrected AQI peaks at 143."
+      "reason": "Winter inversion across 8 hours: mixing height is 180 m, wind is 1.1 m/s, and PM2.5 corrected AQI peaks at 143.",
+      "peakAqi": 143
     }
   ]
 }

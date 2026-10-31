@@ -13,7 +13,8 @@
       "severity": "heads_up",
       "source": "noaa_aqf",
       "confidence": "low",
-      "reason": "Heads up only: NOAA's air quality forecast has ozone corrected AQI 118 on days 3-7, low confidence, across 6 hours."
+      "reason": "Heads up only: NOAA's air quality forecast has ozone corrected AQI 118 on days 3-7, low confidence, across 6 hours.",
+      "peakAqi": 118
     }
   ]
 }
