@@ -13,15 +13,24 @@ struct AetherAQIApp: App {
             // with `-AQIOutlook weekend|weekday|none|error|loading`, and alerts with
             // `-AQIAlerts smoke|winter|ozone|empty|error|loading`. The clock is pinned to the
             // sample's "now", three hours into the recorded NOAA cycle.
-            HomeScreen(model: HomeModel(
-                provider: SampleAirProvider(
-                    scenario: .fromLaunchArguments(),
-                    timeline: .fromLaunchArguments(),
-                    outlookScenario: .fromLaunchArguments(),
-                    alertsScenario: .fromLaunchArguments()
+            // Saved places live on this phone (LocalPlacesProvider); pick from the bundled Idaho list.
+            // `-AQIProStub YES` turns on the local Pro stub (more than one place). No StoreKit.
+            HomeScreen(
+                model: HomeModel(
+                    provider: SampleAirProvider(
+                        scenario: .fromLaunchArguments(),
+                        timeline: .fromLaunchArguments(),
+                        outlookScenario: .fromLaunchArguments(),
+                        alertsScenario: .fromLaunchArguments()
+                    ),
+                    now: { SampleAirProvider.now }
                 ),
-                now: { SampleAirProvider.now }
-            ))
+                places: PlacesModel(
+                    provider: LocalPlacesProvider(),
+                    candidates: (try? IdahoPlaces.decode(BundledFixture.data(named: IdahoPlaces.fixtureName))) ?? [],
+                    isPro: ProStub.isOn()
+                )
+            )
         }
     }
 }

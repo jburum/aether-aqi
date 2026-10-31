@@ -6,8 +6,11 @@ struct HomeScreen: View {
     @State var model: HomeModel
     /// Which alerts the person turned on, kept on this phone.
     @State var alertSettings = AlertSettings()
+    /// Saved places. The home screen shows the active one. Nil where there is no list (still renders, tests).
+    @State var places: PlacesModel? = nil
     /// False only where the caller has already loaded the model (still renders of a fixed state).
     var loadsOnAppear = true
+    @State private var showingPlaces = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -34,9 +37,29 @@ struct HomeScreen: View {
         .foregroundStyle(Theme.ink)
         .animation(reduceMotion ? nil : Theme.fieldFade, value: level)
         .preferredColorScheme(.dark)
-        .task {
-            if loadsOnAppear { await model.load() }
+        .environment(\.openPlaces, openPlacesAction)
+        .sheet(isPresented: $showingPlaces) {
+            if let places { PlacesView(places: places) { showingPlaces = false } }
         }
+        .task {
+            guard loadsOnAppear else { return }
+            if let places {
+                await places.load()
+                await model.show(places.activePlace)
+            } else {
+                await model.load()
+            }
+        }
+        // The home screen follows the active place: picking, deleting or renaming one reloads it.
+        .onChange(of: places?.activePlace) { _, next in
+            Task { await model.show(next) }
+        }
+    }
+
+    /// Opens the places list; nil when this screen has no list.
+    private var openPlacesAction: (@MainActor () -> Void)? {
+        guard places != nil else { return nil }
+        return { showingPlaces = true }
     }
 
     @ViewBuilder private var content: some View {
@@ -121,16 +144,8 @@ private struct CurrentAir: View {
         // to white, which clears 4.5:1 on every field.
         let accent = display.level != nil && display.level == fieldLevel ? display.level!.accent : RGB.white
         VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(snapshot.place.name)
-                    .font(AppFont.sans(body15, weight: 650))
-                Text(snapshot.place.region)
-                    .font(AppFont.sans(body15, weight: 500))
-                    .foregroundStyle(soft.color)
-            }
-            .padding(.top, 6)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("\(snapshot.place.name), \(snapshot.place.region)")
+            PlaceLine(place: snapshot.place, soft: soft)
+                .padding(.top, 6)
 
             VStack(alignment: .leading, spacing: 0) {
                 Text(display.kicker)
@@ -387,13 +402,54 @@ private struct StateMessage<Action: View>: View {
 }
 
 private struct EmptyState: View {
+    @Environment(\.openPlaces) private var openPlaces
+
     var body: some View {
         StateMessage(
             symbol: "mappin.and.ellipse",
             title: "No place yet",
             message: "Add a place to see its air right now and the best time to be outside."
         ) {
-            EmptyView()
+            if let openPlaces { OutlineButton(title: "Add a place") { openPlaces() } }
+        }
+    }
+}
+
+/// "Boise  Idaho". With a places list, it is the button that opens it.
+private struct PlaceLine: View {
+    let place: Place
+    let soft: RGB
+    @Environment(\.openPlaces) private var openPlaces
+    @ScaledMetric(relativeTo: .subheadline) private var body15: CGFloat = 15
+
+    var body: some View {
+        if let openPlaces {
+            Button { openPlaces() } label: { label(chevron: true) }
+                .buttonStyle(.plain)
+                .frame(minHeight: 44, alignment: .leading)
+                .contentShape(Rectangle())
+                .accessibilityLabel("\(place.name), \(place.region)")
+                .accessibilityHint("Shows your saved places.")
+        } else {
+            label(chevron: false)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("\(place.name), \(place.region)")
+        }
+    }
+
+    private func label(chevron: Bool) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Text(place.name)
+                .font(AppFont.sans(body15, weight: 650))
+            Text(place.region)
+                .font(AppFont.sans(body15, weight: 500))
+                .foregroundStyle(soft.color)
+            if chevron {
+                Image(systemName: "chevron.down")
+                    .font(.system(size: body15 - 3, weight: .semibold))
+                    .foregroundStyle(soft.color)
+                    .accessibilityHidden(true)
+            }
         }
     }
 }

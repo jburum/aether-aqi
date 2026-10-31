@@ -81,7 +81,7 @@ private actor FlakyProvider: AirDataProvider {
 
     func fail() { failing = true }
 
-    func homeSnapshot() async throws -> HomeSnapshot? {
+    func homeSnapshot(for place: Place) async throws -> HomeSnapshot? {
         if failing { throw AirDataError.unavailable }
         return SampleAirProvider.snapshot(ours: 30, official: 35, pollutant: "PM2.5")
     }
@@ -102,7 +102,7 @@ private actor TimelineFailsOnceProvider: AirDataProvider {
 
     func recover() { failing = false }
 
-    func homeSnapshot() async throws -> HomeSnapshot? {
+    func homeSnapshot(for place: Place) async throws -> HomeSnapshot? {
         SampleAirProvider.snapshot(ours: 42, official: 48, pollutant: "PM2.5")
     }
 
