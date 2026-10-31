@@ -142,12 +142,14 @@ actor FixturePurchaseProvider: PurchaseProvider {
 enum PaywallReason: Equatable, Sendable {
     case alerts
     case places
+    case share
     case browse
 
     var headline: String {
         switch self {
         case .alerts: "Alerts are part of Pro"
         case .places: "More places are part of Pro"
+        case .share: "Sharing alerts is part of Pro"
         case .browse: "Air Quality Forecast Pro"
         }
     }
