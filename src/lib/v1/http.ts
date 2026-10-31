@@ -1,5 +1,14 @@
 import { readAlerts } from "./alerts.ts";
-import { V1RuleError } from "./errors.ts";
+import {
+  assertPlaceOpen,
+  loadPlaceAccess,
+  readCurrentAir,
+  readEntitlement,
+  readTimeline,
+  requireOpenPlace,
+  requireProAlerts,
+} from "./entitlements.ts";
+import { NotEntitledError, V1RuleError } from "./errors.ts";
 import { parseAsOf, parseTimeZone, readBestWindow, readOutlook } from "./phase2.ts";
 import type { PushSender } from "./push.ts";
 import { parseDeviceToken, requireId } from "./rules.ts";
@@ -38,8 +47,10 @@ async function readJson(request: Request): Promise<unknown> {
 
 /**
  * v1 HTTP surface. The route resolves the user, then calls this.
- * Paths: places, places/:id/best-window, places/:id/outlook, places/:id/alerts,
+ * Paths: entitlement, places, places/:id/current, places/:id/timeline,
+ * places/:id/best-window, places/:id/outlook, places/:id/alerts,
  * forecasts, observations, push/devices, push/deliver, push/samples.
+ * Pro gates live here: alerts, and any saved place after the first.
  */
 export async function handleV1(request: Request, deps: V1Deps): Promise<Response> {
   const url = new URL(request.url);
@@ -51,6 +62,12 @@ export async function handleV1(request: Request, deps: V1Deps): Promise<Response
   try {
     return await route(request, url, rest, deps);
   } catch (err) {
+    if (err instanceof NotEntitledError) {
+      return json(
+        { error: err.code, message: err.message, feature: err.feature, tier: err.tier },
+        err.status,
+      );
+    }
     if (err instanceof V1RuleError) {
       return json({ error: err.code, message: err.message }, err.status);
     }
@@ -58,12 +75,37 @@ export async function handleV1(request: Request, deps: V1Deps): Promise<Response
   }
 }
 
+const PLACE_READS = new Set(["current", "timeline", "best-window", "outlook", "alerts"]);
+
+function peekPlaceId(body: unknown): string | null {
+  if (typeof body !== "object" || body === null || Array.isArray(body)) return null;
+  const placeId = (body as { placeId?: unknown }).placeId;
+  return typeof placeId === "string" ? placeId : null;
+}
+
+function requiredZone(timeZone: string | null): string {
+  if (timeZone == null) {
+    throw new V1RuleError("invalid_time_zone", "timeZone is required and must be an IANA zone.");
+  }
+  return timeZone;
+}
+
 async function route(request: Request, url: URL, rest: string[], deps: V1Deps): Promise<Response> {
   const method = request.method.toUpperCase();
+  const now = new Date();
+
+  if (rest[0] === "entitlement" && rest.length === 1) {
+    if (method !== "GET") {
+      return json({ error: "method_not_allowed", message: "Method not allowed" }, 405);
+    }
+    return json(await readEntitlement(deps.sql, deps.userId, now));
+  }
 
   if (rest[0] === "places" && rest.length === 1) {
     if (method === "GET") {
-      return json({ places: await listSavedPlaces(deps.sql, deps.userId) });
+      const access = await loadPlaceAccess(deps.sql, deps.userId, now);
+      const places = await listSavedPlaces(deps.sql, deps.userId);
+      return json({ places, pro: access.pro, openPlaceIds: access.openPlaceIds });
     }
     if (method === "POST") {
       const place = await addSavedPlace(deps.sql, deps.userId, await readJson(request));
@@ -82,50 +124,53 @@ async function route(request: Request, url: URL, rest: string[], deps: V1Deps): 
 
   if (rest[0] === "places" && rest.length === 3) {
     const placeId = requireId(rest[1], "placeId");
-    if (rest[2] !== "best-window" && rest[2] !== "outlook" && rest[2] !== "alerts") {
+    const kind = rest[2];
+    if (!PLACE_READS.has(kind ?? "")) {
       return json({ error: "not_found", message: "Unknown route" }, 404);
     }
     if (method !== "GET") {
       return json({ error: "method_not_allowed", message: "Method not allowed" }, 405);
     }
     const asOf = parseAsOf(url.searchParams.get("asOf"));
-    if (rest[2] === "best-window") {
+    const timeZone =
+      kind === "outlook" || kind === "alerts"
+        ? parseTimeZone(url.searchParams.get("timeZone"))
+        : null;
+    await requireOpenPlace(deps.sql, deps.userId, placeId, now);
+    if (kind === "current") {
+      return json(await readCurrentAir(deps.sql, deps.userId, placeId, asOf));
+    }
+    if (kind === "timeline") {
+      return json(await readTimeline(deps.sql, deps.userId, placeId, asOf));
+    }
+    if (kind === "best-window") {
       return json(await readBestWindow(deps.sql, deps.userId, placeId, asOf));
     }
-    if (rest[2] === "alerts") {
-      return json(
-        await readAlerts(
-          deps.sql,
-          deps.userId,
-          placeId,
-          asOf,
-          parseTimeZone(url.searchParams.get("timeZone")),
-        ),
-      );
+    if (kind === "outlook") {
+      return json(await readOutlook(deps.sql, deps.userId, placeId, asOf, requiredZone(timeZone)));
     }
-    return json(
-      await readOutlook(
-        deps.sql,
-        deps.userId,
-        placeId,
-        asOf,
-        parseTimeZone(url.searchParams.get("timeZone")),
-      ),
-    );
+    await requireProAlerts(deps.sql, deps.userId, now);
+    return json(await readAlerts(deps.sql, deps.userId, placeId, asOf, requiredZone(timeZone)));
   }
 
   if (rest[0] === "forecasts" && rest.length === 1) {
     if (method === "GET") {
-      const placeId = url.searchParams.get("placeId");
-      const forecasts = await listBeside(
-        deps.sql,
-        deps.userId,
-        placeId ? requireId(placeId, "placeId") : undefined,
-      );
-      return json({ forecasts });
+      const access = await loadPlaceAccess(deps.sql, deps.userId, now);
+      const requested = url.searchParams.get("placeId");
+      if (requested) {
+        const placeId = requireId(requested, "placeId");
+        assertPlaceOpen(access, placeId);
+        return json({ forecasts: await listBeside(deps.sql, deps.userId, placeId) });
+      }
+      const open = new Set(access.openPlaceIds);
+      const forecasts = await listBeside(deps.sql, deps.userId);
+      return json({ forecasts: forecasts.filter((row) => open.has(row.place.id)) });
     }
     if (method === "POST") {
-      const forecast = await issueForecast(deps.sql, deps.userId, await readJson(request));
+      const body = await readJson(request);
+      const placeId = peekPlaceId(body);
+      if (placeId) await requireOpenPlace(deps.sql, deps.userId, placeId, now);
+      const forecast = await issueForecast(deps.sql, deps.userId, body);
       return json({ forecast }, 201);
     }
     return json({ error: "method_not_allowed", message: "Method not allowed" }, 405);
@@ -133,7 +178,10 @@ async function route(request: Request, url: URL, rest: string[], deps: V1Deps): 
 
   if (rest[0] === "observations" && rest.length === 1) {
     if (method === "POST") {
-      const official = await recordOfficial(deps.sql, deps.userId, await readJson(request));
+      const body = await readJson(request);
+      const placeId = peekPlaceId(body);
+      if (placeId) await requireOpenPlace(deps.sql, deps.userId, placeId, now);
+      const official = await recordOfficial(deps.sql, deps.userId, body);
       return json({ official }, 201);
     }
     return json({ error: "method_not_allowed", message: "Method not allowed" }, 405);

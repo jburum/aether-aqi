@@ -812,6 +812,10 @@ describe("v1 alert route", () => {
       true,
     );
 
+    await sql.query(
+      `insert into entitlement (user_id, tier, product, source, expires_at, state)
+       values ('user-a', 'pro', 'yearly', 'storekit', '2099-01-01T00:00:00.000Z', 'active')`,
+    );
     const path = `/api/v1/places/${place.id}/alerts?asOf=${encodeURIComponent(asOf)}&timeZone=${encodeURIComponent(ZONE)}`;
     const call = (method: string, url: string, userId = "user-a") =>
       handleV1(new Request(`http://localhost${url}`, { method }), { sql, userId, sender });
