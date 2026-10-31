@@ -2,7 +2,8 @@
 
 SwiftUI app for AQI v1 (see the locked plan in SharedBrain, `Projects/aether-aqi/v1-plan.md`). So far it
 is the Free home screen: current air for one place, the whole-screen color shift, the 48-hour drag
-timeline (Phase 1), the best window and the Tomorrow and weekend outlook (Phase 2), and loading, empty
+timeline (Phase 1), the best window, the Tomorrow and weekend outlook, alerts and alert settings
+(Phase 2), and loading, empty
 and error states. All data is sample
 or recorded fixture data. There is no network code, no API key and no signing set up.
 
@@ -113,6 +114,39 @@ Pick the canned responses with `-AQIOutlook`:
 | `error` | Both requests fail |
 | `loading` | Both requests never answer |
 
+## Alerts
+
+The alert list is decoded exactly as `GET /api/v1/places/:id/alerts` returns it: `docs/v1/ALERTS.md` and `AlertsResponse` in `src/lib/v1/alerts.ts`, on `keel/aqi-p2-alert-rules` while PR #15 is in review. The body has `placeId`, `asOf`, `timeZone`, `through` and `alerts`. Each alert has `kind` (`smoke`, `inversion` or `ozone`), `fired`, `status`, `start`, an exclusive `end`, `severity` (`elevated`, `high` or `heads_up`), `source`, `confidence` and `reason`. The fixtures were produced by running the back end's own `smokeRule`, `inversionRule` and `ozoneRule`, assembled the way `readAlerts` does it.
+
+What the home screen shows:
+
+- **Order.** Active alerts come first, then upcoming ones by start time. Alerts that are quiet, already over, or missing a time are left out.
+- **Each row.** The rule and severity ("Smoke · High"), Now or Upcoming, the time span in the place's zone ("5 PM to Thu 1 AM"), and the reason the rule gave.
+  - Elevated and high borrow the USG and Unhealthy band colors for a small swatch.
+  - A heads up, or anything at `low` confidence, says "Regional and low-confidence" in words and gets a dashed card.
+- **No alerts.** An empty list shows one line: "No smoke, inversion or ozone alerts in the next 7 days."
+- **Loading and errors.** Alerts load on their own, beside the timeline, best window and outlook. A stall or failure in one never holds back the others.
+
+**Alert settings** opens from the alerts section. It has one switch each for smoke, winter inversion and summer ozone.
+
+- **Off by default.** Every switch is off until the person turns it on (`docs/appstore/ROADMAP.md`).
+- **Stored on the phone only.** The choice is saved in UserDefaults (`alerts.<rule>.enabled`).
+- **Nothing sent.** There is no notification permission prompt, no push, no entitlement and no network call.
+- **The list ignores the switches.** It shows alerts whether or not any switch is on. The switches only record what the person wants alerted on, for when alerts start being delivered.
+
+Pick the canned response with `-AQIAlerts`:
+
+| Alerts | What it shows |
+|---|---|
+| `smoke` (default) | Saturday 31 Oct: smoke active, high |
+| `winter` | 2 Dec: smoke active (elevated), then a valley inversion that evening (upcoming) |
+| `ozone` | 8 Jul: ozone on days 3–7, an upcoming heads up at low confidence |
+| `empty` | Nothing active or upcoming |
+| `error` | The request fails |
+| `loading` | The request never answers |
+
+Each response has its own `asOf`, and the rows read Now or Upcoming against that, not against the app's sample clock.
+
 ## Layout
 
 | Path | What it holds |
@@ -121,7 +155,7 @@ Pick the canned responses with `-AQIOutlook`:
 | `AetherAQI/Model` | AQI levels and colors, the snapshot types, and `ForecastTimeline`. Our corrected forecast and the official AirNow reading are separate types. |
 | `AetherAQI/Data` | `AirDataProvider` (the protocol the screens use), `FixtureForecastProvider` (recorded rows) and `SampleAirProvider` (fixed Boise data) |
 | `AetherAQI/Home` | The home screen, the timeline and their model |
-| `AetherAQI/Resources/Fixtures` | `boise-hourly-12z.json`: one NOAA 12Z cycle as `IssuedForecast` rows. `boise-best-window*.json` and `boise-outlook-*.json`: Phase 2 responses |
+| `AetherAQI/Resources/Fixtures` | `boise-hourly-12z.json`: one NOAA 12Z cycle as `IssuedForecast` rows. `boise-best-window*.json`, `boise-outlook-*.json` and `boise-alerts-*.json`: Phase 2 responses |
 | `AetherAQI/Design` | Tokens and fonts |
 | `AetherAQI/Resources/Fonts` | Source Serif 4 and Source Sans 3 (SIL OFL, see `OFL.txt`) |
 | `AetherAQITests` | Swift Testing unit tests |
@@ -137,4 +171,4 @@ Pick the canned responses with `-AQIOutlook`:
 
 - **App name and bundle ID.** The name "Air Quality Forecast" and the bundle ID `com.example.aetheraqi` are placeholders. Both are still open in `docs/appstore/ROADMAP.md`.
 - **App icon.** There is none yet.
-- **Alert settings.** Not built yet. They wait for the back end's alert-rules API.
+- **Alert delivery.** Alert settings only save the person's choice on the phone. Notifications, the permission prompt and push wait for a later slice.

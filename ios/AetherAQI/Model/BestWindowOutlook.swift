@@ -124,6 +124,24 @@ enum ForecastSourceName {
 
 // MARK: - What the screens show
 
+/// "9 AM to 9 PM", "8 PM to Thu 12 PM": a span with an exclusive end, in a place's local time.
+enum LocalSpan {
+    /// The start names its day when it isn't `asOf`'s day; the end names its day when the span runs past
+    /// midnight. An end exactly at midnight still belongs to the start's day.
+    static func text(start: Date, end: Date, zone: TimeZone, asOf: Date) -> String {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = zone
+        let startText = calendar.isDate(start, inSameDayAs: asOf)
+            ? HourLabel.hour(start, in: zone)
+            : HourLabel.dayAndHour(start, in: zone)
+        let lastMoment = end.addingTimeInterval(-1)
+        let endText = calendar.isDate(lastMoment, inSameDayAs: start)
+            ? HourLabel.hour(end, in: zone)
+            : HourLabel.dayAndHour(end, in: zone)
+        return "\(startText) to \(endText)"
+    }
+}
+
 /// The home screen's best-window line.
 struct BestWindowDisplay: Equatable, Sendable {
     enum State: Equatable, Sendable {
@@ -152,17 +170,7 @@ struct BestWindowDisplay: Equatable, Sendable {
     /// Start to end in the place's local time. The day is named when it is not today, and again at the
     /// end when the window runs past midnight.
     static func span(_ window: OutdoorWindow, zone: TimeZone, asOf: Date) -> String {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = zone
-        let startText = calendar.isDate(window.start, inSameDayAs: asOf)
-            ? HourLabel.hour(window.start, in: zone)
-            : HourLabel.dayAndHour(window.start, in: zone)
-        // `end` is exclusive: a window ending at midnight ends on the start's day.
-        let lastHour = window.end.addingTimeInterval(-1)
-        let endText = calendar.isDate(lastHour, inSameDayAs: window.start)
-            ? HourLabel.hour(window.end, in: zone)
-            : HourLabel.dayAndHour(window.end, in: zone)
-        return "\(startText) to \(endText)"
+        LocalSpan.text(start: window.start, end: window.end, zone: zone, asOf: asOf)
     }
 
     var accessibilityLabel: String {
