@@ -38,7 +38,7 @@ Smoke, inversion, and ozone alerts are Pro on every place, including the first.
 
 Alerts, and saved places 2 through 5. The sixth place is still `place_cap` (409), for Pro and for a downgraded account that already holds five.
 
-A downgrade (expired or revoked) does not delete places or forecasts. `GET /api/v1/places` still lists them and sets `openPlaceIds` to the one Free place. Reads of any later place, including alerts, return the not-entitled shape with `feature: "saved_places"`. `GET /api/v1/forecasts` leaves the later places out. A forecast or official write aimed at a closed place is refused and writes nothing.
+A downgrade (expired or revoked) does not delete places or forecasts. `GET /api/v1/places` still lists them and sets `openPlaceIds` to the one Free place. Reads of any later place, including alerts, return the not-entitled shape with `feature: "saved_places"`. `GET /api/v1/forecasts` leaves the later places out. A forecast or official write aimed at a closed place is refused and writes nothing. `POST /api/v1/push/deliver` resolves the forecast's place and runs that same place gate before it sends or writes `push_delivery`. A locked place is 403 `not_entitled` with `feature: "saved_places"` and no delivery row. The first place still delivers.
 
 ## Not entitled
 
@@ -67,7 +67,7 @@ The gate is `handleV1` in `src/lib/v1/http.ts`. The existing `/api/v1/$` route a
 | GET | `/api/v1/places/:id/timeline` | Free for the first place. |
 | GET | `/api/v1/places/:id/alerts` | Pro. |
 
-Best window, outlook, and the forecast list follow the same place gate as current air.
+Best window, outlook, the forecast list, and push delivery follow the same place gate as current air. Delivery looks up the forecast's place before the test send and the `push_delivery` insert.
 
 ## Checks
 
