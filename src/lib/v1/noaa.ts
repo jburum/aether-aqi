@@ -1,4 +1,6 @@
+import type { StabilitySample } from "./alerts.ts";
 import { V1RuleError } from "./errors.ts";
+import { parseUtcInstant } from "./phase2.ts";
 import { concentrationTokenToTenths, pm25TenthsToAqi } from "./pm25-aqi.ts";
 import { classifyForecastLead, parseForecastInput, type ValidForecast } from "./rules.ts";
 
@@ -360,4 +362,135 @@ export function forecastBodiesFromExtracts(input: {
     bodies.push(body);
   }
   return bodies;
+}
+
+/** HRRR surface fields for the inversion rule. Same DODS short-name pattern as `masden8m`. */
+export const STABILITY_VARIABLES = ["tmp2m", "tmp80m", "ugrd10m", "vgrd10m"] as const;
+export type StabilityVariable = (typeof STABILITY_VARIABLES)[number];
+
+/**
+ * Keyless HRRR surface ASCII for 2 m temperature, 80 m temperature, and 10 m wind.
+ * Lead hours stop at 48. This does not fetch.
+ */
+export function hrrrStabilityAsciiUrls(input: NoaaSeriesQuery): Record<StabilityVariable, string> {
+  if (input.hourStart > 48 || input.hourEnd > 48) {
+    throw new V1RuleError("noaa_hour", "HRRR stability covers lead hours 0 through 48.");
+  }
+  const urls = {} as Record<StabilityVariable, string>;
+  for (const variable of STABILITY_VARIABLES) {
+    const { cycle, query } = seriesBounds(input);
+    const url = `${NOAA_ORIGIN}/dods/hrrr/hrrr${cycle.yyyymmdd}/hrrr_sfc.t${cycle.hh}z.ascii?${variable}${query}`;
+    assertNoaaUrl(url);
+    urls[variable] = url;
+  }
+  return urls;
+}
+
+function stabilityToken(token: string): number | null {
+  const trimmed = token.trim();
+  if (/^(nan|null|missing|m)$/i.test(trimmed)) return null;
+  if (/^-9999(?:\.0+)?$/.test(trimmed)) return null;
+  if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(trimmed)) {
+    throw new V1RuleError("noaa_stability_parse", `NOAA value ${trimmed} is not a plain number.`);
+  }
+  const value = Number(trimmed);
+  if (!Number.isFinite(value) || Math.abs(value) >= 1e19) return null;
+  return value;
+}
+
+function parseStabilityField(
+  text: string,
+  variable: StabilityVariable,
+): Map<number, number | null> {
+  rejectForeignFeed(text);
+  const values = new Map<number, number | null>();
+  let seenHeader = false;
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("---") || line.startsWith("Dataset")) continue;
+    if (line.startsWith(variable)) {
+      seenHeader = true;
+      continue;
+    }
+    for (const other of STABILITY_VARIABLES) {
+      if (other !== variable && line.startsWith(other)) {
+        throw new V1RuleError(
+          "noaa_stability_parse",
+          `Expected ${variable} ASCII, found ${other}.`,
+        );
+      }
+    }
+    if (line.startsWith("masden8m") || line.startsWith("pm25sfc")) {
+      throw new V1RuleError(
+        "noaa_stability_parse",
+        "Stability ASCII is HRRR temperature and wind, not smoke or PM2.5.",
+      );
+    }
+    const data = DATA_LINE.exec(line);
+    if (!data) {
+      throw new V1RuleError(
+        "noaa_stability_parse",
+        "NOAA ASCII line is not a single-cell extract.",
+      );
+    }
+    if (!seenHeader) {
+      throw new V1RuleError("noaa_stability_parse", "NOAA ASCII is missing the variable header.");
+    }
+    const hour = Number(data[1]);
+    if (Number(data[2]) !== 0 || Number(data[3]) !== 0) {
+      throw new V1RuleError(
+        "noaa_point_only",
+        "Phase 1 parses one grid cell. Record the ASCII for that cell.",
+      );
+    }
+    if (values.has(hour)) {
+      throw new V1RuleError("noaa_duplicate_hour", `NOAA extract repeats hour ${hour}.`);
+    }
+    values.set(hour, stabilityToken(data[4] ?? ""));
+  }
+  if (!seenHeader) {
+    throw new V1RuleError("noaa_stability_parse", "NOAA ASCII is missing the variable header.");
+  }
+  return values;
+}
+
+function windSpeed(u: number | null, v: number | null): number | null {
+  if (u == null || v == null) return null;
+  return Math.hypot(u, v);
+}
+
+/**
+ * One cell of HRRR stability. A missing temperature or wind drops that hour.
+ * Lead hours after 48 are dropped. Fill values (`1e20`, `-9999`) are missing.
+ */
+export function stabilitySamplesFromExtracts(input: {
+  issuedAt: string;
+  tmp2m: string;
+  tmp80m: string;
+  ugrd10m: string;
+  vgrd10m: string;
+}): StabilitySample[] {
+  const issuedAt = parseUtcInstant(input.issuedAt, "issuedAt");
+  const tmp2m = parseStabilityField(input.tmp2m, "tmp2m");
+  const tmp80m = parseStabilityField(input.tmp80m, "tmp80m");
+  const ugrd = parseStabilityField(input.ugrd10m, "ugrd10m");
+  const vgrd = parseStabilityField(input.vgrd10m, "vgrd10m");
+  const hours = new Set<number>([
+    ...tmp2m.keys(),
+    ...tmp80m.keys(),
+    ...ugrd.keys(),
+    ...vgrd.keys(),
+  ]);
+  const samples: StabilitySample[] = [];
+  for (const hour of [...hours].sort((a, b) => a - b)) {
+    if (hour > 48) continue;
+    const t2 = tmp2m.get(hour) ?? null;
+    const t80 = tmp80m.get(hour) ?? null;
+    const wind = windSpeed(ugrd.get(hour) ?? null, vgrd.get(hour) ?? null);
+    if (t2 == null || t80 == null || wind == null) continue;
+    const validFor = new Date(Date.parse(issuedAt) + hour * 3_600_000).toISOString();
+    if (classifyForecastLead(issuedAt, validFor) !== "day_1_2") continue;
+    samples.push({ issuedAt, validFor, tmp2mK: t2, tmp80mK: t80, wind10mMs: wind });
+  }
+  return samples;
 }
