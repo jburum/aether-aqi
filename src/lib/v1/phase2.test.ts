@@ -410,6 +410,13 @@ describe("v1 phase 2 best window and outlook", { concurrency: 1 }, () => {
     assert.equal(badClock.status, 400);
     assert.equal(((await badClock.json()) as { error: string }).error, "invalid_time");
 
+    const impossible = await call(
+      "GET",
+      `/api/v1/places/${place.id}/best-window?asOf=2026-02-30T00:00:00.000Z`,
+    );
+    assert.equal(impossible.status, 400);
+    assert.equal(((await impossible.json()) as { error: string }).error, "invalid_time");
+
     const noZone = await call("GET", `/api/v1/places/${place.id}/outlook?asOf=${asOf}`);
     assert.equal(noZone.status, 400);
     assert.equal(((await noZone.json()) as { error: string }).error, "invalid_time_zone");

@@ -8,7 +8,34 @@ import type { Confidence, ForecastSource, Horizon, Queryable, SpatialScale } fro
  */
 
 const HOUR_MS = 3_600_000;
-const ISO_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/;
+const ISO_UTC = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?Z$/;
+
+/**
+ * `Date` rolls impossible calendar days forward (2026-02-30 becomes March 2).
+ * The UTC parts have to match the text that was sent.
+ */
+export function parseUtcInstant(value: string, field: string): string {
+  const match = ISO_UTC.exec(value);
+  if (!match) {
+    throw new V1RuleError("invalid_time", `${field} must be a UTC timestamp.`);
+  }
+  const parsed = new Date(value);
+  const fraction = match[7];
+  const millis = fraction ? Number(fraction.padEnd(3, "0")) : 0;
+  const matches =
+    !Number.isNaN(parsed.getTime()) &&
+    parsed.getUTCFullYear() === Number(match[1]) &&
+    parsed.getUTCMonth() + 1 === Number(match[2]) &&
+    parsed.getUTCDate() === Number(match[3]) &&
+    parsed.getUTCHours() === Number(match[4]) &&
+    parsed.getUTCMinutes() === Number(match[5]) &&
+    parsed.getUTCSeconds() === Number(match[6]) &&
+    parsed.getUTCMilliseconds() === millis;
+  if (!matches) {
+    throw new V1RuleError("invalid_time", `${field} must be a UTC timestamp.`);
+  }
+  return parsed.toISOString();
+}
 
 /** Same names as the iOS air levels. 201–300 is `very`. */
 export const AQI_BANDS = ["good", "moderate", "usg", "unhealthy", "very", "hazardous"] as const;
@@ -99,17 +126,10 @@ export function aqiBand(aqi: number): AqiBand {
   return "hazardous";
 }
 
-/** Omitted `asOf` is the request clock. A present value must be UTC. */
+/** Omitted `asOf` is the request clock. A present value must be a real UTC instant. */
 export function parseAsOf(value: string | null): string {
   if (value == null) return new Date().toISOString();
-  if (!ISO_UTC.test(value)) {
-    throw new V1RuleError("invalid_time", "asOf must be a UTC timestamp.");
-  }
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    throw new V1RuleError("invalid_time", "asOf must be a UTC timestamp.");
-  }
-  return parsed.toISOString();
+  return parseUtcInstant(value, "asOf");
 }
 
 /**
