@@ -364,13 +364,29 @@ interface OpenEpisode {
   lastMs: number;
 }
 
-function considerPeak(open: OpenEpisode, driver: Driver): void {
-  if (driver.airNowCited) open.airNowCited = true;
-  if (driver.aqi <= open.peakAqi) return;
+function takePeak(open: OpenEpisode, driver: Driver): void {
   open.peakAqi = driver.aqi;
   open.source = driver.source;
   open.hpblM = driver.hpblM;
   open.wind10mMs = driver.wind10mMs;
+}
+
+/**
+ * A forecast hour owns the peak once any hour was already on.
+ * AirNow keeps the peak only for an episode it promoted by itself.
+ * A tie keeps the earlier hour, and it does not hand the source to AirNow.
+ */
+function considerPeak(open: OpenEpisode, driver: Driver): void {
+  if (driver.airNowCited) open.airNowCited = true;
+  const forecastOwned = open.peakAqi >= 0 && open.source !== "airnow";
+  const forecastDriver = driver.source !== "airnow";
+  if (forecastOwned && !forecastDriver) return;
+  if (forecastDriver && !forecastOwned) {
+    takePeak(open, driver);
+    return;
+  }
+  if (driver.aqi <= open.peakAqi) return;
+  takePeak(open, driver);
 }
 
 function finish(open: OpenEpisode, end: string, channel: Episode["channel"]): Episode {

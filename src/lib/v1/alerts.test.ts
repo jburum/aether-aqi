@@ -304,8 +304,8 @@ describe("v1 alert rules", () => {
     const ozoneFirst = "2026-07-15T16:00:00.000Z";
     const ozoneDecision = ozoneRule({
       hours: [
-        ...hoursOf(ozoneIssued, ozoneFirst, 4, 180, "later", "O3"),
-        ...hoursOf("2026-07-15T14:00:00.000Z", ozoneFirst, 4, 12),
+        ...hoursOf(ozoneIssued, ozoneFirst, 4, 160, "later", "O3"),
+        ...hoursOf("2026-07-15T14:00:00.000Z", ozoneFirst, 4, 40, "valley", "PM2.5"),
       ],
       official: null,
       asOf: ozoneFirst,
@@ -313,40 +313,87 @@ describe("v1 alert rules", () => {
     });
     assert.equal(ozoneDecision.fired, true);
     assert.equal(ozoneDecision.source, "noaa_aqf");
-    assert.match(ozoneDecision.reason, /180/);
+    assert.equal(ozoneDecision.severity, "high");
+    assert.match(ozoneDecision.reason, /160/);
+    assert.equal(ozoneDecision.reason.includes("40"), false);
   });
 
   it("cites AirNow beside a forecast that is already on", () => {
     const issuedAt = "2026-01-15T12:00:00.000Z";
     const first = "2026-01-15T16:00:00.000Z";
-    const smoke = smokeRule({
-      hours: hoursOf(issuedAt, first, 4, 110),
-      official: { observedAt: first, officialAqi: 200, parameter: "PM2.5" },
-      asOf: first,
-    });
-    assert.equal(smoke.fired, true);
-    assert.equal(smoke.source, "noaa_smoke");
-    assert.equal(smoke.confidence, "valley");
-    assert.equal(smoke.severity, "elevated");
-    assert.match(smoke.reason, /the NOAA smoke model: corrected AQI peaks at 110/);
-    assert.match(smoke.reason, /AirNow PM2\.5 reads 200/);
-    assert.equal(smoke.reason.includes("peaks at 200"), false);
+    for (const officialAqi of [180, 200]) {
+      const smoke = smokeRule({
+        hours: hoursOf(issuedAt, first, 4, 110),
+        official: { observedAt: first, officialAqi, parameter: "PM2.5" },
+        asOf: first,
+      });
+      assert.equal(smoke.fired, true);
+      assert.equal(smoke.source, "noaa_smoke");
+      assert.equal(smoke.confidence, "valley");
+      assert.equal(smoke.severity, "elevated");
+      assert.match(smoke.reason, /the NOAA smoke model: corrected AQI peaks at 110/);
+      assert.match(smoke.reason, new RegExp(`AirNow PM2\\.5 reads ${officialAqi}`));
+      assert.equal(smoke.reason.includes(`peaks at ${officialAqi}`), false);
+    }
 
     const ozoneIssued = "2026-07-15T18:00:00.000Z";
     const ozoneFirst = "2026-07-15T20:00:00.000Z";
-    const ozone = ozoneRule({
-      hours: hoursOf(ozoneIssued, ozoneFirst, 4, 110, "later", "O3"),
-      official: { observedAt: ozoneFirst, officialAqi: 200, parameter: "O3" },
-      asOf: ozoneFirst,
-      timeZone: ZONE,
-    });
-    assert.equal(ozone.fired, true);
-    assert.equal(ozone.source, "noaa_aqf");
-    assert.equal(ozone.confidence, "model");
-    assert.equal(ozone.severity, "elevated");
-    assert.match(ozone.reason, /NOAA's air quality forecast: corrected AQI peaks at 110/);
-    assert.match(ozone.reason, /AirNow ozone reads 200/);
-    assert.equal(ozone.reason.includes("peaks at 200"), false);
+    for (const officialAqi of [180, 200]) {
+      const ozone = ozoneRule({
+        hours: hoursOf(ozoneIssued, ozoneFirst, 4, 110, "later", "O3"),
+        official: { observedAt: ozoneFirst, officialAqi, parameter: "O3" },
+        asOf: ozoneFirst,
+        timeZone: ZONE,
+      });
+      assert.equal(ozone.fired, true);
+      assert.equal(ozone.source, "noaa_aqf");
+      assert.equal(ozone.confidence, "model");
+      assert.equal(ozone.severity, "elevated");
+      assert.match(ozone.reason, /NOAA's air quality forecast: corrected AQI peaks at 110/);
+      assert.match(ozone.reason, new RegExp(`AirNow ozone reads ${officialAqi}`));
+      assert.equal(ozone.reason.includes(`peaks at ${officialAqi}`), false);
+    }
+  });
+
+  it("keeps the forecast peak when a mixed 80 and 140 run meets a higher AirNow reading", () => {
+    const issuedAt = "2026-01-15T12:00:00.000Z";
+    const first = "2026-01-15T16:00:00.000Z";
+    const smokeHours = [80, 140, 140, 80].map((aqi, index) =>
+      pmHour(issuedAt, at(first, index), aqi),
+    );
+    const ozoneIssued = "2026-07-15T18:00:00.000Z";
+    const ozoneFirst = "2026-07-15T20:00:00.000Z";
+    const ozoneHours = [80, 140, 140, 80].map((aqi, index) =>
+      pmHour(ozoneIssued, at(ozoneFirst, index), aqi, "later", "O3"),
+    );
+    for (const officialAqi of [140, 180, 200]) {
+      const smoke = smokeRule({
+        hours: smokeHours,
+        official: { observedAt: first, officialAqi, parameter: "PM2.5" },
+        asOf: first,
+      });
+      assert.equal(smoke.fired, true, `smoke ${officialAqi}`);
+      assert.equal(smoke.source, "noaa_smoke", `smoke ${officialAqi}`);
+      assert.equal(smoke.confidence, "valley", `smoke ${officialAqi}`);
+      assert.equal(smoke.severity, "elevated", `smoke ${officialAqi}`);
+      assert.match(smoke.reason, /corrected AQI peaks at 140/, `smoke ${officialAqi}`);
+      assert.match(smoke.reason, new RegExp(`AirNow PM2\\.5 reads ${officialAqi}`), `smoke ${officialAqi}`);
+      assert.equal(smoke.reason.includes("latest AirNow"), false, `smoke ${officialAqi}`);
+
+      const ozone = ozoneRule({
+        hours: ozoneHours,
+        official: { observedAt: ozoneFirst, officialAqi, parameter: "O3" },
+        asOf: ozoneFirst,
+        timeZone: ZONE,
+      });
+      assert.equal(ozone.fired, true, `ozone ${officialAqi}`);
+      assert.equal(ozone.source, "noaa_aqf", `ozone ${officialAqi}`);
+      assert.equal(ozone.confidence, "model", `ozone ${officialAqi}`);
+      assert.equal(ozone.severity, "elevated", `ozone ${officialAqi}`);
+      assert.match(ozone.reason, /corrected AQI peaks at 140/, `ozone ${officialAqi}`);
+      assert.match(ozone.reason, new RegExp(`AirNow ozone reads ${officialAqi}`), `ozone ${officialAqi}`);
+      assert.equal(ozone.reason.includes("latest AirNow"), false, `ozone ${officialAqi}`);
+    }
   });
 
   it("fires summer ozone, stays quiet in winter, and heads-up only after 48 hours", () => {
@@ -843,5 +890,51 @@ describe("v1 alert route", () => {
     assert.equal(body.alerts[0]?.severity, "high");
     assert.equal(body.alerts[0]?.source, "noaa_smoke");
     assert.match(body.alerts[0]?.reason ?? "", /peaks at 180/);
+  });
+
+  it("keeps a stored ozone alert when a newer PM2.5 row shares the hour", async () => {
+    const sql = await openDb();
+    const place = await addSavedPlace(sql, "user-a", {
+      name: "Boise",
+      latitude: 43.615,
+      longitude: -116.2023,
+      valley: "Treasure Valley",
+      alertAt: null,
+    });
+    const issuedAt = "2026-07-15T12:00:00.000Z";
+    const newer = "2026-07-15T14:00:00.000Z";
+    const first = "2026-07-15T16:00:00.000Z";
+    for (let i = 0; i < 4; i += 1) {
+      const validFor = at(first, i);
+      await issueForecast(sql, "user-a", {
+        placeId: place.id,
+        source: "noaa_smoke",
+        issuedAt,
+        validFor,
+        horizon: "day_1_2_valley",
+        spatialScale: "valley",
+        confidence: "valley",
+        correctedAqi: 160,
+        pollutant: "O3",
+      });
+      await issueForecast(sql, "user-a", {
+        placeId: place.id,
+        source: "noaa_smoke",
+        issuedAt: newer,
+        validFor,
+        horizon: "day_1_2_valley",
+        spatialScale: "valley",
+        confidence: "valley",
+        correctedAqi: 40,
+        pollutant: "PM2.5",
+      });
+    }
+    const body = await readAlerts(sql, "user-a", place.id, first, ZONE);
+    assert.equal(body.alerts.length, 1);
+    assert.equal(body.alerts[0]?.kind, "ozone");
+    assert.equal(body.alerts[0]?.severity, "high");
+    assert.equal(body.alerts[0]?.source, "noaa_smoke");
+    assert.match(body.alerts[0]?.reason ?? "", /160/);
+    assert.equal((body.alerts[0]?.reason ?? "").includes("40"), false);
   });
 });
