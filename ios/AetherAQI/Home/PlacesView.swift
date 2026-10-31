@@ -17,10 +17,13 @@ extension EnvironmentValues {
 /// Up to 5 places; on Free only the first. No paywall: Pro is a local stub flag.
 struct PlacesView: View {
     let places: PlacesModel
+    /// The person's plan. With it, adding a second place on Free opens the paywall.
+    var pro: ProModel? = nil
     let done: () -> Void
     @State private var renaming: SavedPlace?
     @State private var newName = ""
     @State private var adding = false
+    @State private var showingPaywall = false
 
     var body: some View {
         NavigationStack {
@@ -50,6 +53,15 @@ struct PlacesView: View {
             }
             .sheet(isPresented: $adding) {
                 AddPlaceView(places: places) { adding = false }
+            }
+            .sheet(isPresented: $showingPaywall) {
+                if let pro {
+                    PaywallView(pro: pro, reason: .places) {
+                        showingPaywall = false
+                        // Bought on the paywall: the second place opens at once.
+                        places.isPro = pro.isPro
+                    }
+                }
             }
             .alert("Rename place", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
                 TextField("Name", text: $newName)
@@ -124,9 +136,18 @@ struct PlacesView: View {
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         } else if places.addNeedsPro {
-            Label("Add a place", systemImage: "lock")
-                .foregroundStyle(.secondary)
+            if pro != nil {
+                Button {
+                    showingPaywall = true
+                } label: {
+                    Label("Add a place with Pro", systemImage: "lock")
+                }
                 .accessibilityHint(PlaceProblem.needsPro.message)
+            } else {
+                Label("Add a place", systemImage: "lock")
+                    .foregroundStyle(.secondary)
+                    .accessibilityHint(PlaceProblem.needsPro.message)
+            }
             Text(PlaceProblem.needsPro.message)
                 .font(.footnote)
                 .foregroundStyle(.secondary)

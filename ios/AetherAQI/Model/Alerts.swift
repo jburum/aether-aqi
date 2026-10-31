@@ -159,4 +159,18 @@ final class AlertSettings {
         if on { enabled.insert(rule) } else { enabled.remove(rule) }
         defaults.set(on, forKey: Self.key(rule))
     }
+
+    /// Alerts are Pro. Turning one on without Pro changes nothing and returns false: show the paywall.
+    /// Turning one off always works.
+    @discardableResult
+    func request(_ rule: AlertRule, on: Bool, isPro: Bool) -> Bool {
+        if on && !isPro { return false }
+        set(rule, on: on)
+        return true
+    }
+
+    /// What the switch shows. A choice kept from Pro days reads off while the person is on Free.
+    func shownOn(_ rule: AlertRule, isPro: Bool) -> Bool {
+        isPro && isOn(rule)
+    }
 }

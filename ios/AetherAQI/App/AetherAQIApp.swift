@@ -6,6 +6,13 @@ struct AetherAQIApp: App {
         AppFont.register()
     }
 
+    /// Pro purchases. `-AQIStore storekit` uses StoreKit 2 against the local AetherAQI.storekit file;
+    /// otherwise the fixture plans ($1.99 / $12.99), Free at start unless `-AQIProStub YES`.
+    static func purchaseProvider(_ defaults: UserDefaults = .standard) -> any PurchaseProvider {
+        if defaults.string(forKey: "AQIStore") == "storekit" { return StoreKitPurchaseProvider() }
+        return FixturePurchaseProvider(startingPro: ProStub.isOn(defaults))
+    }
+
     var body: some Scene {
         WindowGroup {
             // Sample data only. Pick a screen with `-AQIScenario good|moderate|usg|unhealthy|very|hazardous|empty|error|loading`
@@ -29,7 +36,8 @@ struct AetherAQIApp: App {
                     provider: LocalPlacesProvider(),
                     candidates: (try? IdahoPlaces.decode(BundledFixture.data(named: IdahoPlaces.fixtureName))) ?? [],
                     isPro: ProStub.isOn()
-                )
+                ),
+                pro: ProModel(provider: Self.purchaseProvider())
             )
         }
     }
