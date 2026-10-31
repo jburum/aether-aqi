@@ -245,7 +245,7 @@ When the place has an AirNow reading, it sits in its own panel. That panel uses 
 
 The only name on the card is the mockups' "Air Quality Forecast" placeholder.
 
-The alert API has no number field. `AlertDecision` keeps `peakAqi` internal, so the card reads the corrected peak from the rule's reason ("corrected AQI peaks at 143"). An alert driven by AirNow states the official reading instead, so it shows no corrected number. Its color then comes from the severity. A `peakAqi` field on the API would replace the parsing.
+The corrected peak is the alert's `peakAqi` (docs/v1/ALERTS.md, #21). An alert driven by AirNow has `peakAqi` null, so the card shows no corrected number for it and takes its color from the severity. The official number only ever appears in the AirNow panel.
 
 ## Layout
 

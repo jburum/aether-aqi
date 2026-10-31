@@ -72,12 +72,33 @@ struct ShareCardContentTests {
     }
 
     @Test("An AirNow-driven alert states the official reading: the card shows no corrected number")
-    func airnowSourced() {
-        let reason = "Smoke alert from the latest AirNow PM2.5 reading: AQI 160, valley confidence, across 4 hours."
-        #expect(AlertReason.correctedPeak(reason, source: "airnow") == nil)
-        #expect(AlertReason.correctedPeak("Smoke alert from the NOAA smoke model: corrected AQI peaks at 120, valley confidence, across 6 hours. AirNow PM2.5 reads 131.", source: "noaa_smoke") == 120)
-        #expect(AlertReason.correctedPeak("No number here.", source: "noaa_smoke") == nil)
-        #expect(AlertReason.correctedPeak("corrected AQI 999", source: "noaa_smoke") == nil, "out of range is not an AQI")
+    func airnowSourced() throws {
+        // peakAqi (#21): a number for a forecast rule, null when AirNow drove the alert. A forecast alert
+        // whose reason also cites a higher AirNow reading still carries the corrected peak.
+        let json = """
+        {"placeId":"p","asOf":"2026-10-31T15:00:00.000Z","timeZone":"America/Boise","through":"2026-11-07T15:00:00.000Z","alerts":[
+         {"kind":"smoke","fired":true,"status":"active","start":"2026-10-31T13:00:00.000Z","end":"2026-10-31T17:00:00.000Z","severity":"high","source":"airnow","confidence":"valley","reason":"Smoke alert from the latest AirNow PM2.5 reading: AQI 160, valley confidence, across 4 hours.","peakAqi":null},
+         {"kind":"ozone","fired":true,"status":"upcoming","start":"2026-11-02T20:00:00.000Z","end":"2026-11-02T23:00:00.000Z","severity":"elevated","source":"noaa_aqf","confidence":"model","reason":"Ozone alert from NOAA's air quality forecast: corrected AQI peaks at 120. AirNow ozone reads 131.","peakAqi":120}
+        ]}
+        """
+        let rows = AlertsDisplay(try StoreJSON.decoder().decode(AlertsResponse.self, from: Data(json.utf8)), fallbackZone: boise.timeZone).rows
+        let airnow = try #require(rows.first { $0.kind == "smoke" })
+        let card = AlertShareCard(row: airnow, place: boise, official: official)
+        #expect(card.correctedAqi == nil, "the official 160 is not shown as ours")
+        #expect(card.level == .unhealthy, "colored by its high severity instead")
+        #expect(card.official?.aqi == 48)
+        #expect(rows.first { $0.kind == "ozone" }?.correctedPeak == 120)
+    }
+
+    @Test("Every alert fixture carries peakAqi equal to the peak its reason quotes")
+    func fixturesCarryPeak() throws {
+        for fixture in ["boise-alerts-smoke-active", "boise-alerts-inversion-upcoming", "boise-alerts-ozone-heads-up"] {
+            let response = try StoreJSON.decoder().decode(AlertsResponse.self, from: Fixture.data(named: fixture))
+            for alert in response.alerts {
+                let peak = try #require(alert.peakAqi, "\(fixture) \(alert.kind)")
+                #expect(alert.reason.contains("\(peak)"), "\(fixture) \(alert.kind)")
+            }
+        }
     }
 
     @Test("No app name: the mockups' placeholder only")

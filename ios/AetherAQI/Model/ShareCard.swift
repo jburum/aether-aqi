@@ -3,18 +3,6 @@ import Foundation
 // The Pro alert share card: an image of one active or upcoming alert, for the share sheet. Our corrected
 // forecast and the official AirNow number stay apart on it, as on the home screen.
 
-/// The corrected peak a rule's reason states. The alert API has no number field yet (AlertDecision in
-/// src/lib/v1/alerts.ts keeps peakAqi internal), so the card reads the reason the rule wrote:
-/// "corrected AQI peaks at 143", "corrected AQI 118". An alert promoted by AirNow states the official
-/// reading instead ("from the latest AirNow PM2.5 reading: AQI 160"); that is not our number, so it gives nil.
-enum AlertReason {
-    static func correctedPeak(_ reason: String, source: String?) -> Int? {
-        if source == "airnow" { return nil }
-        guard let match = reason.firstMatch(of: #/corrected AQI (?:peaks at )?(\d{1,3})\b/#) else { return nil }
-        return Int(match.1).flatMap { (0...500).contains($0) ? $0 : nil }
-    }
-}
-
 /// What the card shows for one alert.
 struct AlertShareCard: Equatable, Sendable {
     /// The app name is still open (docs/appstore/ROADMAP.md): the mockups' placeholder.
@@ -31,7 +19,7 @@ struct AlertShareCard: Equatable, Sendable {
     let statusText: String
     /// "7 AM to 2 PM", in the place's zone.
     let span: String
-    /// Our corrected peak, when the rule stated one. Never an AirNow number.
+    /// Our corrected peak (`peakAqi` on the alert). Nil for an AirNow-driven alert: never an AirNow number.
     let correctedAqi: Int?
     let lowConfidence: Bool
     /// The official AirNow reading for the place, shown apart with its credit. Nil hides that panel.
