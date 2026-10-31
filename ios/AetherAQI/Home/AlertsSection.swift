@@ -69,21 +69,49 @@ struct AlertsSection: View {
                     .fixedSize(horizontal: false, vertical: true)
             } else {
                 ForEach(alerts.rows) { row in
-                    AlertRow(row: row, soft: soft)
+                    AlertRow(row: row, card: shareCard(row), pro: pro, soft: soft)
                 }
             }
         }
+    }
+
+    /// The share card for a row: the place on screen and its official reading, when there is one.
+    private func shareCard(_ row: AlertRowDisplay) -> AlertShareCard? {
+        guard case .loaded(let snapshot) = model.state else { return nil }
+        return AlertShareCard(row: row, place: snapshot.place, official: snapshot.official)
     }
 }
 
 private struct AlertRow: View {
     let row: AlertRowDisplay
+    /// Nil hides Share (no place loaded yet).
+    let card: AlertShareCard?
+    let pro: ProModel?
     let soft: RGB
     @ScaledMetric(relativeTo: .subheadline) private var body15: CGFloat = 15
     @ScaledMetric(relativeTo: .footnote) private var small13: CGFloat = 13
     @ScaledMetric(relativeTo: .footnote) private var swatch: CGFloat = 10
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            details
+                // The row reads as one VoiceOver element; Share stays its own button below it.
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(row.accessibilityLabel)
+            if let card {
+                AlertShareButton(card: card, pro: pro)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.white.opacity(row.lowConfidence ? 0.03 : 0.08), in: RoundedRectangle(cornerRadius: 12))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12)
+                .strokeBorder(Color.white.opacity(row.lowConfidence ? 0.5 : 0.22), style: StrokeStyle(lineWidth: 1, dash: row.lowConfidence ? [5, 4] : []))
+        }
+    }
+
+    private var details: some View {
         VStack(alignment: .leading, spacing: 5) {
             ViewThatFits(in: .horizontal) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -114,15 +142,6 @@ private struct AlertRow: View {
                 .foregroundStyle(soft.color)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.white.opacity(row.lowConfidence ? 0.03 : 0.08), in: RoundedRectangle(cornerRadius: 12))
-        .overlay {
-            RoundedRectangle(cornerRadius: 12)
-                .strokeBorder(Color.white.opacity(row.lowConfidence ? 0.5 : 0.22), style: StrokeStyle(lineWidth: 1, dash: row.lowConfidence ? [5, 4] : []))
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(row.accessibilityLabel)
     }
 
     private var heading: some View {
