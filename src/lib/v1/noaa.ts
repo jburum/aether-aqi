@@ -281,6 +281,23 @@ function smokeBody(placeId: string, issuedAt: string, hour: ModelHour): ValidFor
   });
 }
 
+/** Lead-0 valley row used when outdoor sensors drop out. Later hours stay on the cycle ingest. */
+export function lead0SmokeForecast(
+  placeId: string,
+  issuedAt: string,
+  smokeAscii: string,
+): ValidForecast {
+  const hour = parseHrrrSmoke(smokeAscii).find((row) => row.hour === 0);
+  const body = hour ? smokeBody(placeId, issuedAt, hour) : null;
+  if (!body) {
+    throw new V1RuleError(
+      "noaa_smoke_missing",
+      "Sensor dropout needs a NOAA smoke value at lead 0. No official number was written.",
+    );
+  }
+  return body;
+}
+
 function aqfBody(placeId: string, issuedAt: string, hour: ModelHour): ValidForecast | null {
   const validFor = validForHour(issuedAt, hour.hour);
   if (classifyForecastLead(issuedAt, validFor) !== "day_3_7") return null;

@@ -1,0 +1,26 @@
+[
+  {
+    "DateObserved": "2026-11-01",
+    "HourObserved": 5,
+    "LocalTimeZone": "MST",
+    "ReportingArea": "Boise",
+    "StateCode": "ID",
+    "Latitude": 43.615,
+    "Longitude": -116.202,
+    "ParameterName": "PM2.5",
+    "AQI": 48,
+    "Category": { "Number": 1, "Name": "Good" }
+  },
+  {
+    "DateObserved": "2026-11-01",
+    "HourObserved": 5,
+    "LocalTimeZone": "MST",
+    "ReportingArea": "Boise",
+    "StateCode": "ID",
+    "Latitude": 43.615,
+    "Longitude": -116.202,
+    "ParameterName": "O3",
+    "AQI": 32,
+    "Category": { "Number": 1, "Name": "Good" }
+  }
+]

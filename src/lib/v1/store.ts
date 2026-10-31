@@ -361,15 +361,21 @@ export async function listBeside(
 }
 
 /**
- * Sensor dropout writes a NOAA valley forecast only. Outdoor PurpleAir rows
- * are refused before any insert, so the EPA formula never lands in either table.
+ * Sensor dropout writes a NOAA valley forecast. An official AirNow body, when
+ * one is passed, is stored on official_reading and is not copied onto the forecast.
+ * Outdoor PurpleAir rows are refused before any insert.
  */
 export async function applySensorGap(
   sql: Queryable,
   userId: string,
   samples: readonly SensorSample[],
   valleyForecast: unknown,
-): Promise<{ action: "fall_back_to_noaa_valley"; forecast: IssuedForecast; officialAqi: null }> {
+  officialBody?: unknown,
+): Promise<{
+  action: "fall_back_to_noaa_valley";
+  forecast: IssuedForecast;
+  officialAqi: number | null;
+}> {
   const plan = planSensorGap(samples);
   if (plan.action === "purpleair_blocked") {
     throw new V1RuleError(
@@ -377,8 +383,13 @@ export async function applySensorGap(
       "PurpleAir is out this week. Spend is not approved, and this path does not buy points or store sensor readings.",
     );
   }
+  const official = officialBody === undefined ? null : parseOfficialInput(officialBody);
   const forecast = await issueForecast(sql, userId, valleyForecast);
-  return { action: "fall_back_to_noaa_valley", forecast, officialAqi: null };
+  if (!official) {
+    return { action: "fall_back_to_noaa_valley", forecast, officialAqi: null };
+  }
+  const stored = await recordOfficial(sql, userId, official);
+  return { action: "fall_back_to_noaa_valley", forecast, officialAqi: stored.officialAqi };
 }
 
 export async function registerTestDevice(
