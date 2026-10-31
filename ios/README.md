@@ -2,7 +2,8 @@
 
 SwiftUI app for AQI v1 (see the locked plan in SharedBrain, `Projects/aether-aqi/v1-plan.md`). So far it
 is the Free home screen: current air for one place, the whole-screen color shift, the 48-hour drag
-timeline (Phase 1), a best-window placeholder, and loading, empty and error states. All data is sample
+timeline (Phase 1), the best window and the Tomorrow and weekend outlook (Phase 2), and loading, empty
+and error states. All data is sample
 or recorded fixture data. There is no network code, no API key and no signing set up.
 
 ## Requirements
@@ -85,6 +86,33 @@ fixture always reads as current.
 - **VoiceOver:** the chart is one adjustable element. Swipe up or down to move one hour; it reads the time, the forecast AQI and the level.
 - **AirNow reading:** the official AirNow reading stays in its own panel and does not move with the timeline.
 
+## Best window and outlook
+
+The two responses are decoded exactly as `GET /api/v1/places/:id/best-window` and `/outlook` return them (`docs/v1/PHASE2.md`). The fixtures were produced by running the back end's own `bestWindowFromHours` and `outlookFromHours` (`src/lib/v1/phase2.ts`). Both reads use our corrected forecast only, and the AirNow number never feeds either of them.
+
+- **Best window.**
+  - **What it shows:** "Best time outside", start to end in the place's local time, for example "9 AM to 9 PM" or "8 PM to Thu 12 PM". Below that are a swatch in the band color (`Theme.bar`), the peak corrected AQI and its band, and the forecast sources in words.
+  - **No window:** `bestWindow: "none"` shows a calm line: "No forecast hours in the next 48 hours yet."
+- **Outlook.**
+  - **Cards:** one for Tomorrow, then This weekend with Saturday and Sunday. On a weekend those two read Today and Tomorrow, or Yesterday and Today, as the API sends them.
+  - **Each card:** the worst and typical corrected AQI, and the band of the worst value.
+- **Confidence labels.**
+  - **Valley days:** days 1–2 say "Valley forecast".
+  - **Days past 48 hours:** any day with an hour past 48 hours says "Regional and low-confidence" in words. It also gets a dashed, quieter card and lighter numbers, so it never looks like the valley forecast.
+  - **Unknown values:** a label or confidence value the app doesn't know is also shown as low-confidence.
+- **No data:** a day with `summary: "no data"` reads "No forecast for this day yet."
+- **Errors:** each part loads on its own, and a failure shows "Try again" without hiding the rest of the screen.
+
+Pick the canned responses with `-AQIOutlook`:
+
+| Outlook | What it shows |
+|---|---|
+| `weekend` (default) | Saturday 9 AM, as the app's clock: a window from 9 AM to 9 PM, and tomorrow plus both weekend days in the valley |
+| `weekday` | A Wednesday response: Thursday in the valley, Saturday regional and low-confidence, Sunday with no data |
+| `none` | `bestWindow: "none"` with the weekend outlook |
+| `error` | Both requests fail |
+| `loading` | Both requests never answer |
+
 ## Layout
 
 | Path | What it holds |
@@ -93,7 +121,7 @@ fixture always reads as current.
 | `AetherAQI/Model` | AQI levels and colors, the snapshot types, and `ForecastTimeline`. Our corrected forecast and the official AirNow reading are separate types. |
 | `AetherAQI/Data` | `AirDataProvider` (the protocol the screens use), `FixtureForecastProvider` (recorded rows) and `SampleAirProvider` (fixed Boise data) |
 | `AetherAQI/Home` | The home screen, the timeline and their model |
-| `AetherAQI/Resources/Fixtures` | `boise-hourly-12z.json`: one NOAA 12Z cycle as `IssuedForecast` rows |
+| `AetherAQI/Resources/Fixtures` | `boise-hourly-12z.json`: one NOAA 12Z cycle as `IssuedForecast` rows. `boise-best-window*.json` and `boise-outlook-*.json`: Phase 2 responses |
 | `AetherAQI/Design` | Tokens and fonts |
 | `AetherAQI/Resources/Fonts` | Source Serif 4 and Source Sans 3 (SIL OFL, see `OFL.txt`) |
 | `AetherAQITests` | Swift Testing unit tests |
@@ -109,4 +137,4 @@ fixture always reads as current.
 
 - **App name and bundle ID.** The name "Air Quality Forecast" and the bundle ID `com.example.aetheraqi` are placeholders. Both are still open in `docs/appstore/ROADMAP.md`.
 - **App icon.** There is none yet.
-- **Best window.** The best-window line reads "Not ready yet". The real window arrives in Phase 2.
+- **Alert settings.** Not built yet. They wait for the back end's alert-rules API.

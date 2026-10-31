@@ -41,18 +41,11 @@ struct OfficialReading: Equatable, Sendable {
         "Observations courtesy of the U.S. EPA AirNow program (airnow.gov). Preliminary and subject to change."
 }
 
-/// The best time to be outside. Phase 2 fills this in; until then the home screen shows a placeholder line.
-struct BestWindow: Equatable, Sendable {
-    let start: Date
-    let end: Date
-    let peakAqi: Int
-}
-
-/// Everything the Free home screen shows for one place.
+/// Everything the Free home screen shows for one place. The best window and outlook load on their own
+/// (`AirDataProvider.bestWindow(for:)`, `outlook(for:)`).
 struct HomeSnapshot: Equatable, Sendable {
     let place: Place
     let now: CorrectedForecast
     /// Nil when there is no nearby AirNow monitor or it has not reported.
     let official: OfficialReading?
-    let bestWindow: BestWindow?
 }

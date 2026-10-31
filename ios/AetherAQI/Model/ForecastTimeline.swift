@@ -20,6 +20,13 @@ struct ForecastHour: Codable, Equatable, Sendable {
 
     /// Decodes the store's ISO 8601 timestamps, with or without milliseconds (`toISOString()` writes them).
     static func decodeRows(_ data: Data) throws -> [ForecastHour] {
+        try StoreJSON.decoder().decode([ForecastHour].self, from: data)
+    }
+}
+
+/// JSON from the v1 store and API: ISO 8601 UTC times, with or without milliseconds.
+enum StoreJSON {
+    static func decoder() -> JSONDecoder {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .custom { decoder in
             let text = try decoder.singleValueContainer().decode(String.self)
@@ -30,7 +37,7 @@ struct ForecastHour: Codable, Equatable, Sendable {
             if let date = withMillis.date(from: text) ?? plain.date(from: text) { return date }
             throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "Not an ISO 8601 time: \(text)"))
         }
-        return try decoder.decode([ForecastHour].self, from: data)
+        return decoder
     }
 }
 

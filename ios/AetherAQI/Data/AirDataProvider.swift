@@ -8,6 +8,20 @@ protocol AirDataProvider: Sendable {
     /// Stored forecast rows for `place`, shaped like `IssuedForecast` in src/lib/v1/types.ts. The rows
     /// may include days 3–7; `ForecastTimeline` keeps the newest cycle's NOAA smoke hours 0 through 48.
     func hourlyForecast(for place: Place) async throws -> [ForecastHour]
+
+    /// GET /api/v1/places/:id/best-window: the best time outside in the next 48 hours, or "none".
+    func bestWindow(for place: Place) async throws -> BestWindowResponse
+
+    /// GET /api/v1/places/:id/outlook?timeZone=: tomorrow and this weekend in the place's zone.
+    func outlook(for place: Place) async throws -> OutlookResponse
+}
+
+/// A recorded response from the bundle. `name` is the file name without `.json`.
+enum BundledFixture {
+    static func data(named name: String, bundle: Bundle = .main) throws -> Data {
+        guard let url = bundle.url(forResource: name, withExtension: "json") else { throw AirDataError.unavailable }
+        return try Data(contentsOf: url)
+    }
 }
 
 enum AirDataError: Error, Equatable {
@@ -68,6 +82,27 @@ enum SampleTimeline: String, CaseIterable, Sendable {
     }
 }
 
+/// The best window and outlook the sample provider returns. Pick one at launch with `-AQIOutlook <name>`.
+/// The responses were built with the back end's own `bestWindowFromHours` and `outlookFromHours`.
+enum SampleOutlook: String, CaseIterable, Sendable {
+    /// Saturday 9 AM: window 9 AM to 9 PM, tomorrow and both weekend days in the valley.
+    case weekend
+    /// Wednesday: Thursday in the valley, Saturday regional and low-confidence, Sunday with no data.
+    case weekday
+    /// No forecast hour in the next 48 hours: the window is "none".
+    case none
+    /// Both requests fail.
+    case error
+    /// Both requests never answer.
+    case loading
+
+    static let launchKey = "AQIOutlook"
+
+    static func fromLaunchArguments(_ defaults: UserDefaults = .standard) -> SampleOutlook {
+        defaults.string(forKey: launchKey).flatMap(SampleOutlook.init(rawValue:)) ?? .weekend
+    }
+}
+
 /// Fixed sample data for Boise, Idaho. Our corrected number and the AirNow reading differ on purpose,
 /// so a screen that mixes them up is easy to spot.
 struct SampleAirProvider: AirDataProvider {
@@ -77,6 +112,9 @@ struct SampleAirProvider: AirDataProvider {
     var delay: Duration = .milliseconds(350)
     /// The recorded rows. Tests and still renders pass the file in directly.
     var fixtureData: @Sendable () throws -> Data = { try FixtureForecastProvider.bundledData() }
+    var outlookScenario: SampleOutlook = .weekend
+    /// Recorded best-window and outlook responses by fixture name. Tests and renders read the files directly.
+    var responseData: @Sendable (String) throws -> Data = { try BundledFixture.data(named: $0) }
 
     /// The sample clock: 15:00Z, three hours into the fixture's 12Z NOAA cycle.
     static let issuedAt = Date(timeIntervalSince1970: 1_793_458_800) // 2026-10-31T15:00:00Z
@@ -111,6 +149,28 @@ struct SampleAirProvider: AirDataProvider {
         }
     }
 
+    func bestWindow(for place: Place) async throws -> BestWindowResponse {
+        try await phase2Wait()
+        let name = switch outlookScenario {
+        case .weekend, .loading, .error: "boise-best-window"
+        case .weekday: "boise-best-window-weekday"
+        case .none: "boise-best-window-none"
+        }
+        return try StoreJSON.decoder().decode(BestWindowResponse.self, from: responseData(name))
+    }
+
+    func outlook(for place: Place) async throws -> OutlookResponse {
+        try await phase2Wait()
+        let name = outlookScenario == .weekday ? "boise-outlook-weekday" : "boise-outlook-weekend"
+        return try StoreJSON.decoder().decode(OutlookResponse.self, from: responseData(name))
+    }
+
+    private func phase2Wait() async throws {
+        if outlookScenario == .loading { try await Task.sleep(for: .seconds(60 * 60 * 24)) }
+        if delay > .zero { try await Task.sleep(for: delay * 2) }
+        if outlookScenario == .error { throw AirDataError.unavailable }
+    }
+
     private static let ours: [SampleScenario: Int] = [.good: 42, .moderate: 74, .usg: 128, .unhealthy: 172, .very: 243, .hazardous: 352]
     private static let official: [SampleScenario: Int?] = [.good: 48, .moderate: 68, .usg: 117, .unhealthy: 158, .very: 221, .hazardous: nil]
 
@@ -134,8 +194,7 @@ struct SampleAirProvider: AirDataProvider {
             now: CorrectedForecast(aqi: ours, pollutant: pollutant, validFor: issuedAt, issuedAt: issuedAt, confidence: .valley),
             official: official.map {
                 OfficialReading(aqi: $0, observedAt: issuedAt.addingTimeInterval(-40 * 60), attribution: OfficialReading.airNowAttribution)
-            },
-            bestWindow: nil
+            }
         )
     }
 }
