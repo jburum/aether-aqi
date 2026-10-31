@@ -13,13 +13,21 @@ struct HomeScreen: View {
         ZStack {
             (level?.field ?? Theme.neutralField).color
                 .ignoresSafeArea()
-            VStack(alignment: .leading, spacing: 0) {
-                AppTitle(soft: level?.softInk ?? Theme.neutralSoft)
-                content
+            // Scrolls once Dynamic Type makes the content taller than the screen; until then it fills
+            // the screen, so the AirNow panel sits at the bottom and the states stay centered.
+            GeometryReader { viewport in
+                ScrollView(.vertical) {
+                    VStack(alignment: .leading, spacing: 0) {
+                        AppTitle(soft: level?.softInk ?? Theme.neutralSoft)
+                        content
+                    }
+                    .padding(.horizontal, 18)
+                    .padding(.top, 8)
+                    .padding(.bottom, 12)
+                    .frame(minHeight: viewport.size.height, alignment: .top)
+                }
+                .scrollBounceBehavior(.basedOnSize)
             }
-            .padding(.horizontal, 18)
-            .padding(.top, 8)
-            .padding(.bottom, 12)
         }
         .foregroundStyle(Theme.ink)
         .animation(reduceMotion ? nil : Theme.fieldFade, value: level)
@@ -96,18 +104,16 @@ private struct CurrentAir: View {
                     // Source Serif's ascent leaves a tall gap above the digits at this size.
                     .padding(.top, -16)
 
-                HStack(spacing: 10) {
-                    Text(level.label)
-                        .font(AppFont.sans(small13, weight: 650))
-                        .foregroundStyle(level.accent.color)
-                        .lineLimit(1)
-                        .padding(.horizontal, 10)
-                        .frame(minHeight: 26)
-                        .background(Theme.pillFill, in: Capsule())
-                    if let pollutant = snapshot.now.pollutant {
-                        Text(pollutant)
-                            .font(AppFont.sans(small13, weight: 650))
-                            .foregroundStyle(level.softInk.color)
+                // Side by side when they fit; otherwise the pollutant drops under the pill, and the
+                // pill's words wrap rather than truncate ("Unhealthy for Sensitive Groups").
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 10) {
+                        levelPill.fixedSize()
+                        pollutantText
+                    }
+                    VStack(alignment: .leading, spacing: 4) {
+                        levelPill
+                        pollutantText
                     }
                 }
                 .padding(.top, 4)
@@ -128,6 +134,26 @@ private struct CurrentAir: View {
             Spacer(minLength: 16)
 
             OfficialCard(reading: snapshot.official, place: snapshot.place, soft: level.softInk)
+        }
+    }
+
+    private var levelPill: some View {
+        Text(level.label)
+            .font(AppFont.sans(small13, weight: 650))
+            .foregroundStyle(level.accent.color)
+            .multilineTextAlignment(.leading)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 3)
+            .frame(minHeight: 26)
+            .background(Theme.pillFill, in: RoundedRectangle(cornerRadius: 13))
+    }
+
+    @ViewBuilder private var pollutantText: some View {
+        if let pollutant = snapshot.now.pollutant {
+            Text(pollutant)
+                .font(AppFont.sans(small13, weight: 650))
+                .foregroundStyle(level.softInk.color)
         }
     }
 
@@ -208,16 +234,16 @@ private struct OfficialCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 8) {
-                Text("Official AirNow reading")
-                    .font(AppFont.sans(small13, weight: 650))
-                Spacer(minLength: 0)
-                if reading != nil {
-                    Text("Preliminary")
-                        .font(AppFont.sans(tiny12, weight: 650))
-                        .padding(.horizontal, 8)
-                        .frame(minHeight: 22)
-                        .overlay(Capsule().strokeBorder(Color.white.opacity(0.6), lineWidth: 1))
+            // The Preliminary tag drops under the title when both don't fit on one line.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) {
+                    title.fixedSize()
+                    Spacer(minLength: 0)
+                    preliminaryTag
+                }
+                VStack(alignment: .leading, spacing: 6) {
+                    title
+                    preliminaryTag
                 }
             }
             if let reading {
@@ -245,6 +271,23 @@ private struct OfficialCard: View {
         .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.white.opacity(0.22), lineWidth: 1))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityText)
+    }
+
+    private var title: some View {
+        Text("Official AirNow reading")
+            .font(AppFont.sans(small13, weight: 650))
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    @ViewBuilder private var preliminaryTag: some View {
+        if reading != nil {
+            Text("Preliminary")
+                .font(AppFont.sans(tiny12, weight: 650))
+                .fixedSize()
+                .padding(.horizontal, 8)
+                .frame(minHeight: 22)
+                .overlay(Capsule().strokeBorder(Color.white.opacity(0.6), lineWidth: 1))
+        }
     }
 
     private func observed(_ reading: OfficialReading) -> String {
