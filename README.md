@@ -42,7 +42,28 @@ npm install
 npm run dev        # http://0.0.0.0:8080
 npm run typecheck
 npm run build
+npm test           # PGLite only; no Postgres
+npm run lint
 ```
+
+## Tests
+
+`npm test` runs `src/lib/v1/week1.test.ts` on in-memory PGLite. A clean checkout does not need Postgres.
+
+`npm run test:integration` runs the saved-place race in `src/lib/v1/week1.integration.test.ts`. It opens a real Postgres, applies `migrations/`, then creates and drops a scratch database. Connection is env-only (no values are committed):
+
+| Env | When unset |
+| --- | --- |
+| `AQI_TEST_DATABASE_URL` | Use the fields below. If set, it wins. |
+| `AQI_TEST_PGHOST` | `/tmp` (Unix socket) |
+| `AQI_TEST_PGPORT` | `5432` |
+| `AQI_TEST_PGUSER` | Current OS user |
+| `AQI_TEST_PGPASSWORD` | No password |
+| `AQI_TEST_PGDATABASE` | `postgres` (admin database, not the scratch db) |
+
+The role needs `CREATEDB` and visibility of `pg_stat_activity`. Names and placeholders: [.env.example](./.env.example).
+
+Pull requests run test, lint, and build on GitHub-hosted `ubuntu-latest` (no Postgres). A second job runs `npm run test:integration` against a Postgres service container.
 
 ## Deploy
 
