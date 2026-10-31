@@ -42,7 +42,7 @@ struct HomeScreen: View {
         case .loading:
             LoadingState()
         case .loaded(let snapshot):
-            CurrentAir(snapshot: snapshot)
+            CurrentAir(model: model, snapshot: snapshot)
         case .empty:
             EmptyState()
         case .failed:
@@ -67,80 +67,132 @@ private struct AppTitle: View {
 
 // MARK: - Loaded
 
+/// What the hero shows: the hour selected on the timeline, or the current number until the timeline is in.
+struct HeroDisplay: Equatable {
+    let kicker: String
+    /// Nil when NOAA has no value for the selected hour.
+    let aqi: Int?
+    let pollutant: String?
+
+    var level: AirLevel? { aqi.map(AirLevel.init(aqi:)) }
+    var advice: String { level?.advice ?? "NOAA has no value for this hour." }
+
+    @MainActor
+    init(model: HomeModel, snapshot: HomeSnapshot) {
+        switch model.selection {
+        case .forecast(let slot, let isNow):
+            kicker = Self.kicker(slot.validFor, isNow: isNow, place: snapshot.place)
+            aqi = slot.aqi
+            pollutant = slot.pollutant
+        case .missing(let slot, let isNow):
+            kicker = Self.kicker(slot.validFor, isNow: isNow, place: snapshot.place)
+            aqi = nil
+            pollutant = nil
+        case nil:
+            kicker = "Our forecast now"
+            aqi = snapshot.now.aqi
+            pollutant = snapshot.now.pollutant
+        }
+    }
+
+    /// Every hour on the timeline is our forecast, so the label says so for each one.
+    static func kicker(_ date: Date, isNow: Bool, place: Place) -> String {
+        isNow ? "Our forecast now" : "Our forecast for \(HourLabel.dayAndHour(date, in: place.timeZone))"
+    }
+}
+
 private struct CurrentAir: View {
+    let model: HomeModel
     let snapshot: HomeSnapshot
     @ScaledMetric(relativeTo: .subheadline) private var body15: CGFloat = 15
     @ScaledMetric(relativeTo: .footnote) private var small13: CGFloat = 13
     @ScaledMetric(relativeTo: .largeTitle) private var hero: CGFloat = 120
 
-    private var level: AirLevel { snapshot.now.level }
+    /// The level the field shows. It can lag the hero while a finger is on the timeline.
+    private var fieldLevel: AirLevel? { model.level }
+    private var soft: RGB { fieldLevel?.softInk ?? Theme.neutralSoft }
 
     var body: some View {
+        let display = HeroDisplay(model: model, snapshot: snapshot)
+        // Each accent is fit to its own field. While the field holds during a drag, the hero switches
+        // to white, which clears 4.5:1 on every field.
+        let accent = display.level != nil && display.level == fieldLevel ? display.level!.accent : RGB.white
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(snapshot.place.name)
                     .font(AppFont.sans(body15, weight: 650))
                 Text(snapshot.place.region)
                     .font(AppFont.sans(body15, weight: 500))
-                    .foregroundStyle(level.softInk.color)
+                    .foregroundStyle(soft.color)
             }
             .padding(.top, 6)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("\(snapshot.place.name), \(snapshot.place.region)")
 
             VStack(alignment: .leading, spacing: 0) {
-                Text("Our forecast now")
+                Text(display.kicker)
                     .font(AppFont.sans(small13, weight: 650))
-                    .foregroundStyle(level.softInk.color)
+                    .foregroundStyle(soft.color)
                     .padding(.top, 22)
 
-                Text(snapshot.now.aqi, format: .number.grouping(.never))
-                    .font(AppFont.serif(min(hero, 160), weight: 800))
-                    .monospacedDigit()
-                    .foregroundStyle(level.accent.color)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.5)
-                    .contentTransition(.numericText(value: Double(snapshot.now.aqi)))
-                    // Source Serif's ascent leaves a tall gap above the digits at this size.
-                    .padding(.top, -16)
+                Group {
+                    if let aqi = display.aqi {
+                        Text(aqi, format: .number.grouping(.never))
+                            .contentTransition(.numericText(value: Double(aqi)))
+                    } else {
+                        Text("–")
+                    }
+                }
+                .font(AppFont.serif(min(hero, 160), weight: 800))
+                .monospacedDigit()
+                .foregroundStyle(accent.color)
+                .lineLimit(1)
+                .minimumScaleFactor(0.5)
+                // Source Serif's ascent leaves a tall gap above the digits at this size.
+                .padding(.top, -16)
 
                 // Side by side when they fit; otherwise the pollutant drops under the pill, and the
-                // pill's words wrap rather than truncate ("Unhealthy for Sensitive Groups").
+                // pill's words wrap rather than truncate ("Unhealthy for Sensitive Groups"). An hour with
+                // no forecast keeps the row, so the timeline does not jump under the finger.
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: 10) {
-                        levelPill.fixedSize()
-                        pollutantText
+                        levelPill(display.level?.label ?? "No forecast", accent: accent).fixedSize()
+                        pollutantText(display.pollutant)
                     }
                     VStack(alignment: .leading, spacing: 4) {
-                        levelPill
-                        pollutantText
+                        levelPill(display.level?.label ?? "No forecast", accent: accent)
+                        pollutantText(display.pollutant)
                     }
                 }
                 .padding(.top, 4)
 
-                Text(level.advice)
+                Text(display.advice)
                     .font(AppFont.sans(body15, weight: 560))
+                    .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, 6)
             }
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel(heroLabel)
+            .accessibilityLabel(heroLabel(display))
 
-            SpectrumBar(aqi: snapshot.now.aqi)
+            SpectrumBar(aqi: display.aqi)
                 .padding(.top, 12)
 
-            BestWindowLine(window: snapshot.bestWindow, place: snapshot.place, soft: level.softInk)
-                .padding(.top, 20)
+            TimelineSection(model: model, place: snapshot.place, soft: soft)
+                .padding(.top, 18)
+
+            BestWindowLine(window: snapshot.bestWindow, place: snapshot.place, soft: soft)
+                .padding(.top, 18)
 
             Spacer(minLength: 16)
 
-            OfficialCard(reading: snapshot.official, place: snapshot.place, soft: level.softInk)
+            OfficialCard(reading: snapshot.official, place: snapshot.place, soft: soft)
         }
     }
 
-    private var levelPill: some View {
-        Text(level.label)
+    private func levelPill(_ label: String, accent: RGB) -> some View {
+        Text(label)
             .font(AppFont.sans(small13, weight: 650))
-            .foregroundStyle(level.accent.color)
+            .foregroundStyle(accent.color)
             .multilineTextAlignment(.leading)
             .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, 10)
@@ -149,38 +201,43 @@ private struct CurrentAir: View {
             .background(Theme.pillFill, in: RoundedRectangle(cornerRadius: 13))
     }
 
-    @ViewBuilder private var pollutantText: some View {
-        if let pollutant = snapshot.now.pollutant {
+    @ViewBuilder private func pollutantText(_ pollutant: String?) -> some View {
+        if let pollutant {
             Text(pollutant)
                 .font(AppFont.sans(small13, weight: 650))
-                .foregroundStyle(level.softInk.color)
+                .foregroundStyle(soft.color)
         }
     }
 
-    private var heroLabel: String {
-        var parts = ["Our forecast now: air quality index \(snapshot.now.aqi), \(level.label)"]
-        if let pollutant = snapshot.now.pollutant { parts.append("Main pollutant \(pollutant)") }
+    private func heroLabel(_ display: HeroDisplay) -> String {
+        guard let aqi = display.aqi, let level = display.level else {
+            return "\(display.kicker): no forecast for this hour."
+        }
+        var parts = ["\(display.kicker): air quality index \(aqi), \(level.label)"]
+        if let pollutant = display.pollutant { parts.append("Main pollutant \(pollutant)") }
         parts.append(level.advice)
         return parts.joined(separator: ". ")
     }
 }
 
-/// Green to maroon with a dot on the current value (round2.html .spectrum).
+/// Green to maroon with a dot on the current value (round2.html .spectrum). No value, no dot.
 private struct SpectrumBar: View {
-    let aqi: Int
+    let aqi: Int?
 
     var body: some View {
         GeometryReader { geo in
-            let x = geo.size.width * AirLevel.spectrumPosition(aqi: aqi)
             ZStack(alignment: .leading) {
                 Capsule()
                     .fill(LinearGradient(stops: Theme.spectrum, startPoint: .leading, endPoint: .trailing))
                     .frame(height: 10)
-                Circle()
-                    .fill(Color.white)
-                    .overlay(Circle().strokeBorder(RGB(hex: 0x1A120C).color, lineWidth: 1.5))
-                    .frame(width: 16, height: 16)
-                    .offset(x: min(max(x - 8, 0), geo.size.width - 16))
+                if let aqi {
+                    let x = geo.size.width * AirLevel.spectrumPosition(aqi: aqi)
+                    Circle()
+                        .fill(Color.white)
+                        .overlay(Circle().strokeBorder(RGB(hex: 0x1A120C).color, lineWidth: 1.5))
+                        .frame(width: 16, height: 16)
+                        .offset(x: min(max(x - 8, 0), geo.size.width - 16))
+                }
             }
             .frame(maxHeight: .infinity)
         }
@@ -366,7 +423,6 @@ private struct EmptyState: View {
 
 private struct ErrorState: View {
     let retry: () -> Void
-    @ScaledMetric(relativeTo: .body) private var body17: CGFloat = 17
 
     var body: some View {
         StateMessage(
@@ -374,15 +430,28 @@ private struct ErrorState: View {
             title: "Can't load the air",
             message: "Check your connection and try again. We won't show an old number as if it were current."
         ) {
-            Button(action: retry) {
-                Text("Try again")
-                    .font(AppFont.sans(body17, weight: 650))
-                    .padding(.horizontal, 18)
-                    .frame(minHeight: 44)
-                    .overlay(Capsule().strokeBorder(Color.white, lineWidth: 1.5))
-                    .contentShape(Capsule())
-            }
-            .buttonStyle(.plain)
+            OutlineButton(title: "Try again", action: retry)
         }
+    }
+}
+
+/// White-outlined capsule button, at least 44 points tall.
+struct OutlineButton: View {
+    let title: String
+    let action: () -> Void
+    @ScaledMetric(relativeTo: .body) private var body17: CGFloat = 17
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(AppFont.sans(body17, weight: 650))
+                .multilineTextAlignment(.leading)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 8)
+                .frame(minHeight: 44)
+                .overlay(Capsule().strokeBorder(Color.white, lineWidth: 1.5))
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
     }
 }
