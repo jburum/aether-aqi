@@ -178,7 +178,7 @@ Pro is $1.99 a month or $12.99 a year (v1-plan.md). It adds:
 
 - smoke, inversion and ozone alerts
 - up to 5 saved places
-- the alert share card (listed on the paywall; the card itself isn't built yet)
+- the alert share card (see "Alert share card" below)
 
 **Where the paywall opens:**
 
@@ -219,6 +219,27 @@ To try StoreKit purchases in the simulator:
 3. Launch with `-AQIStore storekit`.
 
 The file is not attached to the shared scheme, because that path could not be checked without Xcode.
+
+## Alert share card
+
+Every active or upcoming alert row has a **Share** button.
+
+- **With Pro:** it opens the share sheet (ShareLink) with a PNG of the card. The card is rendered with ImageRenderer at 3×, so the image is 1080 × 1350. It renders only when the person shares.
+- **On Free:** it opens the paywall with "Sharing alerts is part of Pro".
+
+The card (`AlertShareCardView`, built from `AlertShareCard`) shows:
+
+- the place
+- the alert kind, severity and status
+- the time window in the place's zone
+- our corrected peak, as a big number in its band's color
+- "Our forecast, not an official reading.", plus "Regional and low-confidence." for a heads up
+
+When the place has an AirNow reading, it sits in its own panel. That panel uses plain digits, is marked Preliminary, and carries the EPA credit, as on the home screen.
+
+The only name on the card is the mockups' "Air Quality Forecast" placeholder.
+
+The alert API has no number field. `AlertDecision` keeps `peakAqi` internal, so the card reads the corrected peak from the rule's reason ("corrected AQI peaks at 143"). An alert driven by AirNow states the official reading instead, so it shows no corrected number. Its color then comes from the severity. A `peakAqi` field on the API would replace the parsing.
 
 ## Layout
 

@@ -70,6 +70,10 @@ struct AlertRowDisplay: Equatable, Sendable, Identifiable {
     let reason: String
     /// Days 3–7, or a confidence of `low`: shown as regional and low-confidence, in words.
     let lowConfidence: Bool
+    /// `high`, `elevated` or `heads_up`, as the API sent it.
+    var severityKey: String = ""
+    /// Our corrected peak from the rule's reason (AlertReason), for the share card. Nil for AirNow-driven alerts.
+    var correctedPeak: Int? = nil
 
     var accessibilityLabel: String {
         var parts = ["\(title) alert, \(statusText.lowercased()), \(severityText.lowercased())", span]
@@ -113,7 +117,9 @@ struct AlertsDisplay: Equatable, Sendable {
                 statusText: active ? "Now" : "Upcoming",
                 span: LocalSpan.text(start: start, end: end, zone: zone, asOf: asOf),
                 reason: alert.reason,
-                lowConfidence: severity == "heads_up" || alert.confidence == "low"
+                lowConfidence: severity == "heads_up" || alert.confidence == "low",
+                severityKey: severity,
+                correctedPeak: AlertReason.correctedPeak(alert.reason, source: alert.source)
             )
         }
     }
