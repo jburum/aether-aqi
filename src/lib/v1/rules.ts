@@ -17,6 +17,12 @@ export const AIRNOW_ATTRIBUTION =
 /** Server-side saved places for v1. The website localStorage list stays at 15. */
 export const MAX_SAVED_PLACES = 5;
 
+/**
+ * Places a Free account can open. Rows past this stay stored.
+ * The insert trigger in migrations/0004_v1_entitlement.sql uses the same 1.
+ */
+export const FREE_SAVED_PLACES = 1;
+
 const HOUR_MS = 3_600_000;
 /** Days 1-2 run through this lead, including the exact 48-hour instant. */
 export const DAY12_MS = 48 * HOUR_MS;
