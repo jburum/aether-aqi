@@ -24,6 +24,11 @@ struct HomeScreen: View {
                 ScrollView(.vertical) {
                     VStack(alignment: .leading, spacing: 0) {
                         AppTitle(soft: level?.softInk ?? Theme.neutralSoft)
+                        // Loading, stalled, failed: the places list stays one tap away (Dex, PR 17 at 060c5c5).
+                        if let place = model.placeLineOutsideContent {
+                            PlaceLine(place: place, soft: Theme.neutralSoft)
+                                .padding(.top, 6)
+                        }
                         content
                     }
                     .padding(.horizontal, 18)

@@ -27,6 +27,11 @@ struct PlaceCandidate: Codable, Equatable, Identifiable, Sendable {
     let valley: String?
     /// IANA zone. Not part of `saved_place`; the app keeps it beside the place for local times.
     let timeZone: String
+
+    /// The stable identity of a place is where it is. The name can be edited, so it never counts.
+    func isSameLocation(as saved: SavedPlace) -> Bool {
+        abs(latitude - saved.latitude) < 1e-6 && abs(longitude - saved.longitude) < 1e-6
+    }
 }
 
 enum PlaceLimits {
@@ -91,7 +96,8 @@ final class LocalPlacesProvider: SavedPlacesProvider, @unchecked Sendable {
         try lock.withLock {
             var places = load()
             guard places.count < PlaceLimits.maxSaved else { throw PlaceProblem.atCap }
-            guard !places.contains(where: { $0.name == candidate.name && $0.latitude == candidate.latitude && $0.longitude == candidate.longitude }) else {
+            // Identity is the location: a renamed place is still the same place (Dex, PR 17 at 060c5c5).
+            guard !places.contains(where: { candidate.isSameLocation(as: $0) }) else {
                 throw PlaceProblem.alreadySaved
             }
             let place = SavedPlace(
@@ -210,7 +216,7 @@ final class PlacesModel {
 
     /// Candidates not already saved.
     var addable: [PlaceCandidate] {
-        candidates.filter { candidate in !places.contains { $0.name == candidate.name && $0.latitude == candidate.latitude } }
+        candidates.filter { candidate in !places.contains { candidate.isSameLocation(as: $0) } }
     }
 
     /// On Free only the first place in the list can be active; the rest are Pro.
@@ -224,8 +230,8 @@ final class PlacesModel {
     }
 
     func place(for saved: SavedPlace) -> Place {
-        let match = candidates.first { $0.name == saved.name && $0.latitude == saved.latitude } ??
-            candidates.first { $0.latitude == saved.latitude && $0.longitude == saved.longitude }
+        // By location only: a place renamed to another place's name keeps its own zone and region.
+        let match = candidates.first { $0.isSameLocation(as: saved) }
         let zone = match.flatMap { TimeZone(identifier: $0.timeZone) } ?? TimeZone(identifier: "America/Boise")!
         return Place(id: saved.id, name: saved.name, region: match?.region ?? "Idaho", timeZone: zone)
     }

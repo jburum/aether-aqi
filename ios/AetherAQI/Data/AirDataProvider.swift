@@ -198,14 +198,25 @@ struct SampleAirProvider: AirDataProvider {
     func outlook(for place: Place) async throws -> OutlookResponse {
         try await phase2Wait()
         let name = outlookScenario == .weekday ? "boise-outlook-weekday" : "boise-outlook-weekend"
-        return try StoreJSON.decoder().decode(OutlookResponse.self, from: responseData(name))
+        let recorded = try StoreJSON.decoder().decode(OutlookResponse.self, from: responseData(name))
+        // The route answers in the zone the app asks for (?timeZone=), so echo the selected place's.
+        return OutlookResponse(
+            placeId: place.id, timeZone: place.timeZone.identifier, asOf: recorded.asOf,
+            tomorrow: recorded.tomorrow, weekend: recorded.weekend
+        )
     }
 
     func alerts(for place: Place) async throws -> AlertsResponse {
         if alertsScenario == .loading { try await Task.sleep(for: .seconds(60 * 60 * 24)) }
         if delay > .zero { try await Task.sleep(for: delay * 2) }
         guard let name = alertsScenario.fixture else { throw AirDataError.unavailable }
-        return try StoreJSON.decoder().decode(AlertsResponse.self, from: responseData(name))
+        let recorded = try StoreJSON.decoder().decode(AlertsResponse.self, from: responseData(name))
+        // The route answers in the zone the app asks for (?timeZone=): a Pacific place's spans read in
+        // Pacific time, not Boise's (Dex, PR 17 at 060c5c5).
+        return AlertsResponse(
+            placeId: place.id, asOf: recorded.asOf, timeZone: place.timeZone.identifier,
+            through: recorded.through, alerts: recorded.alerts
+        )
     }
 
     private func phase2Wait() async throws {

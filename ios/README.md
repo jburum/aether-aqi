@@ -154,13 +154,14 @@ Each response has its own `asOf`, and the rows read Now or Upcoming against that
 
 Tap the place name on the home screen, or "Add a place" when there is none, to open **Places**.
 
-- **What you can do:** pick the active place, rename (swipe right, or the context menu), delete (swipe left), and add.
+- **What you can do:** pick the active place, rename (swipe right, or the context menu), delete (swipe left), and add. The place line stays on the home screen in every state (loading, stalled, error, no air yet), so the list is always one tap away.
 - **Adding:** you choose from a bundled list of 21 Idaho places (`idaho-places.json`). There is no geocoding service and no location permission.
+- **A place is its location:** a place is the same place by its latitude and longitude, never by its editable name. A renamed place can't be added again or take a second slot.
 - **Following the active place:** the home screen loads every section for the active place. A slow answer for a place you have just switched away from never replaces the new one. Sample air is Boise's for every place; only the name and time zone change.
 - **The shape:** it follows `saved_place` (`docs/v1/WEEK1.md`) and `SavedPlace` in `src/lib/v1/types.ts`: `id`, `name`, `latitude`, `longitude`, `valley`, `alertAt`, `position` and `createdAt`.
 - **Where they are kept:** `LocalPlacesProvider` keeps them on the phone, in UserDefaults, as JSON. A live provider makes the same calls to `GET`/`POST /api/v1/places` and `DELETE /api/v1/places/:id`.
 - **Renaming is local only:** the API has no rename route yet.
-- **Time zones:** each bundled place carries its zone, which isn't part of `saved_place`. North Idaho is Pacific time.
+- **Time zones:** each bundled place carries its zone, which isn't part of `saved_place`. North Idaho is Pacific time. The sample alerts and outlook come back in the selected place's zone, as the routes do with `?timeZone=`, so a Coeur d'Alene alert reads in Pacific time.
 
 Limits:
 

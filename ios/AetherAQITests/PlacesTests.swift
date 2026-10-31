@@ -161,6 +161,29 @@ struct PlacesModelTests {
         #expect(model.activePlace?.timeZone.identifier == "America/Boise")
     }
 
+    @Test("A renamed place is still the same place: it can't be added again or take a second slot (Dex, PR 17)")
+    func renamedIsSamePlace() async throws {
+        let defaults = try freshDefaults("renamedDuplicate")
+        let model = try await places(defaults, pro: true)
+        await model.add(try candidate("McCall"))
+        let mccall = try #require(model.places.first { $0.name == "McCall" })
+        #expect(await model.rename(mccall.id, to: "Lake cabin"))
+        #expect(!model.addable.contains { $0.name == "McCall" })
+        #expect(!(await model.add(try candidate("McCall"))))
+        #expect(model.problem == .alreadySaved)
+        #expect(model.places.count == 2)
+        await #expect(throws: PlaceProblem.alreadySaved) {
+            _ = try await LocalPlacesProvider(defaults: defaults).add(try candidate("McCall"), now: SampleAirProvider.now)
+        }
+        // A place renamed to another place's name keeps its own zone, and doesn't hide the other place.
+        let cda = try candidate("Coeur d'Alene")
+        await model.add(cda)
+        let saved = try #require(model.places.first { cda.isSameLocation(as: $0) })
+        await model.rename(saved.id, to: "Boise")
+        #expect(model.place(for: try #require(model.places.first { $0.id == saved.id })).timeZone.identifier == "America/Los_Angeles")
+        #expect(model.addable.contains { $0.name == "Coeur d'Alene" } == false)
+    }
+
     @Test("The Pro stub is off unless the launch argument turns it on")
     func proStub() throws {
         let defaults = try freshDefaults("pro")
@@ -211,6 +234,50 @@ struct HomeFollowsPlaceTests {
         model.select(lead: 20)
         await model.show(SampleAirProvider.boise)
         #expect(model.selectedLead == 20, "a repeat show of the same place keeps the screen as it is")
+    }
+
+    @Test("The place line stays on screen while loading, stalled, failed or empty (Dex, PR 17)")
+    func pickerInEveryState() async throws {
+        // Loading, and a load that never finishes.
+        let stalled = HomeModel(provider: StallingProvider(stalled: []), now: { SampleAirProvider.now }, place: mccall)
+        #expect(stalled.state == .loading)
+        #expect(stalled.placeLineOutsideContent == mccall)
+
+        // Failed.
+        let failing = HomeModel(provider: SampleAirProvider(scenario: .error, delay: .zero), now: { SampleAirProvider.now }, place: mccall)
+        await failing.load()
+        #expect(failing.state == .failed)
+        #expect(failing.placeLineOutsideContent == mccall)
+
+        // No air for the place yet.
+        let empty = HomeModel(provider: SampleAirProvider(scenario: .empty, delay: .zero), now: { SampleAirProvider.now }, place: mccall)
+        await empty.load()
+        #expect(empty.state == .empty)
+        #expect(empty.placeLineOutsideContent == mccall)
+
+        // Loaded draws its own place line; no place at all has the "Add a place" button instead.
+        let loaded = HomeModel(provider: SlowPlaceProvider(slowId: ""), now: { SampleAirProvider.now }, place: mccall)
+        await loaded.load()
+        #expect(loaded.placeLineOutsideContent == nil)
+        let none = HomeModel(provider: SlowPlaceProvider(slowId: ""), now: { SampleAirProvider.now }, place: nil)
+        await none.load()
+        #expect(none.placeLineOutsideContent == nil)
+    }
+
+    @Test("Alerts and the outlook come back in the selected place's zone, so Pacific spans read in Pacific time (Dex, PR 17)")
+    func pacificZone() async throws {
+        let provider = SampleAirProvider(delay: .zero, responseData: { try Fixture.data(named: $0) })
+        let alerts = try await provider.alerts(for: cda)
+        #expect(alerts.timeZone == "America/Los_Angeles")
+        #expect(alerts.placeId == cda.id)
+        let outlook = try await provider.outlook(for: cda)
+        #expect(outlook.timeZone == "America/Los_Angeles")
+
+        let model = HomeModel(provider: SlowPlaceProvider(slowId: ""), now: { SampleAirProvider.now }, place: nil)
+        await model.show(cda)
+        guard case .loaded(let shown) = model.alertsState, let row = shown.rows.first else { Issue.record("no alerts"); return }
+        // The smoke fixture runs 13:00Z to 20:00Z on 31 Oct: 6 AM to 1 PM in Coeur d'Alene (PDT), not Boise's 7 AM to 2 PM.
+        #expect(row.span.replacingOccurrences(of: "\u{202F}", with: " ") == "6 AM to 1 PM")
     }
 
     @Test("No active place is the empty state")

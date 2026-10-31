@@ -70,6 +70,14 @@ final class HomeModel {
     /// A load has begun at least once.
     private var started = false
 
+    /// The place line (the way into the places list) for every state that doesn't draw its own:
+    /// loading, a stalled load, an error, or no air yet. A loaded screen shows it inside the content.
+    /// Nil only when there is no place at all; that empty state has its own "Add a place" button.
+    var placeLineOutsideContent: Place? {
+        if case .loaded = state { return nil }
+        return place
+    }
+
     /// The hours the user can drag through: the current hour through the 48-hour lead.
     private(set) var selectableLeads: ClosedRange<Int>?
     private(set) var nowLead: Int?
