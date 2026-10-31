@@ -232,5 +232,11 @@ export async function fetchAirNowObservation(
   if (!response.ok) {
     return fail("airnow_fetch_failed", `AirNow responded ${response.status}.`);
   }
-  return parseAirNowCurrent(await response.text());
+  let body: string;
+  try {
+    body = await response.text();
+  } catch {
+    return fail("airnow_fetch_failed", "The AirNow client could not complete the request.");
+  }
+  return parseAirNowCurrent(body);
 }

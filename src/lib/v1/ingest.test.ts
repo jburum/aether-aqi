@@ -661,4 +661,45 @@ describe("v1 phase 1 ingest", { concurrency: 1 }, () => {
       else process.env.AIRNOW_API_KEY = previous;
     }
   });
+
+  it("writes the NOAA row when the AirNow body read fails after headers", async () => {
+    const previous = process.env.AIRNOW_API_KEY;
+    process.env.AIRNOW_API_KEY = "fixture-key";
+    const indoor: SensorSample = { location: "indoor", pmCf1: 80, relativeHumidity: 30 };
+    const dropped: SensorSample = { location: "outdoor", pmCf1: null, relativeHumidity: 30 };
+    try {
+      const sql = await openDb();
+      const place = await addSavedPlace(sql, "user-a", SAMPLE_PLACE);
+      const fetchImpl: typeof fetch = async () =>
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.error(new TypeError("reset after headers"));
+            },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      const result = await fallbackSensorDropout(sql, "user-a", {
+        samples: [indoor, dropped],
+        placeId: place.id,
+        issuedAt: CYCLE,
+        smokeAscii: readFixture("noaa-hrrr-smoke.ascii"),
+        point: { latitude: 43.615, longitude: -116.202 },
+        fetchImpl,
+      });
+      assert.equal(result.airnowError, "airnow_fetch_failed");
+      assert.equal(result.officialAqi, null);
+      assert.equal(result.forecast.source, "noaa_smoke");
+      const forecasts = await sql.query<{ source: string }>("select source from forecast_issued");
+      assert.equal(forecasts.length, 1);
+      assert.equal(forecasts[0]?.source, "noaa_smoke");
+      const official = await sql.query<{ n: number }>(
+        "select count(*)::int as n from official_reading",
+      );
+      assert.equal(official[0]?.n, 0);
+    } finally {
+      if (previous === undefined) delete process.env.AIRNOW_API_KEY;
+      else process.env.AIRNOW_API_KEY = previous;
+    }
+  });
 });
