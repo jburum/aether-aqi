@@ -81,6 +81,11 @@ export interface AlertDecision {
   source: AlertSource | null;
   confidence: Confidence | null;
   reason: string;
+  /**
+   * Corrected peak for a forecast-rule alert. Null when the alert came from
+   * AirNow, and null when the rule is quiet. The official reading is not copied here.
+   */
+  peakAqi: number | null;
 }
 
 export interface AlertsResponse {
@@ -516,6 +521,12 @@ function formatTenths(value: number): string {
   return (Math.round(value * 10) / 10).toFixed(1);
 }
 
+/** Forecast rules publish the corrected peak. An AirNow-owned episode does not. */
+function publishedPeak(episode: Episode): number | null {
+  if (episode.source === "airnow") return null;
+  return episode.peakAqi;
+}
+
 function quietDecision(kind: AlertKind, reason: string): AlertDecision {
   return {
     kind,
@@ -527,6 +538,7 @@ function quietDecision(kind: AlertKind, reason: string): AlertDecision {
     source: null,
     confidence: null,
     reason,
+    peakAqi: null,
   };
 }
 
@@ -570,6 +582,7 @@ function decisionFrom(
     source: chosen.source,
     confidence: confidenceFor(kind, chosen),
     reason: describe(chosen),
+    peakAqi: publishedPeak(chosen),
   };
 }
 
