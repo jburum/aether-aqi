@@ -124,9 +124,12 @@ Push delivery and the forecast store are in this branch. `src/lib/v1/week1.test.
 
 ```bash
 npm test
+npm run test:integration
 npm run lint
 npm run typecheck
 node --experimental-strip-types scripts/push-test-sender.ts
 ```
+
+`npm test` stays on PGLite and does not open Postgres. The two-connection saved-place race is `npm run test:integration` (`src/lib/v1/week1.integration.test.ts`). Connection env vars are in the README and `.env.example`.
 
 Dex reviews this head. Only Clint merges.

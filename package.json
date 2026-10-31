@@ -14,6 +14,7 @@
     "preview": "vite preview --host 0.0.0.0 --port 8080",
     "typecheck": "tsc --noEmit",
     "test": "node --experimental-strip-types --test src/lib/v1/week1.test.ts",
+    "test:integration": "node --experimental-strip-types --test src/lib/v1/week1.integration.test.ts",
     "lint": "eslint .",
     "format": "prettier --write ."
   },
