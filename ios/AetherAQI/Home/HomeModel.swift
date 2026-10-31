@@ -92,8 +92,7 @@ final class HomeModel {
             if let snapshot = try await provider.homeSnapshot() {
                 state = .loaded(snapshot)
                 settleLevel()
-                await loadTimeline(for: snapshot.place)
-                await loadWindowAndOutlook(for: snapshot.place)
+                await loadSections(for: snapshot.place)
             } else {
                 state = .empty
                 timelineState = .empty
@@ -117,25 +116,44 @@ final class HomeModel {
         settleLevel()
     }
 
-    /// Retries the best window and the outlook; the rest of the screen stays up.
+    /// Retries the best window and the outlook; the rest of the screen stays up. Each still publishes
+    /// as soon as its own answer arrives.
     func reloadWindowAndOutlook() async {
         guard case .loaded(let snapshot) = state else { return }
-        await loadWindowAndOutlook(for: snapshot.place)
+        let place = snapshot.place
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask { await self.loadBestWindow(for: place) }
+            group.addTask { await self.loadOutlook(for: place) }
+        }
     }
 
-    /// Both Phase 2 reads, side by side. Each fails on its own: one failing never hides the other.
-    private func loadWindowAndOutlook(for place: Place) async {
+    /// The timeline, the best window and the outlook start together, and each publishes the moment its
+    /// own request finishes. A stalled or failed one never holds back the others (Dex, PR 14 at 05abf90).
+    private func loadSections(for place: Place) async {
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask {
+                await self.loadTimeline(for: place)
+                await self.settleLevel()
+            }
+            group.addTask { await self.loadBestWindow(for: place) }
+            group.addTask { await self.loadOutlook(for: place) }
+        }
+    }
+
+    private func loadBestWindow(for place: Place) async {
         bestWindowState = .loading
-        outlookState = .loading
         let provider = provider
-        async let window = Self.attempt { try await provider.bestWindow(for: place) }
-        async let outlook = Self.attempt { try await provider.outlook(for: place) }
-        switch await window {
+        switch await Self.attempt({ try await provider.bestWindow(for: place) }) {
         case .success(let response): bestWindowState = .loaded(BestWindowDisplay(response, place: place))
         case .failure(let error) where error is CancellationError: break
         case .failure: bestWindowState = .failed
         }
-        switch await outlook {
+    }
+
+    private func loadOutlook(for place: Place) async {
+        outlookState = .loading
+        let provider = provider
+        switch await Self.attempt({ try await provider.outlook(for: place) }) {
         case .success(let response): outlookState = .loaded(OutlookDisplay(response, fallbackZone: place.timeZone))
         case .failure(let error) where error is CancellationError: break
         case .failure: outlookState = .failed

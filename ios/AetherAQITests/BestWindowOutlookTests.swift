@@ -216,3 +216,75 @@ struct WindowOutlookModelTests {
         #expect(SampleOutlook.fromLaunchArguments(defaults) == .weekday)
     }
 }
+
+/// Answers like the sample provider, but the sections named in `stalled` never answer (until cancelled).
+private struct StallingProvider: AirDataProvider {
+    enum Section: Sendable { case timeline, window, outlook }
+    let stalled: Set<Section>
+    let base = SampleAirProvider(
+        timeline: .fixture,
+        delay: .zero,
+        fixtureData: { try Fixture.data() },
+        outlookScenario: .weekday,
+        responseData: { try Fixture.data(named: $0) }
+    )
+
+    private func stall(_ section: Section) async throws {
+        if stalled.contains(section) { try await Task.sleep(for: .seconds(60 * 60)) }
+    }
+
+    func homeSnapshot() async throws -> HomeSnapshot? { try await base.homeSnapshot() }
+    func hourlyForecast(for place: Place) async throws -> [ForecastHour] {
+        try await stall(.timeline)
+        return try await base.hourlyForecast(for: place)
+    }
+    func bestWindow(for place: Place) async throws -> BestWindowResponse {
+        try await stall(.window)
+        return try await base.bestWindow(for: place)
+    }
+    func outlook(for place: Place) async throws -> OutlookResponse {
+        try await stall(.outlook)
+        return try await base.outlook(for: place)
+    }
+}
+
+@MainActor
+@Suite("Sections load on their own (Dex, PR 14 at 05abf90)")
+struct IndependentSectionTests {
+    /// Starts a load that will not finish (one section stalls), waits for `ready`, then cancels it.
+    private func whileStalled(_ stalled: Set<StallingProvider.Section>, until ready: (HomeModel) -> Bool) async -> HomeModel {
+        let model = HomeModel(provider: StallingProvider(stalled: stalled), now: { SampleAirProvider.now })
+        let load = Task { await model.load() }
+        for _ in 0..<400 where !ready(model) {
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+        load.cancel()
+        return model
+    }
+
+    @Test("A stalled timeline doesn't hold back the best window or the outlook")
+    func timelineStalls() async {
+        let model = await whileStalled([.timeline]) { $0.outlookState != .loading && $0.bestWindowState != .loading }
+        #expect(model.timelineState == .loading)
+        guard case .loaded = model.bestWindowState else { Issue.record("window still \(model.bestWindowState)"); return }
+        guard case .loaded(let outlook) = model.outlookState else { Issue.record("outlook still \(model.outlookState)"); return }
+        #expect(outlook.sunday.state == .noData)
+    }
+
+    @Test("A stalled best window doesn't hide a finished outlook")
+    func windowStalls() async {
+        let model = await whileStalled([.window]) { $0.outlookState != .loading && $0.timeline != nil }
+        #expect(model.bestWindowState == .loading)
+        guard case .loaded = model.outlookState else { Issue.record("outlook still \(model.outlookState)"); return }
+        #expect(model.timeline != nil)
+    }
+
+    @Test("A stalled outlook doesn't hold back the best window or the timeline, and the field still follows the timeline")
+    func outlookStalls() async {
+        let model = await whileStalled([.outlook]) { $0.bestWindowState != .loading && $0.timeline != nil }
+        #expect(model.outlookState == .loading)
+        guard case .loaded = model.bestWindowState else { Issue.record("window still \(model.bestWindowState)"); return }
+        #expect(model.selectedLead == 3)
+        #expect(model.level == .good)
+    }
+}
