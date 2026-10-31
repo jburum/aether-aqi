@@ -218,8 +218,8 @@ struct WindowOutlookModelTests {
 }
 
 /// Answers like the sample provider, but the sections named in `stalled` never answer (until cancelled).
-private struct StallingProvider: AirDataProvider {
-    enum Section: Sendable { case timeline, window, outlook }
+struct StallingProvider: AirDataProvider {
+    enum Section: Sendable { case timeline, window, outlook, alerts }
     let stalled: Set<Section>
     let base = SampleAirProvider(
         timeline: .fixture,
@@ -245,6 +245,10 @@ private struct StallingProvider: AirDataProvider {
     func outlook(for place: Place) async throws -> OutlookResponse {
         try await stall(.outlook)
         return try await base.outlook(for: place)
+    }
+    func alerts(for place: Place) async throws -> AlertsResponse {
+        try await stall(.alerts)
+        return try await base.alerts(for: place)
     }
 }
 

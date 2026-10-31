@@ -42,6 +42,7 @@ final class HomeModel {
     private(set) var timelineState: TimelineState = .loading
     private(set) var bestWindowState: PartState<BestWindowDisplay> = .loading
     private(set) var outlookState: PartState<OutlookDisplay> = .loading
+    private(set) var alertsState: PartState<AlertsDisplay> = .loading
     /// The lead hour (0–48 from the cycle's issue time) the timeline is on.
     private(set) var selectedLead: Int = 0
     /// True while a finger is on the timeline. The field color holds still until release (design/round2.html).
@@ -127,7 +128,7 @@ final class HomeModel {
         }
     }
 
-    /// The timeline, the best window and the outlook start together, and each publishes the moment its
+    /// The timeline, best window, outlook and alerts start together, and each publishes the moment its
     /// own request finishes. A stalled or failed one never holds back the others (Dex, PR 14 at 05abf90).
     private func loadSections(for place: Place) async {
         await withTaskGroup(of: Void.self) { group in
@@ -137,6 +138,23 @@ final class HomeModel {
             }
             group.addTask { await self.loadBestWindow(for: place) }
             group.addTask { await self.loadOutlook(for: place) }
+            group.addTask { await self.loadAlerts(for: place) }
+        }
+    }
+
+    /// Retries the alerts alone; everything else stays up.
+    func reloadAlerts() async {
+        guard case .loaded(let snapshot) = state else { return }
+        await loadAlerts(for: snapshot.place)
+    }
+
+    private func loadAlerts(for place: Place) async {
+        alertsState = .loading
+        let provider = provider
+        switch await Self.attempt({ try await provider.alerts(for: place) }) {
+        case .success(let response): alertsState = .loaded(AlertsDisplay(response, fallbackZone: place.timeZone))
+        case .failure(let error) where error is CancellationError: break
+        case .failure: alertsState = .failed
         }
     }
 
