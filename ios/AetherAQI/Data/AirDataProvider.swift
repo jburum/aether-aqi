@@ -2,8 +2,8 @@ import Foundation
 
 /// Where the home screen gets its air. Only sample and fixture providers exist so far: no network, no keys.
 protocol AirDataProvider: Sendable {
-    /// The home screen for the user's place, or nil when no place is set yet.
-    func homeSnapshot() async throws -> HomeSnapshot?
+    /// The home screen for `place` (the active saved place), or nil when there is no air for it yet.
+    func homeSnapshot(for place: Place) async throws -> HomeSnapshot?
 
     /// Stored forecast rows for `place`, shaped like `IssuedForecast` in src/lib/v1/types.ts. The rows
     /// may include days 3–7; `ForecastTimeline` keeps the newest cycle's NOAA smoke hours 0 through 48.
@@ -156,7 +156,8 @@ struct SampleAirProvider: AirDataProvider {
     static let now = issuedAt
     static let boise = Place(id: "place_boise", name: "Boise", region: "Idaho", timeZone: TimeZone(identifier: "America/Boise")!)
 
-    func homeSnapshot() async throws -> HomeSnapshot? {
+    /// Sample numbers are Boise's for every place: the place's name and zone change, the air does not.
+    func homeSnapshot(for place: Place) async throws -> HomeSnapshot? {
         if scenario == .loading {
             try await Task.sleep(for: .seconds(60 * 60 * 24))
         }
@@ -166,7 +167,7 @@ struct SampleAirProvider: AirDataProvider {
         case .error: throw AirDataError.unavailable
         case .loading, .good, .moderate, .usg, .unhealthy, .very, .hazardous:
             let ours = Self.ours[scenario] ?? 42
-            return Self.snapshot(ours: ours, official: Self.official[scenario] ?? nil, pollutant: scenario == .moderate ? "Ozone" : "PM2.5")
+            return Self.snapshot(ours: ours, official: Self.official[scenario] ?? nil, pollutant: scenario == .moderate ? "Ozone" : "PM2.5", place: place)
         }
     }
 
@@ -230,9 +231,9 @@ struct SampleAirProvider: AirDataProvider {
         }
     }
 
-    static func snapshot(ours: Int, official: Int?, pollutant: String) -> HomeSnapshot {
+    static func snapshot(ours: Int, official: Int?, pollutant: String, place: Place = boise) -> HomeSnapshot {
         HomeSnapshot(
-            place: boise,
+            place: place,
             now: CorrectedForecast(aqi: ours, pollutant: pollutant, validFor: issuedAt, issuedAt: issuedAt, confidence: .valley),
             official: official.map {
                 OfficialReading(aqi: $0, observedAt: issuedAt.addingTimeInterval(-40 * 60), attribution: OfficialReading.airNowAttribution)

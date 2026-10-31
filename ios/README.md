@@ -1,11 +1,14 @@
 # iOS app
 
 SwiftUI app for AQI v1 (see the locked plan in SharedBrain, `Projects/aether-aqi/v1-plan.md`). So far it
-is the Free home screen: current air for one place, the whole-screen color shift, the 48-hour drag
-timeline (Phase 1), the best window, the Tomorrow and weekend outlook, alerts and alert settings
-(Phase 2), and loading, empty
-and error states. All data is sample
-or recorded fixture data. There is no network code, no API key and no signing set up.
+has:
+
+- **Phase 1:** the home screen for the active saved place, with the whole-screen color shift and the 48-hour drag timeline.
+- **Phase 2:** the best window, the Tomorrow and weekend outlook, alerts and alert settings.
+- **Phase 3:** saved places (up to 5).
+- **Every part:** loading, empty and error states.
+
+All data is sample or recorded fixture data. There is no network code, no API key and no signing set up.
 
 ## Requirements
 
@@ -47,7 +50,7 @@ The app reads the screen to show from the `-AQIScenario` launch argument. Withou
 | Scenario | Screen |
 |---|---|
 | `good`, `moderate`, `usg`, `unhealthy`, `very`, `hazardous` | Home for Boise at that level. `hazardous` has no AirNow reading. |
-| `empty` | No place set |
+| `empty` | No air for the place yet (shows the "No place yet" state; deleting every saved place shows it too) |
 | `error` | The load failed |
 | `loading` | Stays on the loading state |
 
@@ -147,6 +150,28 @@ Pick the canned response with `-AQIAlerts`:
 
 Each response has its own `asOf`, and the rows read Now or Upcoming against that, not against the app's sample clock.
 
+## Saved places
+
+Tap the place name on the home screen, or "Add a place" when there is none, to open **Places**.
+
+- **What you can do:** pick the active place, rename (swipe right, or the context menu), delete (swipe left), and add.
+- **Adding:** you choose from a bundled list of 21 Idaho places (`idaho-places.json`). There is no geocoding service and no location permission.
+- **Following the active place:** the home screen loads every section for the active place. A slow answer for a place you have just switched away from never replaces the new one. Sample air is Boise's for every place; only the name and time zone change.
+- **The shape:** it follows `saved_place` (`docs/v1/WEEK1.md`) and `SavedPlace` in `src/lib/v1/types.ts`: `id`, `name`, `latitude`, `longitude`, `valley`, `alertAt`, `position` and `createdAt`.
+- **Where they are kept:** `LocalPlacesProvider` keeps them on the phone, in UserDefaults, as JSON. A live provider makes the same calls to `GET`/`POST /api/v1/places` and `DELETE /api/v1/places/:id`.
+- **Renaming is local only:** the API has no rename route yet.
+- **Time zones:** each bundled place carries its zone, which isn't part of `saved_place`. North Idaho is Pacific time.
+
+Limits:
+
+| | |
+|---|---|
+| Cap | 5 places, the same as the server (`MAX_SAVED_PLACES`, `place_cap`). At 5, "Add a place" is disabled and the list says why: "You have 5 places, the most you can save. Delete one to add another." The store refuses a sixth on its own too. |
+| Free | One place. Adding a second shows "Free includes one place. More places are part of Pro." On Free only the first place can be active, so places saved under Pro stay listed and marked Pro. |
+| Pro | A local stub only: launch with `-AQIProStub YES`. No StoreKit, paywall or entitlement. |
+
+Deleting the active place makes the first remaining place active. Deleting the last one leaves the home screen on "No place yet", with an "Add a place" button.
+
 ## Layout
 
 | Path | What it holds |
@@ -155,7 +180,7 @@ Each response has its own `asOf`, and the rows read Now or Upcoming against that
 | `AetherAQI/Model` | AQI levels and colors, the snapshot types, and `ForecastTimeline`. Our corrected forecast and the official AirNow reading are separate types. |
 | `AetherAQI/Data` | `AirDataProvider` (the protocol the screens use), `FixtureForecastProvider` (recorded rows) and `SampleAirProvider` (fixed Boise data) |
 | `AetherAQI/Home` | The home screen, the timeline and their model |
-| `AetherAQI/Resources/Fixtures` | `boise-hourly-12z.json`: one NOAA 12Z cycle as `IssuedForecast` rows. `boise-best-window*.json`, `boise-outlook-*.json` and `boise-alerts-*.json`: Phase 2 responses |
+| `AetherAQI/Resources/Fixtures` | `boise-hourly-12z.json`: one NOAA 12Z cycle as `IssuedForecast` rows. `boise-best-window*.json`, `boise-outlook-*.json` and `boise-alerts-*.json`: Phase 2 responses. `idaho-places.json`: places to add |
 | `AetherAQI/Design` | Tokens and fonts |
 | `AetherAQI/Resources/Fonts` | Source Serif 4 and Source Sans 3 (SIL OFL, see `OFL.txt`) |
 | `AetherAQITests` | Swift Testing unit tests |

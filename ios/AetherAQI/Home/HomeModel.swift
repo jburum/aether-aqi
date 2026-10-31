@@ -50,11 +50,25 @@ final class HomeModel {
 
     private let provider: any AirDataProvider
     private let now: @Sendable () -> Date
+    /// The active saved place the screen shows. Nil (no saved place) is the empty state.
+    private(set) var place: Place?
 
-    init(provider: any AirDataProvider, now: @escaping @Sendable () -> Date = { Date() }) {
+    init(provider: any AirDataProvider, now: @escaping @Sendable () -> Date = { Date() }, place: Place? = SampleAirProvider.boise) {
         self.provider = provider
         self.now = now
+        self.place = place
     }
+
+    /// The home screen follows the active place: switching reloads every section for the new one.
+    func show(_ next: Place?) async {
+        // The same place, already loaded or loading: nothing to do. A first show or a failed one loads.
+        if next == place, started, state != .failed { return }
+        place = next
+        await load()
+    }
+
+    /// A load has begun at least once.
+    private var started = false
 
     /// The hours the user can drag through: the current hour through the 48-hour lead.
     private(set) var selectableLeads: ClosedRange<Int>?
@@ -86,11 +100,21 @@ final class HomeModel {
     private(set) var level: AirLevel?
 
     func load() async {
+        started = true
         state = .loading
         timelineState = .loading
         settleLevel()
+        guard let place else {
+            state = .empty
+            timelineState = .empty
+            settleLevel()
+            return
+        }
         do {
-            if let snapshot = try await provider.homeSnapshot() {
+            let loaded = try await provider.homeSnapshot(for: place)
+            // The person switched places while this was loading: the newer load owns the screen.
+            guard isCurrent(place) else { return }
+            if let snapshot = loaded {
                 state = .loaded(snapshot)
                 settleLevel()
                 await loadSections(for: snapshot.place)
@@ -101,11 +125,17 @@ final class HomeModel {
         } catch is CancellationError {
             // The view went away; keep whatever is on screen.
         } catch {
+            guard isCurrent(place) else { return }
             // Never leave an old number up as if it were current.
             state = .failed
             timelineState = .failed
         }
         settleLevel()
+    }
+
+    /// A result for `place` may still land: it is the place on screen.
+    private func isCurrent(_ place: Place) -> Bool {
+        self.place == place
     }
 
     /// Retries the timeline alone; the current number stays up.
@@ -151,7 +181,9 @@ final class HomeModel {
     private func loadAlerts(for place: Place) async {
         alertsState = .loading
         let provider = provider
-        switch await Self.attempt({ try await provider.alerts(for: place) }) {
+        let result = await Self.attempt({ try await provider.alerts(for: place) })
+        guard isCurrent(place) else { return }
+        switch result {
         case .success(let response): alertsState = .loaded(AlertsDisplay(response, fallbackZone: place.timeZone))
         case .failure(let error) where error is CancellationError: break
         case .failure: alertsState = .failed
@@ -161,7 +193,9 @@ final class HomeModel {
     private func loadBestWindow(for place: Place) async {
         bestWindowState = .loading
         let provider = provider
-        switch await Self.attempt({ try await provider.bestWindow(for: place) }) {
+        let result = await Self.attempt({ try await provider.bestWindow(for: place) })
+        guard isCurrent(place) else { return }
+        switch result {
         case .success(let response): bestWindowState = .loaded(BestWindowDisplay(response, place: place))
         case .failure(let error) where error is CancellationError: break
         case .failure: bestWindowState = .failed
@@ -171,7 +205,9 @@ final class HomeModel {
     private func loadOutlook(for place: Place) async {
         outlookState = .loading
         let provider = provider
-        switch await Self.attempt({ try await provider.outlook(for: place) }) {
+        let result = await Self.attempt({ try await provider.outlook(for: place) })
+        guard isCurrent(place) else { return }
+        switch result {
         case .success(let response): outlookState = .loaded(OutlookDisplay(response, fallbackZone: place.timeZone))
         case .failure(let error) where error is CancellationError: break
         case .failure: outlookState = .failed
@@ -192,6 +228,7 @@ final class HomeModel {
         selectedLead = 0
         do {
             let rows = try await provider.hourlyForecast(for: place)
+            guard isCurrent(place) else { return }
             guard let timeline = ForecastTimeline(rows: rows) else {
                 timelineState = .empty
                 return
@@ -207,6 +244,7 @@ final class HomeModel {
             timelineState = .loaded(timeline)
         } catch is CancellationError {
         } catch {
+            guard isCurrent(place) else { return }
             timelineState = .failed
         }
     }
