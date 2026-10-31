@@ -224,6 +224,19 @@ function channelForLead(lead: "day_1_2" | "day_3_7"): "normal" | "headsUp" {
   return lead === "day_1_2" ? "normal" : "headsUp";
 }
 
+/**
+ * The forecast peak stays the stored corrected AQI. AirNow is cited beside it.
+ * A promoted hour that was still under 101 uses the observation.
+ */
+function alertAqi(
+  forecastOn: boolean,
+  hour: AlertForecastHour,
+  official: AlertOfficial | null,
+): number {
+  if (forecastOn || !official) return hour.correctedAqi;
+  return official.officialAqi;
+}
+
 function pointFor(validFor: string, channel: "normal" | "headsUp", driver: Driver): HourPoint {
   return channel === "normal"
     ? { validFor, normal: driver, headsUp: null }
@@ -246,10 +259,8 @@ function smokePoints(
       continue;
     }
     const cited = citesOfficial(official, hour, "PM2.5");
-    const aqi =
-      promoted && official ? Math.max(hour.correctedAqi, official.officialAqi) : hour.correctedAqi;
     const driver: Driver = {
-      aqi,
+      aqi: alertAqi(forecastOn, hour, official),
       source: forecastOn ? hour.source : "airnow",
       airNowCited: cited,
       hpblM: null,
@@ -278,10 +289,8 @@ function ozonePoints(
       continue;
     }
     const cited = citesOfficial(official, hour, "O3");
-    const aqi =
-      promoted && official ? Math.max(hour.correctedAqi, official.officialAqi) : hour.correctedAqi;
     const driver: Driver = {
-      aqi,
+      aqi: alertAqi(forecastOn, hour, official),
       source: forecastOn ? hour.source : "airnow",
       airNowCited: cited,
       hpblM: null,

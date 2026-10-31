@@ -316,6 +316,39 @@ describe("v1 alert rules", () => {
     assert.match(ozoneDecision.reason, /180/);
   });
 
+  it("cites AirNow beside a forecast that is already on", () => {
+    const issuedAt = "2026-01-15T12:00:00.000Z";
+    const first = "2026-01-15T16:00:00.000Z";
+    const smoke = smokeRule({
+      hours: hoursOf(issuedAt, first, 4, 110),
+      official: { observedAt: first, officialAqi: 200, parameter: "PM2.5" },
+      asOf: first,
+    });
+    assert.equal(smoke.fired, true);
+    assert.equal(smoke.source, "noaa_smoke");
+    assert.equal(smoke.confidence, "valley");
+    assert.equal(smoke.severity, "elevated");
+    assert.match(smoke.reason, /the NOAA smoke model: corrected AQI peaks at 110/);
+    assert.match(smoke.reason, /AirNow PM2\.5 reads 200/);
+    assert.equal(smoke.reason.includes("peaks at 200"), false);
+
+    const ozoneIssued = "2026-07-15T18:00:00.000Z";
+    const ozoneFirst = "2026-07-15T20:00:00.000Z";
+    const ozone = ozoneRule({
+      hours: hoursOf(ozoneIssued, ozoneFirst, 4, 110, "later", "O3"),
+      official: { observedAt: ozoneFirst, officialAqi: 200, parameter: "O3" },
+      asOf: ozoneFirst,
+      timeZone: ZONE,
+    });
+    assert.equal(ozone.fired, true);
+    assert.equal(ozone.source, "noaa_aqf");
+    assert.equal(ozone.confidence, "model");
+    assert.equal(ozone.severity, "elevated");
+    assert.match(ozone.reason, /NOAA's air quality forecast: corrected AQI peaks at 110/);
+    assert.match(ozone.reason, /AirNow ozone reads 200/);
+    assert.equal(ozone.reason.includes("peaks at 200"), false);
+  });
+
   it("fires summer ozone, stays quiet in winter, and heads-up only after 48 hours", () => {
     const issuedAt = "2026-07-15T18:00:00.000Z";
     // Lead is 2 hours, so this is a days 1-2 ozone hour. The store still rejects that row.
