@@ -18,9 +18,21 @@ export const AIRNOW_ATTRIBUTION =
 export const MAX_SAVED_PLACES = 5;
 
 const HOUR_MS = 3_600_000;
-const DAY12_MS = 48 * HOUR_MS;
-const DAY7_MS = 168 * HOUR_MS;
+/** Days 1-2 run through this lead, including the exact 48-hour instant. */
+export const DAY12_MS = 48 * HOUR_MS;
+/** The launch window ends at 168 hours, including that instant. */
+export const DAY7_MS = 168 * HOUR_MS;
 const ISO_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/;
+
+export type ForecastLeadClass = "day_1_2" | "day_3_7" | "outside";
+
+/** Same cut the SQL window uses: `<= 48 hours` is days 1-2, after that is days 3-7. */
+export function classifyForecastLead(issuedAt: string, validFor: string): ForecastLeadClass {
+  const lead = new Date(validFor).getTime() - new Date(issuedAt).getTime();
+  if (!Number.isFinite(lead) || lead < 0 || lead > DAY7_MS) return "outside";
+  if (lead <= DAY12_MS) return "day_1_2";
+  return "day_3_7";
+}
 
 export interface ValidForecast {
   placeId: string;
@@ -110,14 +122,14 @@ function oneOf<T extends string>(value: unknown, allowed: readonly T[], field: s
  * Days 3-7 are NOAA's air quality forecast, or regional and low-confidence.
  */
 export function assertForecastWindow(input: ValidForecast): void {
-  const leadMs = new Date(input.validFor).getTime() - new Date(input.issuedAt).getTime();
-  if (leadMs < 0 || leadMs > DAY7_MS) {
+  const lead = classifyForecastLead(input.issuedAt, input.validFor);
+  if (lead === "outside") {
     throw new V1RuleError(
       "outside_launch_window",
       "Launch forecasts cover days 1 through 7 from the issue time.",
     );
   }
-  const day12 = leadMs <= DAY12_MS;
+  const day12 = lead === "day_1_2";
   if (day12) {
     if (
       input.source !== "noaa_smoke" ||
