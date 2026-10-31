@@ -8,6 +8,8 @@ struct HomeScreen: View {
     @State var alertSettings = AlertSettings()
     /// Saved places. The home screen shows the active one. Nil where there is no list (still renders, tests).
     @State var places: PlacesModel? = nil
+    /// The person's plan. Alerts and a second place are Pro. Nil leaves both ungated (still renders, tests).
+    @State var pro: ProModel? = nil
     /// False only where the caller has already loaded the model (still renders of a fixed state).
     var loadsOnAppear = true
     @State private var showingPlaces = false
@@ -44,10 +46,14 @@ struct HomeScreen: View {
         .preferredColorScheme(.dark)
         .environment(\.openPlaces, openPlacesAction)
         .sheet(isPresented: $showingPlaces) {
-            if let places { PlacesView(places: places) { showingPlaces = false } }
+            if let places { PlacesView(places: places, pro: pro) { showingPlaces = false } }
         }
         .task {
             guard loadsOnAppear else { return }
+            if let pro {
+                await pro.refresh()
+                places?.isPro = pro.isPro
+            }
             if let places {
                 await places.load()
                 await model.show(places.activePlace)
@@ -58,6 +64,10 @@ struct HomeScreen: View {
         // The home screen follows the active place: picking, deleting or renaming one reloads it.
         .onChange(of: places?.activePlace) { _, next in
             Task { await model.show(next) }
+        }
+        // Buying or losing Pro changes how many places are open.
+        .onChange(of: pro?.isPro) { _, next in
+            if let next { places?.isPro = next }
         }
     }
 
@@ -72,7 +82,7 @@ struct HomeScreen: View {
         case .loading:
             LoadingState()
         case .loaded(let snapshot):
-            CurrentAir(model: model, snapshot: snapshot, alertSettings: alertSettings)
+            CurrentAir(model: model, snapshot: snapshot, alertSettings: alertSettings, pro: pro)
         case .empty:
             EmptyState()
         case .failed:
@@ -135,6 +145,7 @@ private struct CurrentAir: View {
     let model: HomeModel
     let snapshot: HomeSnapshot
     let alertSettings: AlertSettings
+    let pro: ProModel?
     @ScaledMetric(relativeTo: .subheadline) private var body15: CGFloat = 15
     @ScaledMetric(relativeTo: .footnote) private var small13: CGFloat = 13
     @ScaledMetric(relativeTo: .largeTitle) private var hero: CGFloat = 120
@@ -200,7 +211,7 @@ private struct CurrentAir: View {
             SpectrumBar(aqi: display.aqi)
                 .padding(.top, 12)
 
-            AlertsSection(model: model, settings: alertSettings, soft: soft)
+            AlertsSection(model: model, settings: alertSettings, pro: pro, soft: soft)
                 .padding(.top, 18)
 
             TimelineSection(model: model, place: snapshot.place, soft: soft)
