@@ -1,9 +1,9 @@
-# iOS app (Phase 0 shell)
+# iOS app
 
-SwiftUI app for AQI v1 (see the locked plan in SharedBrain, `Projects/aether-aqi/v1-plan.md`). Phase 0 is the
-Free home screen only: current air for one place, the whole-screen color shift, a best-window placeholder,
-and loading, empty and error states. All data is sample data. There is no network code, no API key and no
-signing set up.
+SwiftUI app for AQI v1 (see the locked plan in SharedBrain, `Projects/aether-aqi/v1-plan.md`). So far it
+is the Free home screen: current air for one place, the whole-screen color shift, the 48-hour drag
+timeline (Phase 1), a best-window placeholder, and loading, empty and error states. All data is sample
+or recorded fixture data. There is no network code, no API key and no signing set up.
 
 ## Requirements
 
@@ -57,14 +57,43 @@ xcrun simctl io booted screenshot home-error.png
 
 In Xcode, the scheme's Run > Arguments tab lists `good`, `empty` and `error`. Tick one to use it.
 
+The timeline has its own argument, `-AQITimeline`, so its states show while the rest of the home screen
+is loaded. The scheme lists `empty` and `error`.
+
+| Timeline | What it shows |
+|---|---|
+| `fixture` (default) | The recorded 12Z cycle, moved so the current hour matches the scenario's number. Hour 31 has no value. |
+| `empty` | No hourly forecast for the place |
+| `error` | The forecast request failed, with Try again |
+| `loading` | Stays on the loading placeholder |
+
+The app's clock is pinned to 2026-10-31 15:00 UTC (9 AM in Boise), three hours into that cycle, so the
+fixture always reads as current.
+
+## The 48-hour timeline
+
+- **What it plots:** one bar per hour of our corrected NOAA smoke forecast, from the current hour to the 48-hour lead. It is cut the same way as `classifyForecastLead` in `src/lib/v1/rules.ts`: hour 48 is in, anything after it is out.
+- **Data shape:** rows are `IssuedForecast` from `src/lib/v1/types.ts`. `ForecastTimeline` keeps the newest cycle's `noaa_smoke` / `day_1_2_valley` rows and drops the rest:
+  - days 3–7 rows (`noaa_aqf`, `regional`)
+  - off-hour times
+  - repeats (the first row stays)
+  - AQI outside 0–500
+
+  A live provider only has to return those rows.
+- **Missing hours:** an hour with no row is drawn as a hollow stub. Selecting it shows "No forecast" and the neutral field. No number is filled in.
+- **Dragging:** dragging moves the number, level, pollutant and advice. The field color holds while the finger is down and crossfades on release (design/round2.html). While it holds, the number and pill are white, so they still clear 4.5:1. "Back to now" returns to the current hour.
+- **VoiceOver:** the chart is one adjustable element. Swipe up or down to move one hour; it reads the time, the forecast AQI and the level.
+- **AirNow reading:** the official AirNow reading stays in its own panel and does not move with the timeline.
+
 ## Layout
 
 | Path | What it holds |
 |---|---|
 | `AetherAQI/App` | The app entry point |
-| `AetherAQI/Model` | AQI levels and colors, and the snapshot types. Our corrected forecast and the official AirNow reading are separate types. |
-| `AetherAQI/Data` | `AirDataProvider` (the protocol the screens use) and `SampleAirProvider` (fixed Boise data) |
-| `AetherAQI/Home` | The home screen and its model |
+| `AetherAQI/Model` | AQI levels and colors, the snapshot types, and `ForecastTimeline`. Our corrected forecast and the official AirNow reading are separate types. |
+| `AetherAQI/Data` | `AirDataProvider` (the protocol the screens use), `FixtureForecastProvider` (recorded rows) and `SampleAirProvider` (fixed Boise data) |
+| `AetherAQI/Home` | The home screen, the timeline and their model |
+| `AetherAQI/Resources/Fixtures` | `boise-hourly-12z.json`: one NOAA 12Z cycle as `IssuedForecast` rows |
 | `AetherAQI/Design` | Tokens and fonts |
 | `AetherAQI/Resources/Fonts` | Source Serif 4 and Source Sans 3 (SIL OFL, see `OFL.txt`) |
 | `AetherAQITests` | Swift Testing unit tests |

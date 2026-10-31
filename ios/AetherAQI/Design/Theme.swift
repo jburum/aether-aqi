@@ -24,6 +24,17 @@ enum Theme {
         .init(color: RGB(hex: 0x972E2C).color, location: 0.6),
         .init(color: RGB(hex: 0x6E282A).color, location: 1),
     ]
+    /// Timeline bar color for a level: the spectrum stop at that level's start.
+    static func bar(_ level: AirLevel) -> RGB {
+        switch level {
+        case .good: RGB(hex: 0x51A957)
+        case .moderate: RGB(hex: 0xC4AB11)
+        case .usg: RGB(hex: 0xD77D20)
+        case .unhealthy: RGB(hex: 0xC84531)
+        case .very: RGB(hex: 0x972E2C)
+        case .hazardous: RGB(hex: 0x6E282A)
+        }
+    }
     /// The field crossfade (round2.html: 600ms linear).
     static let fieldFade = Animation.linear(duration: 0.6)
 }
