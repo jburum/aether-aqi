@@ -1,4 +1,7 @@
+import type { StabilitySample } from "./alerts.ts";
 import { V1RuleError } from "./errors.ts";
+import { readSimpleGribFields, type SimpleGribField } from "./grib.ts";
+import { parseUtcInstant } from "./phase2.ts";
 import { concentrationTokenToTenths, pm25TenthsToAqi } from "./pm25-aqi.ts";
 import { classifyForecastLead, parseForecastInput, type ValidForecast } from "./rules.ts";
 
@@ -360,4 +363,180 @@ export function forecastBodiesFromExtracts(input: {
     bodies.push(body);
   }
   return bodies;
+}
+
+const STABILITY_BOX_DEGREES = 0.2;
+
+/** WMO / NCEP identities on the HRRR surface file. Skin temperature is category 0 on surface type 1 and is ignored. */
+const STABILITY_FIELDS = {
+  tmp: { category: 0, parameter: 0, surfaceType: 103, level: 2 },
+  u: { category: 2, parameter: 2, surfaceType: 103, level: 10 },
+  v: { category: 2, parameter: 3, surfaceType: 103, level: 10 },
+  hpbl: { category: 3, parameter: 18, surfaceType: 1, level: 0 },
+} as const;
+
+type StabilityFieldName = keyof typeof STABILITY_FIELDS;
+
+export interface HrrrStabilityQuery {
+  cycleUtc: string;
+  hourStart: number;
+  hourEnd: number;
+  south: number;
+  north: number;
+  west: number;
+  east: number;
+}
+
+function assertStabilityBox(input: HrrrStabilityQuery): void {
+  const { south, north, west, east } = input;
+  for (const value of [south, north, west, east]) {
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      throw new V1RuleError("noaa_grid", "Stability box edges must be finite degrees.");
+    }
+  }
+  if (south < -90 || north > 90 || !(south < north) || north - south > STABILITY_BOX_DEGREES) {
+    throw new V1RuleError(
+      "noaa_grid",
+      "Stability box runs south to north and spans at most 0.2 degrees.",
+    );
+  }
+  if (west < -180 || east > 180 || !(west < east) || east - west > STABILITY_BOX_DEGREES) {
+    throw new V1RuleError(
+      "noaa_grid",
+      "Stability box runs west to east and spans at most 0.2 degrees.",
+    );
+  }
+}
+
+/**
+ * Keyless NOMADS GRIB filter for one lead hour. OpenDAP ASCII is retired.
+ * `lev_surface` is on so mixing height is included. Skin temperature comes along and is ignored.
+ * `var_WIND` is left off: that message is the day's max wind, not this hour.
+ */
+export function hrrrStabilityFilterUrls(input: HrrrStabilityQuery): string[] {
+  if (input.hourStart > 48 || input.hourEnd > 48) {
+    throw new V1RuleError("noaa_hour", "HRRR stability covers lead hours 0 through 48.");
+  }
+  const cycle = noaaCycleParts(input.cycleUtc);
+  assertQueryHour(input.hourStart, "hourStart");
+  assertQueryHour(input.hourEnd, "hourEnd");
+  if (input.hourEnd < input.hourStart) {
+    throw new V1RuleError("noaa_hour", "hourEnd is before hourStart.");
+  }
+  assertStabilityBox(input);
+  const urls: string[] = [];
+  for (let lead = input.hourStart; lead <= input.hourEnd; lead += 1) {
+    const file = `hrrr.t${cycle.hh}z.wrfsfcf${String(lead).padStart(2, "0")}.grib2`;
+    const params = new URLSearchParams();
+    params.set("dir", `/hrrr.${cycle.yyyymmdd}/conus`);
+    params.set("file", file);
+    params.set("var_TMP", "on");
+    params.set("var_UGRD", "on");
+    params.set("var_VGRD", "on");
+    params.set("var_HPBL", "on");
+    params.set("lev_2_m_above_ground", "on");
+    params.set("lev_10_m_above_ground", "on");
+    params.set("lev_surface", "on");
+    params.set("subregion", "");
+    params.set("toplat", String(input.north));
+    params.set("leftlon", String(input.west));
+    params.set("rightlon", String(input.east));
+    params.set("bottomlat", String(input.south));
+    const url = `${NOAA_ORIGIN}/cgi-bin/filter_hrrr_2d.pl?${params.toString()}`;
+    assertNoaaUrl(url);
+    urls.push(url);
+  }
+  return urls;
+}
+
+export async function fetchNoaaGrib(url: string, fetchImpl: typeof fetch): Promise<Uint8Array> {
+  const allowed = assertNoaaUrl(url);
+  const response = await fetchImpl(allowed.toString(), {
+    headers: { accept: "application/octet-stream", "user-agent": NOAA_USER_AGENT },
+    redirect: "error",
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!response.ok) {
+    throw new V1RuleError("noaa_fetch_failed", `NOAA responded ${response.status}.`);
+  }
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  if (bytes.length < 16 || bytes[0] !== 0x47) {
+    throw new V1RuleError("noaa_stability_parse", "NOAA stability response is not a GRIB2 file.");
+  }
+  return bytes;
+}
+
+function sameField(field: SimpleGribField, name: StabilityFieldName): boolean {
+  const identity = STABILITY_FIELDS[name];
+  return (
+    field.category === identity.category &&
+    field.parameter === identity.parameter &&
+    field.surfaceType === identity.surfaceType &&
+    Math.abs(field.level - identity.level) < 1e-6
+  );
+}
+
+function mean(values: readonly number[]): number {
+  let sum = 0;
+  for (const value of values) sum += value;
+  return sum / values.length;
+}
+
+/**
+ * One lead hour from a filter extract. The sample is the mean of the cells in the box.
+ * Wind is `hypot` of the mean 10 m components. Lead hours stop at 48.
+ */
+export function stabilitySampleFromGrib(bytes: Uint8Array, issuedAt: string): StabilitySample {
+  const cycle = parseUtcInstant(issuedAt, "issuedAt");
+  const picked = new Map<StabilityFieldName, SimpleGribField>();
+  for (const field of readSimpleGribFields(bytes)) {
+    for (const name of Object.keys(STABILITY_FIELDS) as StabilityFieldName[]) {
+      if (!sameField(field, name)) continue;
+      if (picked.has(name)) {
+        throw new V1RuleError("noaa_stability_parse", "GRIB2 extract repeats a stability field.");
+      }
+      picked.set(name, field);
+    }
+  }
+  const tmp = picked.get("tmp");
+  const u = picked.get("u");
+  const v = picked.get("v");
+  const hpbl = picked.get("hpbl");
+  if (!tmp || !u || !v || !hpbl) {
+    throw new V1RuleError(
+      "noaa_stability_parse",
+      "GRIB2 extract is missing 2 m temperature, 10 m wind, or mixing height.",
+    );
+  }
+  const group = [tmp, u, v, hpbl];
+  const forecastHour = tmp.forecastHour;
+  if (tmp.referenceTime !== cycle) {
+    throw new V1RuleError("noaa_stability_parse", "GRIB reference time does not match issuedAt.");
+  }
+  if (group.some((field) => field.referenceTime !== cycle || field.forecastHour !== forecastHour)) {
+    throw new V1RuleError(
+      "noaa_stability_parse",
+      "GRIB2 stability fields disagree on the valid hour.",
+    );
+  }
+  if (!Number.isInteger(forecastHour) || forecastHour < 0 || forecastHour > 48) {
+    throw new V1RuleError("noaa_hour", "HRRR stability covers lead hours 0 through 48.");
+  }
+  const validFor = new Date(Date.parse(cycle) + forecastHour * 3_600_000).toISOString();
+  if (classifyForecastLead(cycle, validFor) !== "day_1_2") {
+    throw new V1RuleError("noaa_hour", "HRRR stability covers lead hours 0 through 48.");
+  }
+  const tmp2mK = mean(tmp.values);
+  const hpblM = mean(hpbl.values);
+  const wind10mMs = Math.hypot(mean(u.values), mean(v.values));
+  if (tmp2mK < 180 || tmp2mK > 330) {
+    throw new V1RuleError("invalid_field", "HRRR temperatures must be Kelvin between 180 and 330.");
+  }
+  if (hpblM < 0 || hpblM > 20_000) {
+    throw new V1RuleError("invalid_field", "Mixing height must be from 0 to 20000 m.");
+  }
+  if (wind10mMs > 100) {
+    throw new V1RuleError("invalid_field", "10 m wind must be a speed from 0 to 100 m/s.");
+  }
+  return { issuedAt: cycle, validFor, tmp2mK, hpblM, wind10mMs };
 }

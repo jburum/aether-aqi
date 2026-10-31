@@ -2,7 +2,7 @@
 
 Project Air phase 2 from the locked plan, on top of the week-1 store in [WEEK1.md](./WEEK1.md) and the phase-1 ingest in [WEEK2.md](./WEEK2.md). Both reads use `forecast_issued` only. Official AirNow rows are not an input. There is no new migration, no paid service, and no scheduler.
 
-`ios/`, `design/`, `src/routes/`, and `src/components/` are untouched. Inversion, smoke, and ozone alert rules are the next slice.
+`ios/`, `design/`, `src/routes/`, and `src/components/` are untouched. Inversion, smoke, and ozone alert rules are in [ALERTS.md](./ALERTS.md).
 
 ## Best window
 
