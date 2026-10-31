@@ -1,0 +1,14 @@
+{
+  "placeId": "place_boise",
+  "asOf": "2026-10-31T15:00:00.000Z",
+  "through": "2026-11-02T15:00:00.000Z",
+  "bestWindow": {
+    "start": "2026-10-31T15:00:00.000Z",
+    "end": "2026-11-01T03:00:00.000Z",
+    "peakCorrectedAqi": 50,
+    "band": "good",
+    "sources": [
+      "noaa_smoke"
+    ]
+  }
+}

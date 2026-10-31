@@ -90,6 +90,9 @@ private actor FlakyProvider: AirDataProvider {
         if failing { throw AirDataError.unavailable }
         return []
     }
+
+    func bestWindow(for place: Place) async throws -> BestWindowResponse { throw AirDataError.unavailable }
+    func outlook(for place: Place) async throws -> OutlookResponse { throw AirDataError.unavailable }
 }
 
 /// Answers the home screen, and fails the forecast until `recover()`.
@@ -106,6 +109,9 @@ private actor TimelineFailsOnceProvider: AirDataProvider {
         if failing { throw AirDataError.unavailable }
         return try Fixture.rows()
     }
+
+    func bestWindow(for place: Place) async throws -> BestWindowResponse { throw AirDataError.unavailable }
+    func outlook(for place: Place) async throws -> OutlookResponse { throw AirDataError.unavailable }
 }
 
 @MainActor

@@ -180,7 +180,10 @@ private struct CurrentAir: View {
             TimelineSection(model: model, place: snapshot.place, soft: soft)
                 .padding(.top, 18)
 
-            BestWindowLine(window: snapshot.bestWindow, place: snapshot.place, soft: soft)
+            BestWindowLine(model: model, soft: soft)
+                .padding(.top, 18)
+
+            OutlookSection(model: model, soft: soft)
                 .padding(.top, 18)
 
             Spacer(minLength: 16)
@@ -243,38 +246,6 @@ private struct SpectrumBar: View {
         }
         .frame(height: 22)
         .accessibilityHidden(true)
-    }
-}
-
-/// Phase 0 placeholder. The best-window logic lands in Phase 2 (v1-plan.md).
-private struct BestWindowLine: View {
-    let window: BestWindow?
-    let place: Place
-    let soft: RGB
-    @ScaledMetric(relativeTo: .subheadline) private var body15: CGFloat = 15
-    @ScaledMetric(relativeTo: .footnote) private var small13: CGFloat = 13
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text("Best time outside")
-                .font(AppFont.sans(small13, weight: 650))
-                .foregroundStyle(soft.color)
-            if let window {
-                Text(span(window))
-                    .font(AppFont.sans(body15, weight: 650))
-            } else {
-                Text("Not ready yet")
-                    .font(AppFont.sans(body15, weight: 560))
-                    .foregroundStyle(soft.color)
-            }
-        }
-        .accessibilityElement(children: .combine)
-    }
-
-    private func span(_ window: BestWindow) -> String {
-        var style = Date.FormatStyle(date: .omitted, time: .shortened)
-        style.timeZone = place.timeZone
-        return "\(window.start.formatted(style)) to \(window.end.formatted(style))"
     }
 }
 

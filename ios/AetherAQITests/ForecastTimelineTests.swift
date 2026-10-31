@@ -5,11 +5,16 @@ import Testing
 /// The recorded 12Z cycle: from the app bundle when the tests run in the app, else from the source tree.
 enum Fixture {
     static func data() throws -> Data {
-        if let data = try? FixtureForecastProvider.bundledData() { return data }
+        try data(named: FixtureForecastProvider.bundledName)
+    }
+
+    /// Any file in Resources/Fixtures, by name without `.json`.
+    static func data(named name: String) throws -> Data {
+        if let data = try? BundledFixture.data(named: name) { return data }
         let url = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
-            .appendingPathComponent("AetherAQI/Resources/Fixtures/\(FixtureForecastProvider.bundledName).json")
+            .appendingPathComponent("AetherAQI/Resources/Fixtures/\(name).json")
         return try Data(contentsOf: url)
     }
 

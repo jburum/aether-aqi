@@ -1,0 +1,38 @@
+{
+  "placeId": "place_boise",
+  "timeZone": "America/Boise",
+  "asOf": "2026-11-04T15:00:00.000Z",
+  "tomorrow": {
+    "date": "2026-11-05",
+    "weekday": "thursday",
+    "summary": {
+      "worstCorrectedAqi": 75,
+      "typicalCorrectedAqi": 40,
+      "band": "moderate",
+      "confidence": "valley",
+      "spatialScale": "valley",
+      "horizon": "day_1_2_valley",
+      "label": "valley"
+    }
+  },
+  "weekend": {
+    "saturday": {
+      "date": "2026-11-07",
+      "weekday": "saturday",
+      "summary": {
+        "worstCorrectedAqi": 136,
+        "typicalCorrectedAqi": 103,
+        "band": "usg",
+        "confidence": "low",
+        "spatialScale": "regional",
+        "horizon": "day_3_7_regional_low_confidence",
+        "label": "regional and low-confidence"
+      }
+    },
+    "sunday": {
+      "date": "2026-11-08",
+      "weekday": "sunday",
+      "summary": "no data"
+    }
+  }
+}

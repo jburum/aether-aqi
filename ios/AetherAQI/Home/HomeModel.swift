@@ -31,8 +31,17 @@ final class HomeModel {
         case missing(ForecastTimeline.Slot, isNow: Bool)
     }
 
+    /// A part of the screen that loads on its own: the best window, the outlook.
+    enum PartState<Value: Equatable>: Equatable {
+        case loading
+        case loaded(Value)
+        case failed
+    }
+
     private(set) var state: State = .loading
     private(set) var timelineState: TimelineState = .loading
+    private(set) var bestWindowState: PartState<BestWindowDisplay> = .loading
+    private(set) var outlookState: PartState<OutlookDisplay> = .loading
     /// The lead hour (0–48 from the cycle's issue time) the timeline is on.
     private(set) var selectedLead: Int = 0
     /// True while a finger is on the timeline. The field color holds still until release (design/round2.html).
@@ -83,7 +92,7 @@ final class HomeModel {
             if let snapshot = try await provider.homeSnapshot() {
                 state = .loaded(snapshot)
                 settleLevel()
-                await loadTimeline(for: snapshot.place)
+                await loadSections(for: snapshot.place)
             } else {
                 state = .empty
                 timelineState = .empty
@@ -105,6 +114,58 @@ final class HomeModel {
         settleLevel()
         await loadTimeline(for: snapshot.place)
         settleLevel()
+    }
+
+    /// Retries the best window and the outlook; the rest of the screen stays up. Each still publishes
+    /// as soon as its own answer arrives.
+    func reloadWindowAndOutlook() async {
+        guard case .loaded(let snapshot) = state else { return }
+        let place = snapshot.place
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask { await self.loadBestWindow(for: place) }
+            group.addTask { await self.loadOutlook(for: place) }
+        }
+    }
+
+    /// The timeline, the best window and the outlook start together, and each publishes the moment its
+    /// own request finishes. A stalled or failed one never holds back the others (Dex, PR 14 at 05abf90).
+    private func loadSections(for place: Place) async {
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask {
+                await self.loadTimeline(for: place)
+                await self.settleLevel()
+            }
+            group.addTask { await self.loadBestWindow(for: place) }
+            group.addTask { await self.loadOutlook(for: place) }
+        }
+    }
+
+    private func loadBestWindow(for place: Place) async {
+        bestWindowState = .loading
+        let provider = provider
+        switch await Self.attempt({ try await provider.bestWindow(for: place) }) {
+        case .success(let response): bestWindowState = .loaded(BestWindowDisplay(response, place: place))
+        case .failure(let error) where error is CancellationError: break
+        case .failure: bestWindowState = .failed
+        }
+    }
+
+    private func loadOutlook(for place: Place) async {
+        outlookState = .loading
+        let provider = provider
+        switch await Self.attempt({ try await provider.outlook(for: place) }) {
+        case .success(let response): outlookState = .loaded(OutlookDisplay(response, fallbackZone: place.timeZone))
+        case .failure(let error) where error is CancellationError: break
+        case .failure: outlookState = .failed
+        }
+    }
+
+    private nonisolated static func attempt<T: Sendable>(_ body: @Sendable () async throws -> T) async -> Result<T, Error> {
+        do {
+            return .success(try await body())
+        } catch {
+            return .failure(error)
+        }
     }
 
     private func loadTimeline(for place: Place) async {
