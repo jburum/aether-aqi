@@ -233,7 +233,7 @@ struct StallingProvider: AirDataProvider {
         if stalled.contains(section) { try await Task.sleep(for: .seconds(60 * 60)) }
     }
 
-    func homeSnapshot() async throws -> HomeSnapshot? { try await base.homeSnapshot() }
+    func homeSnapshot(for place: Place) async throws -> HomeSnapshot? { try await base.homeSnapshot(for: place) }
     func hourlyForecast(for place: Place) async throws -> [ForecastHour] {
         try await stall(.timeline)
         return try await base.hourlyForecast(for: place)

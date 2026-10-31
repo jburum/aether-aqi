@@ -1,0 +1,23 @@
+[
+  { "name": "Boise", "region": "Idaho", "latitude": 43.615, "longitude": -116.202, "valley": "Treasure Valley", "timeZone": "America/Boise" },
+  { "name": "Meridian", "region": "Idaho", "latitude": 43.612, "longitude": -116.391, "valley": "Treasure Valley", "timeZone": "America/Boise" },
+  { "name": "Nampa", "region": "Idaho", "latitude": 43.540, "longitude": -116.563, "valley": "Treasure Valley", "timeZone": "America/Boise" },
+  { "name": "Caldwell", "region": "Idaho", "latitude": 43.663, "longitude": -116.687, "valley": "Treasure Valley", "timeZone": "America/Boise" },
+  { "name": "Eagle", "region": "Idaho", "latitude": 43.696, "longitude": -116.354, "valley": "Treasure Valley", "timeZone": "America/Boise" },
+  { "name": "McCall", "region": "Idaho", "latitude": 44.911, "longitude": -116.099, "valley": "Long Valley", "timeZone": "America/Boise" },
+  { "name": "Donnelly", "region": "Idaho", "latitude": 44.733, "longitude": -116.078, "valley": "Long Valley", "timeZone": "America/Boise" },
+  { "name": "Tamarack", "region": "Idaho", "latitude": 44.671, "longitude": -116.117, "valley": "Long Valley", "timeZone": "America/Boise" },
+  { "name": "Cascade", "region": "Idaho", "latitude": 44.516, "longitude": -116.042, "valley": "Long Valley", "timeZone": "America/Boise" },
+  { "name": "Idaho City", "region": "Idaho", "latitude": 43.829, "longitude": -115.834, "valley": null, "timeZone": "America/Boise" },
+  { "name": "Ketchum", "region": "Idaho", "latitude": 43.681, "longitude": -114.364, "valley": "Wood River Valley", "timeZone": "America/Boise" },
+  { "name": "Hailey", "region": "Idaho", "latitude": 43.520, "longitude": -114.315, "valley": "Wood River Valley", "timeZone": "America/Boise" },
+  { "name": "Stanley", "region": "Idaho", "latitude": 44.216, "longitude": -114.938, "valley": "Sawtooth Valley", "timeZone": "America/Boise" },
+  { "name": "Twin Falls", "region": "Idaho", "latitude": 42.563, "longitude": -114.461, "valley": "Magic Valley", "timeZone": "America/Boise" },
+  { "name": "Pocatello", "region": "Idaho", "latitude": 42.871, "longitude": -112.445, "valley": "Portneuf Valley", "timeZone": "America/Boise" },
+  { "name": "Idaho Falls", "region": "Idaho", "latitude": 43.492, "longitude": -112.034, "valley": "Upper Snake River Valley", "timeZone": "America/Boise" },
+  { "name": "Salmon", "region": "Idaho", "latitude": 45.176, "longitude": -113.896, "valley": "Lemhi Valley", "timeZone": "America/Boise" },
+  { "name": "Lewiston", "region": "Idaho", "latitude": 46.417, "longitude": -117.017, "valley": "Lewis-Clark Valley", "timeZone": "America/Los_Angeles" },
+  { "name": "Moscow", "region": "Idaho", "latitude": 46.732, "longitude": -117.000, "valley": null, "timeZone": "America/Los_Angeles" },
+  { "name": "Coeur d'Alene", "region": "Idaho", "latitude": 47.677, "longitude": -116.780, "valley": null, "timeZone": "America/Los_Angeles" },
+  { "name": "Sandpoint", "region": "Idaho", "latitude": 48.277, "longitude": -116.553, "valley": null, "timeZone": "America/Los_Angeles" }
+]
