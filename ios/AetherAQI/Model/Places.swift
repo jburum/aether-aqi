@@ -179,7 +179,8 @@ final class PlacesModel {
     private(set) var problem: PlaceProblem?
 
     let candidates: [PlaceCandidate]
-    let isPro: Bool
+    /// Follows the person's plan (ProModel): buying Pro on the paywall opens more places at once.
+    var isPro: Bool
     private let provider: any SavedPlacesProvider
     private let defaults: UserDefaults
     private let now: @Sendable () -> Date

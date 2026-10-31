@@ -5,7 +5,7 @@ has:
 
 - **Phase 1:** the home screen for the active saved place, with the whole-screen color shift and the 48-hour drag timeline.
 - **Phase 2:** the best window, the Tomorrow and weekend outlook, alerts and alert settings.
-- **Phase 3:** saved places (up to 5).
+- **Phase 3:** saved places (up to 5) and the Pro paywall.
 - **Every part:** loading, empty and error states.
 
 All data is sample or recorded fixture data. There is no network code, no API key and no signing set up.
@@ -169,9 +169,57 @@ Limits:
 |---|---|
 | Cap | 5 places, the same as the server (`MAX_SAVED_PLACES`, `place_cap`). At 5, "Add a place" is disabled and the list says why: "You have 5 places, the most you can save. Delete one to add another." The store refuses a sixth on its own too. |
 | Free | One place. Adding a second shows "Free includes one place. More places are part of Pro." On Free only the first place can be active, so places saved under Pro stay listed and marked Pro. |
-| Pro | A local stub only: launch with `-AQIProStub YES`. No StoreKit, paywall or entitlement. |
+| Pro | Adding a second place on Free opens the paywall (see Pro below). `-AQIProStub YES` starts the sample store as Pro. |
 
 Deleting the active place makes the first remaining place active. Deleting the last one leaves the home screen on "No place yet", with an "Add a place" button.
+
+## Pro and the paywall
+
+Pro is $1.99 a month or $12.99 a year (v1-plan.md). It adds:
+
+- smoke, inversion and ozone alerts
+- up to 5 saved places
+- the alert share card (listed on the paywall; the card itself isn't built yet)
+
+**Where the paywall opens:**
+
+- **Turning on an alert.** Any switch in Alert settings, on Free, opens it with "Alerts are part of Pro". The switch stays off.
+- **Adding a second place.** On Free, the Places list shows "Add a place with Pro".
+- **Turning things off.** Always works.
+- **After Pro lapses.** A switch turned on under Pro reads off.
+
+**What the paywall shows:**
+
+- Free and Pro side by side.
+- Monthly and yearly plans, with prices from the store and the yearly saving worked out from them (45%).
+- Subscribe and Restore purchases.
+- The renewal terms.
+- Terms of Use and Privacy Policy links. These are placeholder `example.com` addresses until the App Store listing exists.
+
+**How purchases work:**
+
+- **Behind one protocol.** Purchases go through `PurchaseProvider`.
+- **The App Store.** `StoreKitPurchaseProvider` (StoreKit 2) counts only verified transactions, finishes them, and restores with `AppStore.sync()`.
+- **Tests and default runs.** `FixturePurchaseProvider` gives the two plans and lets a test pick buy, cancel, pending or fail.
+- **Choosing StoreKit.** Launch with `-AQIStore storekit` to use StoreKit.
+
+**Entitlement:**
+
+- **Where it comes from.** Reads are shaped after the coming entitlement route: `tier` (`free` or `pro`), `expires_at` and `revoked`. Both `expires_at` and `expiresAt` are accepted until the route lands.
+- **When it counts as Pro.** Only when the tier is `pro`, it isn't revoked and it hasn't expired.
+
+**Placeholders and limits:**
+
+- **Product IDs.** `com.example.aetheraqi.pro.monthly` and `com.example.aetheraqi.pro.yearly` are placeholders, like the bundle ID.
+- **Not changed.** There is no App Store Connect setup, no entitlements or capabilities file, and no In-App Purchase capability change.
+
+To try StoreKit purchases in the simulator:
+
+1. Open Edit Scheme > Run > Options.
+2. Set StoreKit Configuration to `ios/AetherAQI.storekit`. It is a local test file with both plans.
+3. Launch with `-AQIStore storekit`.
+
+The file is not attached to the shared scheme, because that path could not be checked without Xcode.
 
 ## Layout
 

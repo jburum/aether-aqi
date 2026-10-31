@@ -6,6 +6,8 @@ import SwiftUI
 struct AlertsSection: View {
     let model: HomeModel
     let settings: AlertSettings
+    /// The person's plan. Nil (still renders, tests) leaves the switches ungated.
+    var pro: ProModel? = nil
     let soft: RGB
     @State private var showingSettings = false
     @ScaledMetric(relativeTo: .footnote) private var small13: CGFloat = 13
@@ -27,7 +29,7 @@ struct AlertsSection: View {
             content
         }
         .sheet(isPresented: $showingSettings) {
-            AlertSettingsView(settings: settings) { showingSettings = false }
+            AlertSettingsView(settings: settings, pro: pro) { showingSettings = false }
         }
     }
 
@@ -150,14 +152,22 @@ private struct AlertRow: View {
 /// no notification permission prompt, no push, no network.
 struct AlertSettingsView: View {
     let settings: AlertSettings
+    /// Alerts are Pro: turning one on without Pro opens the paywall and leaves the switch off.
+    var pro: ProModel? = nil
     let done: () -> Void
+    @State private var showingPaywall = false
+
+    private var isPro: Bool { pro?.isPro ?? true }
 
     var body: some View {
         NavigationStack {
             Form {
                 Section {
                     ForEach(AlertRule.allCases, id: \.self) { rule in
-                        Toggle(isOn: Binding(get: { settings.isOn(rule) }, set: { settings.set(rule, on: $0) })) {
+                        Toggle(isOn: Binding(
+                            get: { settings.shownOn(rule, isPro: isPro) },
+                            set: { if !settings.request(rule, on: $0, isPro: isPro) { showingPaywall = true } }
+                        )) {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(rule.title)
                                 Text(rule.detail)
@@ -167,10 +177,13 @@ struct AlertSettingsView: View {
                         }
                     }
                 } footer: {
-                    Text("Every alert is off until you turn it on. Your choice is saved on this phone only. The app doesn't send notifications yet.")
+                    Text("Every alert is off until you turn it on. Alerts are part of Pro. Your choice is saved on this phone only. The app doesn't send notifications yet.")
                 }
             }
             .navigationTitle("Alert settings")
+            .sheet(isPresented: $showingPaywall) {
+                if let pro { PaywallView(pro: pro, reason: .alerts) { showingPaywall = false } }
+            }
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done", action: done)
