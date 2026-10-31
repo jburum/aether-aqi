@@ -1,4 +1,5 @@
 import { V1RuleError } from "./errors.ts";
+import { parseAsOf, parseTimeZone, readBestWindow, readOutlook } from "./phase2.ts";
 import type { PushSender } from "./push.ts";
 import { parseDeviceToken, requireId } from "./rules.ts";
 import { samplePushPayloads } from "./samples.ts";
@@ -35,8 +36,9 @@ async function readJson(request: Request): Promise<unknown> {
 }
 
 /**
- * Week-1 HTTP surface. The route resolves the user, then calls this.
- * Paths: places, forecasts, observations, push/devices, push/deliver, push/samples.
+ * v1 HTTP surface. The route resolves the user, then calls this.
+ * Paths: places, places/:id/best-window, places/:id/outlook, forecasts,
+ * observations, push/devices, push/deliver, push/samples.
  */
 export async function handleV1(request: Request, deps: V1Deps): Promise<Response> {
   const url = new URL(request.url);
@@ -75,6 +77,29 @@ async function route(request: Request, url: URL, rest: string[], deps: V1Deps): 
       return new Response(null, { status: 204 });
     }
     return json({ error: "method_not_allowed", message: "Method not allowed" }, 405);
+  }
+
+  if (rest[0] === "places" && rest.length === 3) {
+    const placeId = requireId(rest[1], "placeId");
+    if (rest[2] !== "best-window" && rest[2] !== "outlook") {
+      return json({ error: "not_found", message: "Unknown route" }, 404);
+    }
+    if (method !== "GET") {
+      return json({ error: "method_not_allowed", message: "Method not allowed" }, 405);
+    }
+    const asOf = parseAsOf(url.searchParams.get("asOf"));
+    if (rest[2] === "best-window") {
+      return json(await readBestWindow(deps.sql, deps.userId, placeId, asOf));
+    }
+    return json(
+      await readOutlook(
+        deps.sql,
+        deps.userId,
+        placeId,
+        asOf,
+        parseTimeZone(url.searchParams.get("timeZone")),
+      ),
+    );
   }
 
   if (rest[0] === "forecasts" && rest.length === 1) {
