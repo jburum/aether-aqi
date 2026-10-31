@@ -1,0 +1,19 @@
+{
+  "placeId": "place_boise",
+  "asOf": "2026-07-08T15:00:00.000Z",
+  "timeZone": "America/Boise",
+  "through": "2026-07-15T15:00:00.000Z",
+  "alerts": [
+    {
+      "kind": "ozone",
+      "fired": true,
+      "status": "upcoming",
+      "start": "2026-07-11T19:00:00.000Z",
+      "end": "2026-07-12T01:00:00.000Z",
+      "severity": "heads_up",
+      "source": "noaa_aqf",
+      "confidence": "low",
+      "reason": "Heads up only: NOAA's air quality forecast has ozone corrected AQI 118 on days 3-7, low confidence, across 6 hours."
+    }
+  ]
+}

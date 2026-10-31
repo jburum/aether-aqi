@@ -14,6 +14,9 @@ protocol AirDataProvider: Sendable {
 
     /// GET /api/v1/places/:id/outlook?timeZone=: tomorrow and this weekend in the place's zone.
     func outlook(for place: Place) async throws -> OutlookResponse
+
+    /// GET /api/v1/places/:id/alerts?timeZone=: smoke, inversion and ozone alerts, active or upcoming.
+    func alerts(for place: Place) async throws -> AlertsResponse
 }
 
 /// A recorded response from the bundle. `name` is the file name without `.json`.
@@ -103,6 +106,37 @@ enum SampleOutlook: String, CaseIterable, Sendable {
     }
 }
 
+/// The alerts the sample provider returns. Pick one at launch with `-AQIAlerts <name>`. The responses
+/// were built with the back end's own smokeRule, inversionRule and ozoneRule (keel/aqi-p2-alert-rules).
+enum SampleAlerts: String, CaseIterable, Sendable {
+    /// Saturday 31 Oct: smoke active, high.
+    case smoke
+    /// 2 Dec: smoke active (elevated), then a valley inversion tonight (upcoming).
+    case winter
+    /// 8 Jul: ozone on days 3–7, a low-confidence heads up.
+    case ozone
+    /// Nothing active or upcoming.
+    case empty
+    case error
+    case loading
+
+    static let launchKey = "AQIAlerts"
+
+    static func fromLaunchArguments(_ defaults: UserDefaults = .standard) -> SampleAlerts {
+        defaults.string(forKey: launchKey).flatMap(SampleAlerts.init(rawValue:)) ?? .smoke
+    }
+
+    var fixture: String? {
+        switch self {
+        case .smoke: "boise-alerts-smoke-active"
+        case .winter: "boise-alerts-inversion-upcoming"
+        case .ozone: "boise-alerts-ozone-heads-up"
+        case .empty: "boise-alerts-empty"
+        case .error, .loading: nil
+        }
+    }
+}
+
 /// Fixed sample data for Boise, Idaho. Our corrected number and the AirNow reading differ on purpose,
 /// so a screen that mixes them up is easy to spot.
 struct SampleAirProvider: AirDataProvider {
@@ -115,6 +149,7 @@ struct SampleAirProvider: AirDataProvider {
     var outlookScenario: SampleOutlook = .weekend
     /// Recorded best-window and outlook responses by fixture name. Tests and renders read the files directly.
     var responseData: @Sendable (String) throws -> Data = { try BundledFixture.data(named: $0) }
+    var alertsScenario: SampleAlerts = .smoke
 
     /// The sample clock: 15:00Z, three hours into the fixture's 12Z NOAA cycle.
     static let issuedAt = Date(timeIntervalSince1970: 1_793_458_800) // 2026-10-31T15:00:00Z
@@ -163,6 +198,13 @@ struct SampleAirProvider: AirDataProvider {
         try await phase2Wait()
         let name = outlookScenario == .weekday ? "boise-outlook-weekday" : "boise-outlook-weekend"
         return try StoreJSON.decoder().decode(OutlookResponse.self, from: responseData(name))
+    }
+
+    func alerts(for place: Place) async throws -> AlertsResponse {
+        if alertsScenario == .loading { try await Task.sleep(for: .seconds(60 * 60 * 24)) }
+        if delay > .zero { try await Task.sleep(for: delay * 2) }
+        guard let name = alertsScenario.fixture else { throw AirDataError.unavailable }
+        return try StoreJSON.decoder().decode(AlertsResponse.self, from: responseData(name))
     }
 
     private func phase2Wait() async throws {

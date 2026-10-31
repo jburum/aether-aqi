@@ -1,0 +1,30 @@
+{
+  "placeId": "place_boise",
+  "asOf": "2026-12-02T15:00:00.000Z",
+  "timeZone": "America/Boise",
+  "through": "2026-12-09T15:00:00.000Z",
+  "alerts": [
+    {
+      "kind": "smoke",
+      "fired": true,
+      "status": "active",
+      "start": "2026-12-02T13:00:00.000Z",
+      "end": "2026-12-02T19:00:00.000Z",
+      "severity": "elevated",
+      "source": "noaa_smoke",
+      "confidence": "valley",
+      "reason": "Smoke alert from the NOAA smoke model: corrected AQI peaks at 120, valley confidence, across 6 hours."
+    },
+    {
+      "kind": "inversion",
+      "fired": true,
+      "status": "upcoming",
+      "start": "2026-12-03T00:00:00.000Z",
+      "end": "2026-12-03T08:00:00.000Z",
+      "severity": "elevated",
+      "source": "noaa_hrrr",
+      "confidence": "valley",
+      "reason": "Winter inversion across 8 hours: 80 m is 2.4 K warmer than 2 m, wind is 1.1 m/s, and PM2.5 corrected AQI peaks at 143."
+    }
+  ]
+}

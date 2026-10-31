@@ -4,6 +4,8 @@ import SwiftUI
 /// and error use the neutral dark field, so no color ever stands for a number that is not shown.
 struct HomeScreen: View {
     @State var model: HomeModel
+    /// Which alerts the person turned on, kept on this phone.
+    @State var alertSettings = AlertSettings()
     /// False only where the caller has already loaded the model (still renders of a fixed state).
     var loadsOnAppear = true
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -42,7 +44,7 @@ struct HomeScreen: View {
         case .loading:
             LoadingState()
         case .loaded(let snapshot):
-            CurrentAir(model: model, snapshot: snapshot)
+            CurrentAir(model: model, snapshot: snapshot, alertSettings: alertSettings)
         case .empty:
             EmptyState()
         case .failed:
@@ -104,6 +106,7 @@ struct HeroDisplay: Equatable {
 private struct CurrentAir: View {
     let model: HomeModel
     let snapshot: HomeSnapshot
+    let alertSettings: AlertSettings
     @ScaledMetric(relativeTo: .subheadline) private var body15: CGFloat = 15
     @ScaledMetric(relativeTo: .footnote) private var small13: CGFloat = 13
     @ScaledMetric(relativeTo: .largeTitle) private var hero: CGFloat = 120
@@ -176,6 +179,9 @@ private struct CurrentAir: View {
 
             SpectrumBar(aqi: display.aqi)
                 .padding(.top, 12)
+
+            AlertsSection(model: model, settings: alertSettings, soft: soft)
+                .padding(.top, 18)
 
             TimelineSection(model: model, place: snapshot.place, soft: soft)
                 .padding(.top, 18)
