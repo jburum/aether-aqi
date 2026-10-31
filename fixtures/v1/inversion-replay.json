@@ -1,6 +1,6 @@
 {
   "timeZone": "America/Boise",
-  "note": "Treasure Valley winter samples for the replay gate. Checked-in hours, not a live NOAA pull and not a certified AirNow archive.",
+  "note": "Treasure Valley winter samples for the replay gate. Checked-in hours, not a live NOAA pull and not a certified AirNow archive. Mixing height and wind sit on either side of the documented thresholds.",
   "days": [
     {
       "name": "stagnant inverted morning",
@@ -11,7 +11,7 @@
       "firstValidFor": "2026-01-15T16:00:00.000Z",
       "hours": 8,
       "tmp2mK": 270,
-      "tmp80mK": 273,
+      "hpblM": 180,
       "wind10mMs": 1.2,
       "correctedAqi": 142
     },
@@ -24,7 +24,7 @@
       "firstValidFor": "2026-01-19T17:00:00.000Z",
       "hours": 6,
       "tmp2mK": 268,
-      "tmp80mK": 272,
+      "hpblM": 90,
       "wind10mMs": 0.8,
       "correctedAqi": 176
     },
@@ -36,7 +36,7 @@
       "firstValidFor": "2026-01-18T16:00:00.000Z",
       "hours": 8,
       "tmp2mK": 272,
-      "tmp80mK": 270,
+      "hpblM": 220,
       "wind10mMs": 6.5,
       "correctedAqi": 136
     },
@@ -48,9 +48,33 @@
       "firstValidFor": "2026-02-02T12:00:00.000Z",
       "hours": 8,
       "tmp2mK": 265,
-      "tmp80mK": 268,
+      "hpblM": 110,
       "wind10mMs": 0.9,
       "correctedAqi": 44
+    },
+    {
+      "name": "well-mixed dirty afternoon",
+      "expect": "quiet",
+      "asOf": "2026-01-17T20:00:00.000Z",
+      "issuedAt": "2026-01-17T12:00:00.000Z",
+      "firstValidFor": "2026-01-17T18:00:00.000Z",
+      "hours": 8,
+      "tmp2mK": 274,
+      "hpblM": 1600,
+      "wind10mMs": 1.4,
+      "correctedAqi": 140
+    },
+    {
+      "name": "summer shallow mix",
+      "expect": "quiet",
+      "asOf": "2026-07-15T18:00:00.000Z",
+      "issuedAt": "2026-07-15T12:00:00.000Z",
+      "firstValidFor": "2026-07-15T16:00:00.000Z",
+      "hours": 6,
+      "tmp2mK": 300,
+      "hpblM": 80,
+      "wind10mMs": 0.7,
+      "correctedAqi": 160
     },
     {
       "name": "two hour spike",
@@ -60,7 +84,7 @@
       "firstValidFor": "2026-01-20T16:00:00.000Z",
       "hours": 2,
       "tmp2mK": 269,
-      "tmp80mK": 272,
+      "hpblM": 150,
       "wind10mMs": 1.1,
       "correctedAqi": 155
     }
@@ -70,16 +94,16 @@
     "issuedAt": "2026-01-16T12:00:00.000Z",
     "firstValidFor": "2026-01-16T16:00:00.000Z",
     "hours": 10,
-    "on": { "tmp2mK": 270, "tmp80mK": 273, "wind10mMs": 1, "correctedAqi": 150 },
-    "off": { "tmp2mK": 274, "tmp80mK": 272, "wind10mMs": 6, "correctedAqi": 40 }
+    "on": { "tmp2mK": 270, "hpblM": 160, "wind10mMs": 1, "correctedAqi": 150 },
+    "off": { "tmp2mK": 274, "hpblM": 1500, "wind10mMs": 6, "correctedAqi": 40 }
   },
   "hold": {
     "name": "one clean hour inside a long inversion",
     "issuedAt": "2026-01-21T12:00:00.000Z",
     "firstValidFor": "2026-01-21T16:00:00.000Z",
     "dipIndex": 4,
-    "on": { "tmp2mK": 270, "tmp80mK": 273, "wind10mMs": 1.1, "correctedAqi": 148 },
-    "off": { "tmp2mK": 274, "tmp80mK": 272, "wind10mMs": 7, "correctedAqi": 42 },
+    "on": { "tmp2mK": 270, "hpblM": 170, "wind10mMs": 1.1, "correctedAqi": 148 },
+    "off": { "tmp2mK": 274, "hpblM": 1400, "wind10mMs": 7, "correctedAqi": 42 },
     "pattern": ["on", "on", "on", "on", "off", "on", "on", "on"]
   }
 }

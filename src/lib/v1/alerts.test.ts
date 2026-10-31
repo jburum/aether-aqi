@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { PGlite } from "@electric-sql/pglite";
 
 import {
+  INVERSION_HPBL_M,
   inversionRule,
   ozoneRule,
   readAlerts,
@@ -20,7 +21,8 @@ import {
 } from "./alerts.ts";
 import { V1RuleError } from "./errors.ts";
 import { handleV1 } from "./http.ts";
-import { hrrrStabilityAsciiUrls, stabilitySamplesFromExtracts } from "./noaa.ts";
+import { ingestRecordedStability } from "./ingest.ts";
+import { fetchNoaaGrib, hrrrStabilityFilterUrls, stabilitySampleFromGrib } from "./noaa.ts";
 import { TestPushSender } from "./push.ts";
 import { AIRNOW_ATTRIBUTION } from "./rules.ts";
 import { addSavedPlace, issueForecast, recordOfficial } from "./store.ts";
@@ -39,14 +41,14 @@ interface SteadyDay {
   firstValidFor: string;
   hours: number;
   tmp2mK: number;
-  tmp80mK: number;
+  hpblM: number;
   wind10mMs: number;
   correctedAqi: number;
 }
 
 interface Met {
   tmp2mK: number;
-  tmp80mK: number;
+  hpblM: number;
   wind10mMs: number;
   correctedAqi: number;
 }
@@ -73,15 +75,14 @@ const replay = JSON.parse(
   };
 };
 
-const stabilityFixture = JSON.parse(
-  readFileSync(join(root, "fixtures/v1/noaa-hrrr-stability.json"), "utf8"),
-) as {
-  issuedAt: string;
-  tmp2m: string;
-  tmp80m: string;
-  ugrd10m: string;
-  vgrd10m: string;
-};
+const stabilityIssuedAt = "2026-10-30T12:00:00.000Z";
+const stabilityF00 = new Uint8Array(
+  readFileSync(join(root, "fixtures/v1/noaa-hrrr-stability-f00.grib2")),
+);
+const stabilityF06 = new Uint8Array(
+  readFileSync(join(root, "fixtures/v1/noaa-hrrr-stability-f06.grib2")),
+);
+const boiseBox = { south: 43.59, north: 43.63, west: -116.22, east: -116.18 };
 
 function at(start: string, index: number): string {
   return new Date(Date.parse(start) + index * HOUR_MS).toISOString();
@@ -124,7 +125,7 @@ function steady(day: SteadyDay): { hours: AlertForecastHour[]; stability: Stabil
       issuedAt: day.issuedAt,
       validFor,
       tmp2mK: day.tmp2mK,
-      tmp80mK: day.tmp80mK,
+      hpblM: day.hpblM,
       wind10mMs: day.wind10mMs,
     });
   }
@@ -148,7 +149,7 @@ function patternSeries(
       issuedAt,
       validFor,
       tmp2mK: met.tmp2mK,
-      tmp80mK: met.tmp80mK,
+      hpblM: met.hpblM,
       wind10mMs: met.wind10mMs,
     });
   });
@@ -411,63 +412,151 @@ describe("v1 alert rules", () => {
     assert.equal(loneSpike.fired, false);
   });
 
-  it("holds the inversion threshold at 1 K and 2 m/s", () => {
+  it("holds the inversion threshold at 400 m and 2 m/s", () => {
     const issuedAt = "2026-01-15T12:00:00.000Z";
     const first = "2026-01-15T16:00:00.000Z";
-    const run = (tmp80mK: number, wind10mMs: number, correctedAqi: number) => {
+    const run = (hpblM: number, wind10mMs: number, correctedAqi: number) => {
       const hours: AlertForecastHour[] = [];
       const stability: StabilitySample[] = [];
       for (let i = 0; i < 3; i += 1) {
         const validFor = at(first, i);
         hours.push(pmHour(issuedAt, validFor, correctedAqi));
-        stability.push({ issuedAt, validFor, tmp2mK: 270, tmp80mK, wind10mMs });
+        stability.push({ issuedAt, validFor, tmp2mK: 270, hpblM, wind10mMs });
       }
       return inversionRule({ hours, stability, asOf: first, timeZone: ZONE });
     };
-    assert.equal(run(271, 2, 101).fired, true);
-    assert.equal(run(270.9, 2, 101).fired, false);
-    assert.equal(run(271, 2.1, 101).fired, false);
-    assert.equal(run(271, 2, 100).fired, false);
+    assert.equal(run(INVERSION_HPBL_M, 2, 101).fired, true);
+    assert.equal(run(INVERSION_HPBL_M + 1, 2, 101).fired, false);
+    assert.equal(run(INVERSION_HPBL_M, 2.1, 101).fired, false);
+    assert.equal(run(INVERSION_HPBL_M, 2, 100).fired, false);
   });
 
-  it("parses HRRR stability ASCII and builds keyless URLs", () => {
-    const samples = stabilitySamplesFromExtracts(stabilityFixture);
-    assert.deepEqual(
-      samples.map((sample) => sample.validFor),
-      ["2026-01-15T12:00:00.000Z", "2026-01-17T12:00:00.000Z"],
-    );
-    assert.equal(samples[0]?.tmp2mK, 270.15);
-    assert.equal(samples[0]?.tmp80mK, 273.4);
-    assert.equal(samples[0]?.wind10mMs, 1);
-    assert.equal(samples[1]?.wind10mMs, 0.5);
+  it("reads a HRRR filter extract and builds keyless URLs", async () => {
+    const sample = stabilitySampleFromGrib(stabilityF00, stabilityIssuedAt);
+    assert.equal(sample.issuedAt, stabilityIssuedAt);
+    assert.equal(sample.validFor, stabilityIssuedAt);
+    assert.ok(Math.abs(sample.tmp2mK - 277.9340515136719) < 1e-6);
+    assert.ok(Math.abs(sample.hpblM - 44.11328887939453) < 1e-6);
+    assert.ok(Math.abs(sample.wind10mMs - 0.815236) < 1e-4);
+    assert.ok(sample.tmp2mK > 277);
 
-    const urls = hrrrStabilityAsciiUrls({
-      cycleUtc: "2026-01-15T12:00:00.000Z",
-      latIndex: 10,
-      lonIndex: 20,
-      hourStart: 0,
-      hourEnd: 48,
+    const later = stabilitySampleFromGrib(stabilityF06, stabilityIssuedAt);
+    assert.equal(later.validFor, "2026-10-30T18:00:00.000Z");
+    assert.ok(later.hpblM >= 0 && later.hpblM <= 20_000);
+    assert.ok(later.wind10mMs >= 0);
+
+    const copied = (validFor: string): StabilitySample => ({
+      issuedAt: stabilityIssuedAt,
+      validFor,
+      tmp2mK: sample.tmp2mK,
+      hpblM: sample.hpblM,
+      wind10mMs: sample.wind10mMs,
     });
-    assert.match(urls.tmp2m, /^https:\/\/nomads\.ncep\.noaa\.gov\/dods\/hrrr\/hrrr20260115\//);
-    assert.match(urls.tmp2m, /tmp2m\[0:48\]\[10:10\]\[20:20\]$/);
-    assert.match(urls.tmp80m, /tmp80m\[0:48\]/);
-    assert.match(urls.ugrd10m, /ugrd10m\[0:48\]/);
-    assert.match(urls.vgrd10m, /vgrd10m\[0:48\]/);
-    for (const url of Object.values(urls)) {
-      assert.equal(url.includes("API_KEY"), false);
+    const octoberHours = hoursOf(stabilityIssuedAt, stabilityIssuedAt, 3, 160);
+    const october = inversionRule({
+      hours: octoberHours,
+      stability: octoberHours.map((hour) => copied(hour.validFor)),
+      asOf: stabilityIssuedAt,
+      timeZone: ZONE,
+    });
+    assert.equal(october.fired, false);
+
+    const januaryStart = "2026-01-15T16:00:00.000Z";
+    const januaryHours = hoursOf("2026-01-15T12:00:00.000Z", januaryStart, 3, 160);
+    const january = inversionRule({
+      hours: januaryHours,
+      stability: januaryHours.map((hour) => copied(hour.validFor)),
+      asOf: januaryStart,
+      timeZone: ZONE,
+    });
+    assert.equal(january.fired, true);
+    assert.equal(january.severity, "high");
+    assert.match(january.reason, /mixing height is 44 m/);
+
+    const urls = hrrrStabilityFilterUrls({
+      cycleUtc: stabilityIssuedAt,
+      hourStart: 0,
+      hourEnd: 6,
+      ...boiseBox,
+    });
+    assert.equal(urls.length, 7);
+    assert.match(urls[0] ?? "", /\/cgi-bin\/filter_hrrr_2d\.pl\?/);
+    assert.match(urls[0] ?? "", /file=hrrr\.t12z\.wrfsfcf00\.grib2/);
+    assert.match(urls[6] ?? "", /file=hrrr\.t12z\.wrfsfcf06\.grib2/);
+    assert.match(urls[0] ?? "", /var_TMP=on/);
+    assert.match(urls[0] ?? "", /var_UGRD=on/);
+    assert.match(urls[0] ?? "", /var_VGRD=on/);
+    assert.match(urls[0] ?? "", /var_HPBL=on/);
+    assert.match(urls[0] ?? "", /lev_2_m_above_ground=on/);
+    assert.match(urls[0] ?? "", /lev_10_m_above_ground=on/);
+    assert.match(urls[0] ?? "", /lev_surface=on/);
+    assert.equal((urls[0] ?? "").includes("var_WIND"), false);
+    for (const url of urls) {
       assert.equal(url.includes("api_key"), false);
+      assert.equal(url.includes("API_KEY"), false);
     }
     assert.throws(
       () =>
-        hrrrStabilityAsciiUrls({
-          cycleUtc: "2026-01-15T12:00:00.000Z",
-          latIndex: 1,
-          lonIndex: 1,
+        hrrrStabilityFilterUrls({
+          cycleUtc: stabilityIssuedAt,
           hourStart: 0,
           hourEnd: 49,
+          ...boiseBox,
         }),
       (err: unknown) => err instanceof V1RuleError && err.code === "noaa_hour",
     );
+    assert.throws(
+      () =>
+        hrrrStabilityFilterUrls({
+          cycleUtc: stabilityIssuedAt,
+          hourStart: 0,
+          hourEnd: 1,
+          south: 43,
+          north: 44,
+          west: -117,
+          east: -116,
+        }),
+      (err: unknown) => err instanceof V1RuleError && err.code === "noaa_grid",
+    );
+    assert.throws(
+      () => stabilitySampleFromGrib(new TextEncoder().encode("<!doctype html>"), stabilityIssuedAt),
+      (err: unknown) => err instanceof V1RuleError && err.code === "noaa_stability_parse",
+    );
+    assert.throws(
+      () => stabilitySampleFromGrib(stabilityF00, "2026-10-30T18:00:00.000Z"),
+      (err: unknown) => err instanceof V1RuleError && err.code === "noaa_stability_parse",
+    );
+
+    let requested = "";
+    const fetched = await fetchNoaaGrib(urls[0] ?? "", async (url) => {
+      requested = String(url);
+      return new Response(stabilityF00);
+    });
+    assert.equal(requested, urls[0]);
+    assert.equal(stabilitySampleFromGrib(fetched, stabilityIssuedAt).validFor, stabilityIssuedAt);
+    await assert.rejects(
+      () => fetchNoaaGrib("https://api.open-meteo.com/v1/forecast", async () => new Response()),
+      (err: unknown) => err instanceof V1RuleError && err.code === "open_meteo_not_for_launch",
+    );
+  });
+
+  it("stores a recorded HRRR stability extract", async () => {
+    const sql = await openDb();
+    const place = await addSavedPlace(sql, "user-a", {
+      name: "Boise",
+      latitude: 43.615,
+      longitude: -116.2023,
+      valley: "Treasure Valley",
+      alertAt: null,
+    });
+    const stored = await ingestRecordedStability(sql, "user-a", {
+      placeId: place.id,
+      issuedAt: stabilityIssuedAt,
+      grib: stabilityF00,
+    });
+    assert.equal(stored.validFor, stabilityIssuedAt);
+    assert.ok(stored.hpblM < INVERSION_HPBL_M);
+    assert.ok(stored.wind10mMs <= 2);
   });
 });
 
@@ -502,7 +591,7 @@ describe("v1 alert route", () => {
         issuedAt,
         validFor,
         tmp2mK: 270,
-        tmp80mK: 273,
+        hpblM: 180,
         wind10mMs: 1.2,
       });
     }
@@ -526,7 +615,7 @@ describe("v1 alert route", () => {
         issuedAt: windyIssued,
         validFor,
         tmp2mK: 272,
-        tmp80mK: 270,
+        hpblM: 220,
         wind10mMs: 6.5,
       });
     }

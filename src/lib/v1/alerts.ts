@@ -24,8 +24,8 @@ export const ALERT_AQI_HIGH = 151;
 export const ALERT_ON_HOURS = 3;
 /** Consecutive quiet hours required to end one. */
 export const ALERT_OFF_HOURS = 3;
-/** T(80 m) − T(2 m), Kelvin. At or above this the layer is inverted. */
-export const INVERSION_LAPSE_K = 1;
+/** HRRR mixing height at or under this, in meters, counts as a shallow layer. */
+export const INVERSION_HPBL_M = 400;
 /** 10 m wind at or under this, in m/s, counts as stagnant. */
 export const INVERSION_WIND_MS = 2;
 /** Local months. November through February. */
@@ -63,10 +63,10 @@ export interface AlertOfficial {
 export interface StabilitySample {
   issuedAt: string;
   validFor: string;
-  /** Kelvin. HRRR temperature at 2 m. */
+  /** Kelvin. HRRR air temperature at 2 m above ground. */
   tmp2mK: number;
-  /** Kelvin. HRRR temperature at 80 m. */
-  tmp80mK: number;
+  /** Meters. HRRR planetary boundary layer height. */
+  hpblM: number;
   /** m/s. Speed from the 10 m wind components. */
   wind10mMs: number;
 }
@@ -96,7 +96,7 @@ interface Driver {
   aqi: number;
   source: AlertSource;
   airNowCited: boolean;
-  lapseK: number | null;
+  hpblM: number | null;
   wind10mMs: number | null;
 }
 
@@ -113,7 +113,7 @@ interface Episode {
   source: AlertSource;
   channel: "normal" | "heads_up";
   airNowCited: boolean;
-  lapseK: number | null;
+  hpblM: number | null;
   wind10mMs: number | null;
 }
 
@@ -237,7 +237,7 @@ function smokePoints(
       aqi,
       source: forecastOn ? hour.source : "airnow",
       airNowCited: cited,
-      lapseK: null,
+      hpblM: null,
       wind10mMs: null,
     };
     points.push(pointFor(hour.validFor, channelForLead(lead), driver));
@@ -269,7 +269,7 @@ function ozonePoints(
       aqi,
       source: forecastOn ? hour.source : "airnow",
       airNowCited: cited,
-      lapseK: null,
+      hpblM: null,
       wind10mMs: null,
     };
     points.push(pointFor(hour.validFor, channelForLead(lead), driver));
@@ -289,14 +289,14 @@ function inversionPoints(
   const points: HourPoint[] = [];
   for (const sample of latestByValidFor(stability)) {
     const forecast = pm.get(sample.validFor);
-    const lapse = sample.tmp80mK - sample.tmp2mK;
     const winter = WINTER_MONTHS.includes(localMonth(sample.validFor, timeZone));
     const lead = forecast ? classifyForecastLead(forecast.issuedAt, forecast.validFor) : "outside";
+    const shallow = sample.hpblM >= 0 && sample.hpblM <= INVERSION_HPBL_M && sample.wind10mMs >= 0;
     if (
       !forecast ||
       !winter ||
       lead === "outside" ||
-      lapse < INVERSION_LAPSE_K ||
+      !shallow ||
       sample.wind10mMs > INVERSION_WIND_MS ||
       forecast.correctedAqi < ALERT_AQI_ON
     ) {
@@ -307,7 +307,7 @@ function inversionPoints(
       aqi: forecast.correctedAqi,
       source: "noaa_hrrr",
       airNowCited: false,
-      lapseK: lapse,
+      hpblM: sample.hpblM,
       wind10mMs: sample.wind10mMs,
     };
     points.push(pointFor(sample.validFor, channelForLead(lead), driver));
@@ -335,7 +335,7 @@ interface OpenEpisode {
   peakAqi: number;
   source: AlertSource;
   airNowCited: boolean;
-  lapseK: number | null;
+  hpblM: number | null;
   wind10mMs: number | null;
   lastMs: number;
 }
@@ -345,7 +345,7 @@ function considerPeak(open: OpenEpisode, driver: Driver): void {
   if (driver.aqi <= open.peakAqi) return;
   open.peakAqi = driver.aqi;
   open.source = driver.source;
-  open.lapseK = driver.lapseK;
+  open.hpblM = driver.hpblM;
   open.wind10mMs = driver.wind10mMs;
 }
 
@@ -357,7 +357,7 @@ function finish(open: OpenEpisode, end: string, channel: Episode["channel"]): Ep
     source: open.source,
     channel,
     airNowCited: open.airNowCited,
-    lapseK: open.lapseK,
+    hpblM: open.hpblM,
     wind10mMs: open.wind10mMs,
   };
 }
@@ -430,7 +430,7 @@ function runChannel(
         peakAqi: -1,
         source: first.driver.source,
         airNowCited: false,
-        lapseK: null,
+        hpblM: null,
         wind10mMs: null,
         lastMs: ms,
       };
@@ -533,7 +533,7 @@ const SMOKE_QUIET =
 const OZONE_QUIET =
   "No ozone alert. Summer ozone needs corrected AQI at or above 101 for 3 hours in May through September.";
 const INVERSION_QUIET =
-  "No inversion alert. A winter inversion needs the 80 m temperature at least 1 K warmer than 2 m, wind at or under 2 m/s, and PM2.5 at or above 101 for 3 hours.";
+  "No inversion alert. A winter inversion needs mixing height at or under 400 m, wind at or under 2 m/s, and PM2.5 at or above 101 for 3 hours.";
 
 function smokePhrase(source: AlertSource): string {
   if (source === "noaa_smoke") return "the NOAA smoke model";
@@ -572,14 +572,18 @@ function ozoneReason(episode: Episode, official: AlertOfficial | null): string {
   return base;
 }
 
+function formatMeters(value: number): string {
+  return String(Math.round(value));
+}
+
 function inversionReason(episode: Episode): string {
   const hours = spanHours(episode);
-  const lapse = formatTenths(episode.lapseK ?? 0);
+  const hpbl = formatMeters(episode.hpblM ?? 0);
   const wind = formatTenths(episode.wind10mMs ?? 0);
   if (episode.channel === "heads_up") {
-    return `Heads up only: winter inversion on days 3-7, low confidence, across ${hours} hours. 80 m is ${lapse} K warmer than 2 m, wind is ${wind} m/s, and PM2.5 corrected AQI peaks at ${episode.peakAqi}.`;
+    return `Heads up only: winter inversion on days 3-7, low confidence, across ${hours} hours. Mixing height is ${hpbl} m, wind is ${wind} m/s, and PM2.5 corrected AQI peaks at ${episode.peakAqi}.`;
   }
-  return `Winter inversion across ${hours} hours: 80 m is ${lapse} K warmer than 2 m, wind is ${wind} m/s, and PM2.5 corrected AQI peaks at ${episode.peakAqi}.`;
+  return `Winter inversion across ${hours} hours: mixing height is ${hpbl} m, wind is ${wind} m/s, and PM2.5 corrected AQI peaks at ${episode.peakAqi}.`;
 }
 
 export function smokeRule(input: {
@@ -650,8 +654,16 @@ export async function recordStability(
       "HRRR stability covers lead hours 0 through 48.",
     );
   }
-  if (!kelvinOk(body.tmp2mK) || !kelvinOk(body.tmp80mK)) {
+  if (!kelvinOk(body.tmp2mK)) {
     throw new V1RuleError("invalid_field", "HRRR temperatures must be Kelvin between 180 and 330.");
+  }
+  if (
+    typeof body.hpblM !== "number" ||
+    !Number.isFinite(body.hpblM) ||
+    body.hpblM < 0 ||
+    body.hpblM > 20_000
+  ) {
+    throw new V1RuleError("invalid_field", "Mixing height must be from 0 to 20000 m.");
   }
   if (
     typeof body.wind10mMs !== "number" ||
@@ -669,18 +681,9 @@ export async function recordStability(
   try {
     await sql.query(
       `insert into stability_issued
-         (id, place_id, user_id, source, issued_at, valid_for, tmp_2m_k, tmp_80m_k, wind_10m_ms)
+         (id, place_id, user_id, source, issued_at, valid_for, tmp_2m_k, hpbl_m, wind_10m_ms)
        values ($1, $2, $3, 'noaa_hrrr', $4, $5, $6, $7, $8)`,
-      [
-        randomUUID(),
-        placeId,
-        userId,
-        issuedAt,
-        validFor,
-        body.tmp2mK,
-        body.tmp80mK,
-        body.wind10mMs,
-      ],
+      [randomUUID(), placeId, userId, issuedAt, validFor, body.tmp2mK, body.hpblM, body.wind10mMs],
     );
   } catch (err) {
     if (err instanceof V1RuleError) throw err;
@@ -699,7 +702,7 @@ export async function recordStability(
     issuedAt,
     validFor,
     tmp2mK: body.tmp2mK,
-    tmp80mK: body.tmp80mK,
+    hpblM: body.hpblM,
     wind10mMs: body.wind10mMs,
   };
 }
@@ -717,7 +720,7 @@ interface StabilityRow {
   issued_at: string | Date;
   valid_for: string | Date;
   tmp_2m_k: number;
-  tmp_80m_k: number;
+  hpbl_m: number;
   wind_10m_ms: number;
 }
 
@@ -773,7 +776,7 @@ async function loadStability(
 ): Promise<StabilitySample[]> {
   const rows = await sql.query<StabilityRow>(
     `select distinct on (valid_for)
-            issued_at, valid_for, tmp_2m_k, tmp_80m_k, wind_10m_ms
+            issued_at, valid_for, tmp_2m_k, hpbl_m, wind_10m_ms
        from stability_issued
       where place_id = $1 and user_id = $2
       order by valid_for asc, issued_at desc, created_at desc, id desc`,
@@ -783,7 +786,7 @@ async function loadStability(
     issuedAt: iso(row.issued_at),
     validFor: iso(row.valid_for),
     tmp2mK: Number(row.tmp_2m_k),
-    tmp80mK: Number(row.tmp_80m_k),
+    hpblM: Number(row.hpbl_m),
     wind10mMs: Number(row.wind_10m_ms),
   }));
 }

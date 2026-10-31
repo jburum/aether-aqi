@@ -4,11 +4,22 @@ import {
   parseAirNowCurrent,
   airNowKey,
 } from "./airnow.ts";
+import { recordStability, type StabilitySample } from "./alerts.ts";
 import { V1RuleError } from "./errors.ts";
-import { forecastBodiesFromExtracts, lead0SmokeForecast } from "./noaa.ts";
+import { forecastBodiesFromExtracts, lead0SmokeForecast, stabilitySampleFromGrib } from "./noaa.ts";
 import { planSensorGap, type SensorSample } from "./purpleair.ts";
 import { applySensorGap, issueForecast, recordOfficial } from "./store.ts";
 import type { IssuedForecast, OfficialReading, Queryable } from "./types.ts";
+
+/** Store one recorded HRRR filter extract. This path does not open a socket. */
+export async function ingestRecordedStability(
+  sql: Queryable,
+  userId: string,
+  input: { placeId: string; issuedAt: string; grib: Uint8Array },
+): Promise<StabilitySample & { placeId: string }> {
+  const sample = stabilitySampleFromGrib(input.grib, input.issuedAt);
+  return recordStability(sql, userId, { placeId: input.placeId, ...sample });
+}
 
 /**
  * Write one NOAA cycle from recorded ASCII. Days 1-2 are the smoke model.
