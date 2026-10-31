@@ -210,6 +210,43 @@ private struct SlowPlaceProvider: AirDataProvider {
     func alerts(for place: Place) async throws -> AlertsResponse { try await base.alerts(for: place) }
 }
 
+/// The first answers for one place are slow and different from later ones, so a stale answer shows.
+private actor FirstAnswerSlowProvider: AirDataProvider {
+    let slowId: String
+    private var snapshotCalls = 0
+    private var alertCalls = 0
+    private let base = SampleAirProvider(
+        timeline: .fixture, delay: .zero, fixtureData: { try Fixture.data() }, responseData: { try Fixture.data(named: $0) }
+    )
+
+    init(slowId: String) { self.slowId = slowId }
+
+    func homeSnapshot(for place: Place) async throws -> HomeSnapshot? {
+        guard place.id == slowId else { return try await base.homeSnapshot(for: place) }
+        snapshotCalls += 1
+        if snapshotCalls == 1 {
+            try await Task.sleep(for: .milliseconds(200))
+            return SampleAirProvider.snapshot(ours: 150, official: nil, pollutant: "PM2.5", place: place)
+        }
+        return try await base.homeSnapshot(for: place)
+    }
+
+    func alerts(for place: Place) async throws -> AlertsResponse {
+        guard place.id == slowId else { return try await base.alerts(for: place) }
+        alertCalls += 1
+        if alertCalls == 1 {
+            try await Task.sleep(for: .milliseconds(200))
+            let empty = try StoreJSON.decoder().decode(AlertsResponse.self, from: Fixture.data(named: "boise-alerts-empty"))
+            return AlertsResponse(placeId: place.id, asOf: empty.asOf, timeZone: empty.timeZone, through: empty.through, alerts: [])
+        }
+        return try await base.alerts(for: place)
+    }
+
+    func hourlyForecast(for place: Place) async throws -> [ForecastHour] { try await base.hourlyForecast(for: place) }
+    func bestWindow(for place: Place) async throws -> BestWindowResponse { try await base.bestWindow(for: place) }
+    func outlook(for place: Place) async throws -> OutlookResponse { try await base.outlook(for: place) }
+}
+
 @MainActor
 @Suite("The home screen follows the active place")
 struct HomeFollowsPlaceTests {
@@ -278,6 +315,43 @@ struct HomeFollowsPlaceTests {
         guard case .loaded(let shown) = model.alertsState, let row = shown.rows.first else { Issue.record("no alerts"); return }
         // The smoke fixture runs 13:00Z to 20:00Z on 31 Oct: 6 AM to 1 PM in Coeur d'Alene (PDT), not Boise's 7 AM to 2 PM.
         #expect(row.span.replacingOccurrences(of: "\u{202F}", with: " ") == "6 AM to 1 PM")
+    }
+
+    @Test("A→B→A: the first, slow answer for A never overwrites the newer load of A (Dex, PR 17)")
+    func staleSamePlace() async throws {
+        let model = HomeModel(provider: FirstAnswerSlowProvider(slowId: mccall.id), now: { SampleAirProvider.now }, place: nil)
+        let first = Task { await model.show(mccall) }
+        // Wait until the first load of A is out (its slow snapshot request).
+        for _ in 0..<200 where model.place != mccall { try await Task.sleep(for: .milliseconds(5)) }
+        try await Task.sleep(for: .milliseconds(10))
+        await model.show(cda)
+        await model.show(mccall)
+        guard case .loaded(let fresh) = model.state else { Issue.record("not loaded"); return }
+        #expect(fresh.now.aqi == 42)
+        await first.value
+        guard case .loaded(let after) = model.state else { Issue.record("not loaded"); return }
+        #expect(after.now.aqi == 42, "the stale 150 from the first load of A must not land")
+        #expect(model.place == mccall)
+    }
+
+    @Test("A→B→A: a slow section answer from the first A load is dropped too")
+    func staleSamePlaceSection() async throws {
+        // The first load of A gets its snapshot at once, but its alerts answer late (and empty).
+        let model = HomeModel(provider: FirstAnswerSlowProvider(slowId: cda.id), now: { SampleAirProvider.now }, place: nil)
+        let first = Task { await model.show(cda) }
+        // Wait until the first load of A has its snapshot and its slow alerts request is out.
+        for _ in 0..<200 {
+            if case .loaded = model.state, model.timeline != nil { break }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(model.alertsState == .loading)
+        await model.show(mccall)
+        await model.show(cda)
+        guard case .loaded(let fresh) = model.alertsState else { Issue.record("alerts \(model.alertsState)"); return }
+        #expect(!fresh.isEmpty)
+        await first.value
+        guard case .loaded(let after) = model.alertsState else { Issue.record("alerts \(model.alertsState)"); return }
+        #expect(!after.isEmpty, "the stale empty list from the first load of A must not land")
     }
 
     @Test("No active place is the empty state")

@@ -109,6 +109,8 @@ final class HomeModel {
 
     func load() async {
         started = true
+        generation += 1
+        let request = generation
         state = .loading
         timelineState = .loading
         settleLevel()
@@ -120,12 +122,12 @@ final class HomeModel {
         }
         do {
             let loaded = try await provider.homeSnapshot(for: place)
-            // The person switched places while this was loading: the newer load owns the screen.
-            guard isCurrent(place) else { return }
+            // A newer load started while this one waited (another place, or A→B→A): it owns the screen.
+            guard isCurrent(request) else { return }
             if let snapshot = loaded {
                 state = .loaded(snapshot)
                 settleLevel()
-                await loadSections(for: snapshot.place)
+                await loadSections(for: snapshot.place, request: request)
             } else {
                 state = .empty
                 timelineState = .empty
@@ -133,7 +135,7 @@ final class HomeModel {
         } catch is CancellationError {
             // The view went away; keep whatever is on screen.
         } catch {
-            guard isCurrent(place) else { return }
+            guard isCurrent(request) else { return }
             // Never leave an old number up as if it were current.
             state = .failed
             timelineState = .failed
@@ -141,9 +143,13 @@ final class HomeModel {
         settleLevel()
     }
 
-    /// A result for `place` may still land: it is the place on screen.
-    private func isCurrent(_ place: Place) -> Bool {
-        self.place == place
+    /// Bumped by every load. Each request carries the generation it started in, and only the newest may
+    /// publish: comparing the place alone would let a slow first answer for A overwrite a newer load of A
+    /// after A→B→A (Dex, PR 17).
+    private var generation = 0
+
+    private func isCurrent(_ request: Int) -> Bool {
+        request == generation
     }
 
     /// Retries the timeline alone; the current number stays up.
@@ -151,7 +157,7 @@ final class HomeModel {
         guard case .loaded(let snapshot) = state else { return }
         timelineState = .loading
         settleLevel()
-        await loadTimeline(for: snapshot.place)
+        await loadTimeline(for: snapshot.place, request: generation)
         settleLevel()
     }
 
@@ -160,37 +166,39 @@ final class HomeModel {
     func reloadWindowAndOutlook() async {
         guard case .loaded(let snapshot) = state else { return }
         let place = snapshot.place
+        let request = generation
         await withTaskGroup(of: Void.self) { group in
-            group.addTask { await self.loadBestWindow(for: place) }
-            group.addTask { await self.loadOutlook(for: place) }
+            group.addTask { await self.loadBestWindow(for: place, request: request) }
+            group.addTask { await self.loadOutlook(for: place, request: request) }
         }
     }
 
     /// The timeline, best window, outlook and alerts start together, and each publishes the moment its
     /// own request finishes. A stalled or failed one never holds back the others (Dex, PR 14 at 05abf90).
-    private func loadSections(for place: Place) async {
+    private func loadSections(for place: Place, request: Int) async {
         await withTaskGroup(of: Void.self) { group in
             group.addTask {
-                await self.loadTimeline(for: place)
+                await self.loadTimeline(for: place, request: request)
                 await self.settleLevel()
             }
-            group.addTask { await self.loadBestWindow(for: place) }
-            group.addTask { await self.loadOutlook(for: place) }
-            group.addTask { await self.loadAlerts(for: place) }
+            group.addTask { await self.loadBestWindow(for: place, request: request) }
+            group.addTask { await self.loadOutlook(for: place, request: request) }
+            group.addTask { await self.loadAlerts(for: place, request: request) }
         }
     }
 
     /// Retries the alerts alone; everything else stays up.
     func reloadAlerts() async {
         guard case .loaded(let snapshot) = state else { return }
-        await loadAlerts(for: snapshot.place)
+        await loadAlerts(for: snapshot.place, request: generation)
     }
 
-    private func loadAlerts(for place: Place) async {
+    private func loadAlerts(for place: Place, request: Int) async {
+        guard isCurrent(request) else { return }
         alertsState = .loading
         let provider = provider
         let result = await Self.attempt({ try await provider.alerts(for: place) })
-        guard isCurrent(place) else { return }
+        guard isCurrent(request) else { return }
         switch result {
         case .success(let response): alertsState = .loaded(AlertsDisplay(response, fallbackZone: place.timeZone))
         case .failure(let error) where error is CancellationError: break
@@ -198,11 +206,12 @@ final class HomeModel {
         }
     }
 
-    private func loadBestWindow(for place: Place) async {
+    private func loadBestWindow(for place: Place, request: Int) async {
+        guard isCurrent(request) else { return }
         bestWindowState = .loading
         let provider = provider
         let result = await Self.attempt({ try await provider.bestWindow(for: place) })
-        guard isCurrent(place) else { return }
+        guard isCurrent(request) else { return }
         switch result {
         case .success(let response): bestWindowState = .loaded(BestWindowDisplay(response, place: place))
         case .failure(let error) where error is CancellationError: break
@@ -210,11 +219,12 @@ final class HomeModel {
         }
     }
 
-    private func loadOutlook(for place: Place) async {
+    private func loadOutlook(for place: Place, request: Int) async {
+        guard isCurrent(request) else { return }
         outlookState = .loading
         let provider = provider
         let result = await Self.attempt({ try await provider.outlook(for: place) })
-        guard isCurrent(place) else { return }
+        guard isCurrent(request) else { return }
         switch result {
         case .success(let response): outlookState = .loaded(OutlookDisplay(response, fallbackZone: place.timeZone))
         case .failure(let error) where error is CancellationError: break
@@ -230,13 +240,14 @@ final class HomeModel {
         }
     }
 
-    private func loadTimeline(for place: Place) async {
+    private func loadTimeline(for place: Place, request: Int) async {
+        guard isCurrent(request) else { return }
         selectableLeads = nil
         nowLead = nil
         selectedLead = 0
         do {
             let rows = try await provider.hourlyForecast(for: place)
-            guard isCurrent(place) else { return }
+            guard isCurrent(request) else { return }
             guard let timeline = ForecastTimeline(rows: rows) else {
                 timelineState = .empty
                 return
@@ -252,7 +263,7 @@ final class HomeModel {
             timelineState = .loaded(timeline)
         } catch is CancellationError {
         } catch {
-            guard isCurrent(place) else { return }
+            guard isCurrent(request) else { return }
             timelineState = .failed
         }
     }
