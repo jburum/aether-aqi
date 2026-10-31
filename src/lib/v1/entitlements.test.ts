@@ -679,6 +679,105 @@ describe("v1 phase 3 entitlements", { concurrency: 1 }, () => {
     assert.equal(await countFor(sql, "saved_place", "user-a"), 4);
   });
 
+  it("delivers the first place after a downgrade and refuses places 2 through 5", async () => {
+    const sql = await openDb();
+    const sender = new TestPushSender();
+    const http = (method: string, path: string, body?: unknown) =>
+      handleV1(
+        new Request(`http://localhost${path}`, {
+          method,
+          headers: body ? { "content-type": "application/json" } : undefined,
+          body: body ? JSON.stringify(body) : undefined,
+        }),
+        { sql, userId: "user-a", sender },
+      );
+
+    await applySignedTransaction(sql, "user-a", signed(), verifier, NOW);
+    const placeIds: string[] = [];
+    for (let i = 0; i < 5; i += 1) {
+      const created = await http("POST", "/api/v1/places", {
+        ...SAMPLE_PLACE,
+        name: `Deliver place ${i + 1}`,
+        latitude: 43 + i / 10,
+      });
+      assert.equal(created.status, 201);
+      placeIds.push((await placeBody(created)).id);
+    }
+
+    const forecastIds: string[] = [];
+    for (const [index, placeId] of placeIds.entries()) {
+      const issued = await http("POST", "/api/v1/forecasts", {
+        ...SAMPLE_FORECAST_DAY1,
+        placeId,
+        correctedAqi: 150 + index,
+      });
+      assert.equal(issued.status, 201);
+      const issuedBody = (await issued.json()) as { forecast: { id: string } };
+      forecastIds.push(issuedBody.forecast.id);
+      const officialAqi = 40 + index;
+      const official = await http("POST", "/api/v1/observations", {
+        ...SAMPLE_OFFICIAL,
+        placeId,
+        officialAqi,
+        officialRaw: String(officialAqi),
+      });
+      assert.equal(official.status, 201);
+    }
+
+    await applySignedTransaction(
+      sql,
+      "user-a",
+      signed({ expiresAt: PAST, originalTransactionId: "fixture-downgrade-push" }),
+      verifier,
+      NOW,
+    );
+
+    const device = await http("POST", "/api/v1/push/devices", {
+      token: "test-device-boise",
+      platform: "test",
+    });
+    assert.equal(device.status, 201);
+
+    const open = await http("POST", "/api/v1/push/deliver", { forecastId: forecastIds[0] });
+    assert.equal(open.status, 200);
+    const openBody = (await open.json()) as {
+      deliveries: {
+        payload: { placeId: string; forecast: { correctedAqi: number }; official: { aqi: number } };
+      }[];
+    };
+    assert.equal(openBody.deliveries.length, 1);
+    assert.equal(openBody.deliveries[0]?.payload.placeId, placeIds[0]);
+    assert.equal(openBody.deliveries[0]?.payload.forecast.correctedAqi, 150);
+    assert.equal(openBody.deliveries[0]?.payload.official.aqi, 40);
+
+    for (const [index, forecastId] of forecastIds.entries()) {
+      if (index === 0) continue;
+      const denied = await http("POST", "/api/v1/push/deliver", { forecastId });
+      assert.equal(denied.status, 403, `place ${index + 1}`);
+      assert.notEqual(denied.status, 500, `place ${index + 1}`);
+      const body = await errorBody(denied);
+      assert.equal(body.error, "not_entitled", `place ${index + 1}`);
+      assert.equal(body.feature, "saved_places", `place ${index + 1}`);
+      assert.equal(body.tier, "free", `place ${index + 1}`);
+      assert.equal("deliveries" in body, false, `place ${index + 1}`);
+      const written = await sql.query<{ n: number }>(
+        "select count(*)::int as n from push_delivery where forecast_id = $1",
+        [forecastId],
+      );
+      assert.equal(written[0]?.n, 0, `place ${index + 1}`);
+    }
+
+    const deliveries = await sql.query<{ n: number }>(
+      "select count(*)::int as n from push_delivery where user_id = $1",
+      ["user-a"],
+    );
+    assert.equal(deliveries[0]?.n, 1);
+    assert.deepEqual(
+      sender.sent.map((payload) => payload.placeId),
+      [placeIds[0]],
+    );
+  });
+
   it("rejects a second place from the library with not_entitled, not a 500", async () => {
     const sql = await openDb();
     await addSavedPlace(sql, "user-a", SAMPLE_PLACE);

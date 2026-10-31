@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 
+import { requireOpenPlace } from "./entitlements.ts";
 import { NotEntitledError, V1RuleError } from "./errors.ts";
 import { planSensorGap, type SensorSample } from "./purpleair.ts";
 import { buildPushPayload, type PushPayload, type PushSender } from "./push.ts";
@@ -429,11 +430,30 @@ export async function registerTestDevice(
   return { id: row.id, platform: "test", token: row.token, createdAt: iso(row.created_at) };
 }
 
+/**
+ * Place id for a forecast this user issued.
+ * Selects no corrected or official numbers. Missing forecast is 404.
+ */
+export async function readForecastPlaceId(
+  sql: Queryable,
+  userId: string,
+  forecastId: string,
+): Promise<string> {
+  const rows = await sql.query<{ place_id: string }>(
+    `select place_id from forecast_issued where id = $1 and user_id = $2`,
+    [forecastId, userId],
+  );
+  const placeId = rows[0]?.place_id;
+  if (!placeId) throw new V1RuleError("forecast_not_found", "Forecast not found.", 404);
+  return placeId;
+}
+
 export async function deliverForecastPush(
   sql: Queryable,
   userId: string,
   forecastId: string,
   sender: PushSender,
+  now: Date = new Date(),
 ): Promise<PushDeliveryRecord[]> {
   if (sender.name !== "test") {
     throw new V1RuleError(
@@ -441,6 +461,8 @@ export async function deliverForecastPush(
       "Week-1 delivery uses the test sender. There is no APNs key and no paid push vendor.",
     );
   }
+  const placeId = await readForecastPlaceId(sql, userId, forecastId);
+  await requireOpenPlace(sql, userId, placeId, now);
   const beside = await sql.query<BesideRow>(
     `select forecast_id, place_id, place_name, forecast_source, issued_at, valid_for, horizon,
             spatial_scale, confidence, corrected_aqi, pollutant, observation_id, official_aqi,

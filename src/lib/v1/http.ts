@@ -19,6 +19,7 @@ import {
   issueForecast,
   listBeside,
   listSavedPlaces,
+  readForecastPlaceId,
   recordOfficial,
   registerTestDevice,
   removeSavedPlace,
@@ -50,7 +51,8 @@ async function readJson(request: Request): Promise<unknown> {
  * Paths: entitlement, places, places/:id/current, places/:id/timeline,
  * places/:id/best-window, places/:id/outlook, places/:id/alerts,
  * forecasts, observations, push/devices, push/deliver, push/samples.
- * Pro gates live here: alerts, and any saved place after the first.
+ * Pro gates live here: alerts, any saved place after the first, and
+ * push delivery of a forecast for a closed place.
  */
 export async function handleV1(request: Request, deps: V1Deps): Promise<Response> {
   const url = new URL(request.url);
@@ -210,7 +212,15 @@ async function route(request: Request, url: URL, rest: string[], deps: V1Deps): 
         throw new V1RuleError("invalid_body", "Delivery body must be an object.");
       }
       const forecastId = requireId((body as { forecastId?: unknown }).forecastId, "forecastId");
-      const deliveries = await deliverForecastPush(deps.sql, deps.userId, forecastId, deps.sender);
+      const placeId = await readForecastPlaceId(deps.sql, deps.userId, forecastId);
+      await requireOpenPlace(deps.sql, deps.userId, placeId, now);
+      const deliveries = await deliverForecastPush(
+        deps.sql,
+        deps.userId,
+        forecastId,
+        deps.sender,
+        now,
+      );
       return json({ deliveries });
     }
     return json({ error: "method_not_allowed", message: "Method not allowed" }, 405);
