@@ -299,6 +299,11 @@ describe("v1 week 1", { concurrency: 1 }, () => {
 
   it("caps saved places at 5 in the database", async () => {
     const sql = await openDb();
+    // Pro, so the free slot of 1 is not what stops the sixth place.
+    await sql.query(
+      `insert into entitlement (user_id, tier, product, source, expires_at, state)
+       values ('user-a', 'pro', 'yearly', 'storekit', '2099-01-01T00:00:00.000Z', 'active')`,
+    );
     for (let i = 0; i < 5; i += 1) {
       await addSavedPlace(sql, "user-a", {
         ...SAMPLE_PLACE,

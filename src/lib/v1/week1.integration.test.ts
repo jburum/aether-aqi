@@ -176,6 +176,13 @@ describe("v1 week 1 postgres", { concurrency: 1 }, () => {
   it("keeps five saved places when two connections race the next add", async () => {
     await withPostgres(async (connect) => {
       const setup = await connect();
+      // Both accounts are Pro. The race below is the cap of 5, not the free slot.
+      await setup.query(
+        `insert into entitlement (user_id, tier, product, source, expires_at, state)
+         values
+           ('user-a', 'pro', 'yearly', 'storekit', '2099-01-01T00:00:00.000Z', 'active'),
+           ('user-b', 'pro', 'yearly', 'storekit', '2099-01-01T00:00:00.000Z', 'active')`,
+      );
       for (let i = 0; i < 4; i += 1) {
         await addSavedPlace(clientSql(setup), "user-a", {
           ...SAMPLE_PLACE,

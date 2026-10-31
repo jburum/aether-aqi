@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
-import { V1RuleError } from "./errors.ts";
+import { requireOpenPlace } from "./entitlements.ts";
+import { NotEntitledError, V1RuleError } from "./errors.ts";
 import { planSensorGap, type SensorSample } from "./purpleair.ts";
 import { buildPushPayload, type PushPayload, type PushSender } from "./push.ts";
 import {
@@ -206,6 +207,12 @@ function rethrowStore(err: unknown): never {
   if (message.includes("saved places cap is 5")) {
     throw new V1RuleError("place_cap", "Saved places are capped at 5.", 409);
   }
+  if (message.includes("saved places beyond 1 require pro")) {
+    throw new NotEntitledError(
+      "saved_places",
+      "Saved places beyond the first require Pro.",
+    );
+  }
   throw err instanceof Error ? err : new Error(message);
 }
 
@@ -219,7 +226,8 @@ export async function addSavedPlace(
   try {
     // One statement: saved_place_add locks this user, then counts and inserts
     // before that lock is released. A pool query() cannot hold a lock across
-    // separate round trips.
+    // separate round trips. The insert trigger allows a second place only
+    // while the user is Pro, and still refuses a sixth place for everyone.
     const inserted = await sql.query<PlaceRow>(
       `select id, name, latitude, longitude, valley, alert_at, position, created_at
          from saved_place_add($1, $2, $3, $4, $5, $6, $7, $8)`,
@@ -422,11 +430,30 @@ export async function registerTestDevice(
   return { id: row.id, platform: "test", token: row.token, createdAt: iso(row.created_at) };
 }
 
+/**
+ * Place id for a forecast this user issued.
+ * Selects no corrected or official numbers. Missing forecast is 404.
+ */
+export async function readForecastPlaceId(
+  sql: Queryable,
+  userId: string,
+  forecastId: string,
+): Promise<string> {
+  const rows = await sql.query<{ place_id: string }>(
+    `select place_id from forecast_issued where id = $1 and user_id = $2`,
+    [forecastId, userId],
+  );
+  const placeId = rows[0]?.place_id;
+  if (!placeId) throw new V1RuleError("forecast_not_found", "Forecast not found.", 404);
+  return placeId;
+}
+
 export async function deliverForecastPush(
   sql: Queryable,
   userId: string,
   forecastId: string,
   sender: PushSender,
+  now: Date = new Date(),
 ): Promise<PushDeliveryRecord[]> {
   if (sender.name !== "test") {
     throw new V1RuleError(
@@ -434,6 +461,8 @@ export async function deliverForecastPush(
       "Week-1 delivery uses the test sender. There is no APNs key and no paid push vendor.",
     );
   }
+  const placeId = await readForecastPlaceId(sql, userId, forecastId);
+  await requireOpenPlace(sql, userId, placeId, now);
   const beside = await sql.query<BesideRow>(
     `select forecast_id, place_id, place_name, forecast_source, issued_at, valid_for, horizon,
             spatial_scale, confidence, corrected_aqi, pollutant, observation_id, official_aqi,
