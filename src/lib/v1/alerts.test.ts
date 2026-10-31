@@ -277,6 +277,45 @@ describe("v1 alert rules", () => {
     assert.equal(later.fired, false);
   });
 
+  it("keeps a four-hour PM2.5 alert when a newer clean ozone row shares the hour", () => {
+    const issuedAt = "2026-01-15T12:00:00.000Z";
+    const newer = "2026-01-15T14:00:00.000Z";
+    const first = "2026-01-15T16:00:00.000Z";
+    const pm = hoursOf(issuedAt, first, 4, 180);
+    const ozone = hoursOf(newer, first, 4, 12, "valley", "O3");
+    const smoke = smokeRule({
+      hours: [...pm, ...ozone],
+      official: null,
+      asOf: first,
+    });
+    assert.equal(smoke.fired, true);
+    assert.equal(smoke.severity, "high");
+    assert.equal(smoke.source, "noaa_smoke");
+    assert.match(smoke.reason, /peaks at 180/);
+
+    const replaced = smokeRule({
+      hours: [...pm, ...hoursOf(newer, first, 4, 12)],
+      official: null,
+      asOf: first,
+    });
+    assert.equal(replaced.fired, false);
+
+    const ozoneIssued = "2026-07-15T12:00:00.000Z";
+    const ozoneFirst = "2026-07-15T16:00:00.000Z";
+    const ozoneDecision = ozoneRule({
+      hours: [
+        ...hoursOf(ozoneIssued, ozoneFirst, 4, 180, "later", "O3"),
+        ...hoursOf("2026-07-15T14:00:00.000Z", ozoneFirst, 4, 12),
+      ],
+      official: null,
+      asOf: ozoneFirst,
+      timeZone: ZONE,
+    });
+    assert.equal(ozoneDecision.fired, true);
+    assert.equal(ozoneDecision.source, "noaa_aqf");
+    assert.match(ozoneDecision.reason, /180/);
+  });
+
   it("fires summer ozone, stays quiet in winter, and heads-up only after 48 hours", () => {
     const issuedAt = "2026-07-15T18:00:00.000Z";
     // Lead is 2 hours, so this is a days 1-2 ozone hour. The store still rejects that row.
@@ -726,5 +765,50 @@ describe("v1 alert route", () => {
         }),
       (err: unknown) => err instanceof V1RuleError && err.code === "day_1_2_valley_only",
     );
+  });
+
+  it("keeps a stored PM2.5 alert when a newer clean ozone row shares the hour", async () => {
+    const sql = await openDb();
+    const place = await addSavedPlace(sql, "user-a", {
+      name: "Boise",
+      latitude: 43.615,
+      longitude: -116.2023,
+      valley: "Treasure Valley",
+      alertAt: null,
+    });
+    const issuedAt = "2026-01-15T12:00:00.000Z";
+    const newer = "2026-01-15T14:00:00.000Z";
+    const first = "2026-01-15T16:00:00.000Z";
+    for (let i = 0; i < 4; i += 1) {
+      const validFor = at(first, i);
+      await issueForecast(sql, "user-a", {
+        placeId: place.id,
+        source: "noaa_smoke",
+        issuedAt,
+        validFor,
+        horizon: "day_1_2_valley",
+        spatialScale: "valley",
+        confidence: "valley",
+        correctedAqi: 180,
+        pollutant: "PM2.5",
+      });
+      await issueForecast(sql, "user-a", {
+        placeId: place.id,
+        source: "noaa_smoke",
+        issuedAt: newer,
+        validFor,
+        horizon: "day_1_2_valley",
+        spatialScale: "valley",
+        confidence: "valley",
+        correctedAqi: 12,
+        pollutant: "O3",
+      });
+    }
+    const body = await readAlerts(sql, "user-a", place.id, first, ZONE);
+    assert.equal(body.alerts.length, 1);
+    assert.equal(body.alerts[0]?.kind, "smoke");
+    assert.equal(body.alerts[0]?.severity, "high");
+    assert.equal(body.alerts[0]?.source, "noaa_smoke");
+    assert.match(body.alerts[0]?.reason ?? "", /peaks at 180/);
   });
 });

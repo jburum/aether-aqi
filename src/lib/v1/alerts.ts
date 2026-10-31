@@ -139,13 +139,28 @@ function isOzonePollutant(hour: AlertForecastHour): boolean {
   return key === "o3" || key === "ozone";
 }
 
+function keepLatest<T extends Timed>(map: Map<string, T>, key: string, row: T): void {
+  const prev = map.get(key);
+  if (!prev || Date.parse(row.issuedAt) >= Date.parse(prev.issuedAt)) {
+    map.set(key, row);
+  }
+}
+
+/** Latest stored issue for one valid hour. Stability has no pollutant. */
 function latestByValidFor<T extends Timed>(rows: readonly T[]): T[] {
   const map = new Map<string, T>();
+  for (const row of rows) keepLatest(map, row.validFor, row);
+  return [...map.values()];
+}
+
+/**
+ * Latest issue for one valid hour and one pollutant.
+ * A newer ozone row must not replace a PM2.5 row at the same hour.
+ */
+function latestForecastByPollutant(rows: readonly AlertForecastHour[]): AlertForecastHour[] {
+  const map = new Map<string, AlertForecastHour>();
   for (const row of rows) {
-    const prev = map.get(row.validFor);
-    if (!prev || Date.parse(row.issuedAt) >= Date.parse(prev.issuedAt)) {
-      map.set(row.validFor, row);
-    }
+    keepLatest(map, `${row.validFor}\0${pollutantKey(row.pollutant)}`, row);
   }
   return [...map.values()];
 }
@@ -220,7 +235,7 @@ function smokePoints(
   official: AlertOfficial | null,
 ): HourPoint[] {
   const points: HourPoint[] = [];
-  for (const hour of latestByValidFor(hours)) {
+  for (const hour of latestForecastByPollutant(hours)) {
     if (!isPm(hour)) continue;
     const lead = classifyForecastLead(hour.issuedAt, hour.validFor);
     if (lead === "outside") continue;
@@ -251,7 +266,7 @@ function ozonePoints(
   timeZone: string,
 ): HourPoint[] {
   const points: HourPoint[] = [];
-  for (const hour of latestByValidFor(hours)) {
+  for (const hour of latestForecastByPollutant(hours)) {
     if (!isOzonePollutant(hour)) continue;
     const lead = classifyForecastLead(hour.issuedAt, hour.validFor);
     if (lead === "outside") continue;
@@ -283,8 +298,8 @@ function inversionPoints(
   timeZone: string,
 ): HourPoint[] {
   const pm = new Map<string, AlertForecastHour>();
-  for (const hour of latestByValidFor(hours)) {
-    if (isPm(hour)) pm.set(hour.validFor, hour);
+  for (const hour of latestForecastByPollutant(hours)) {
+    if (isPm(hour)) keepLatest(pm, hour.validFor, hour);
   }
   const points: HourPoint[] = [];
   for (const sample of latestByValidFor(stability)) {
@@ -752,11 +767,11 @@ async function loadForecastHours(
   placeId: string,
 ): Promise<AlertForecastHour[]> {
   const rows = await sql.query<ForecastAlertRow>(
-    `select distinct on (valid_for)
+    `select distinct on (valid_for, pollutant)
             source, issued_at, valid_for, confidence, corrected_aqi, pollutant
        from forecast_issued
       where place_id = $1 and user_id = $2
-      order by valid_for asc, issued_at desc, created_at desc, id desc`,
+      order by valid_for asc, pollutant asc, issued_at desc, created_at desc, id desc`,
     [placeId, userId],
   );
   return rows.map((row) => ({
