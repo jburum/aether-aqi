@@ -318,6 +318,49 @@ describe("v1 alert rules", () => {
     assert.equal(ozoneDecision.reason.includes("40"), false);
   });
 
+  it("stays quiet when four newer low hours use an equivalent pollutant label", () => {
+    const issuedAt = "2026-01-15T12:00:00.000Z";
+    const newer = "2026-01-15T14:00:00.000Z";
+    const first = "2026-01-15T16:00:00.000Z";
+    const smokePairs: readonly (readonly [string | null, string | null])[] = [
+      [null, "PM2.5"],
+      ["PM2.5", null],
+    ];
+    for (const [olderLabel, newerLabel] of smokePairs) {
+      const smoke = smokeRule({
+        hours: [
+          ...hoursOf(issuedAt, first, 4, 180, "valley", olderLabel),
+          ...hoursOf(newer, first, 4, 12, "valley", newerLabel),
+        ],
+        official: null,
+        asOf: first,
+      });
+      assert.equal(smoke.fired, false, `smoke ${olderLabel} then ${newerLabel}`);
+      assert.equal(smoke.status, "quiet", `smoke ${olderLabel} then ${newerLabel}`);
+    }
+
+    const ozoneIssued = "2026-07-15T12:00:00.000Z";
+    const ozoneNewer = "2026-07-15T14:00:00.000Z";
+    const ozoneFirst = "2026-07-15T16:00:00.000Z";
+    const ozonePairs: readonly (readonly [string, string])[] = [
+      ["O3", "ozone"],
+      ["ozone", "O3"],
+    ];
+    for (const [olderLabel, newerLabel] of ozonePairs) {
+      const ozone = ozoneRule({
+        hours: [
+          ...hoursOf(ozoneIssued, ozoneFirst, 4, 180, "valley", olderLabel),
+          ...hoursOf(ozoneNewer, ozoneFirst, 4, 12, "valley", newerLabel),
+        ],
+        official: null,
+        asOf: ozoneFirst,
+        timeZone: ZONE,
+      });
+      assert.equal(ozone.fired, false, `ozone ${olderLabel} then ${newerLabel}`);
+      assert.equal(ozone.status, "quiet", `ozone ${olderLabel} then ${newerLabel}`);
+    }
+  });
+
   it("cites AirNow beside a forecast that is already on", () => {
     const issuedAt = "2026-01-15T12:00:00.000Z";
     const first = "2026-01-15T16:00:00.000Z";
@@ -936,5 +979,60 @@ describe("v1 alert route", () => {
     assert.equal(body.alerts[0]?.source, "noaa_smoke");
     assert.match(body.alerts[0]?.reason ?? "", /160/);
     assert.equal((body.alerts[0]?.reason ?? "").includes("40"), false);
+  });
+
+  it("stays quiet when a stored newer issue uses an equivalent pollutant label", async () => {
+    const sql = await openDb();
+    const place = await addSavedPlace(sql, "user-a", {
+      name: "Boise",
+      latitude: 43.615,
+      longitude: -116.2023,
+      valley: "Treasure Valley",
+      alertAt: null,
+    });
+    const issueRun = async (
+      issuedAt: string,
+      first: string,
+      correctedAqi: number,
+      pollutant: string | null,
+    ) => {
+      for (let i = 0; i < 4; i += 1) {
+        await issueForecast(sql, "user-a", {
+          placeId: place.id,
+          source: "noaa_smoke",
+          issuedAt,
+          validFor: at(first, i),
+          horizon: "day_1_2_valley",
+          spatialScale: "valley",
+          confidence: "valley",
+          correctedAqi,
+          pollutant,
+        });
+      }
+    };
+
+    const smokeFirst = "2026-01-15T16:00:00.000Z";
+    await issueRun("2026-01-15T12:00:00.000Z", smokeFirst, 180, null);
+    await issueRun("2026-01-15T14:00:00.000Z", smokeFirst, 12, "PM2.5");
+    const smokeSwapped = "2026-01-20T16:00:00.000Z";
+    await issueRun("2026-01-20T12:00:00.000Z", smokeSwapped, 180, "PM2.5");
+    await issueRun("2026-01-20T14:00:00.000Z", smokeSwapped, 12, null);
+    const january = await readAlerts(sql, "user-a", place.id, smokeFirst, ZONE);
+    assert.equal(
+      january.alerts.some((alert) => alert.kind === "smoke"),
+      false,
+    );
+
+    const ozoneFirst = "2026-07-15T16:00:00.000Z";
+    await issueRun("2026-07-15T12:00:00.000Z", ozoneFirst, 180, "O3");
+    await issueRun("2026-07-15T14:00:00.000Z", ozoneFirst, 12, "ozone");
+    const ozoneSwapped = "2026-07-20T16:00:00.000Z";
+    await issueRun("2026-07-20T12:00:00.000Z", ozoneSwapped, 180, "ozone");
+    await issueRun("2026-07-20T14:00:00.000Z", ozoneSwapped, 12, "O3");
+    const july = await readAlerts(sql, "user-a", place.id, ozoneFirst, ZONE);
+    assert.equal(
+      july.alerts.some((alert) => alert.kind === "ozone"),
+      false,
+    );
   });
 });

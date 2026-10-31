@@ -122,21 +122,25 @@ interface Timed {
   validFor: string;
 }
 
-function pollutantKey(value: string | null): string {
-  if (!value) return "";
-  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
+/**
+ * One key per pollutant before the latest-issue dedupe.
+ * An unlabeled NOAA smoke hour and a PM2.5 label are the same key.
+ * `O3` and `ozone` are the same key. A different pollutant stays apart.
+ */
+function pollutantKey(hour: Pick<AlertForecastHour, "source" | "pollutant">): string {
+  const label = (hour.pollutant ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (label === "pm25" || (label === "" && hour.source === "noaa_smoke")) return "pm25";
+  if (label === "o3" || label === "ozone") return "o3";
+  return label;
 }
 
 /** PM2.5, or an unlabeled NOAA smoke hour. Ozone labels are not PM. */
 function isPm(hour: AlertForecastHour): boolean {
-  const key = pollutantKey(hour.pollutant);
-  if (key === "pm25") return true;
-  return hour.source === "noaa_smoke" && key === "";
+  return pollutantKey(hour) === "pm25";
 }
 
 function isOzonePollutant(hour: AlertForecastHour): boolean {
-  const key = pollutantKey(hour.pollutant);
-  return key === "o3" || key === "ozone";
+  return pollutantKey(hour) === "o3";
 }
 
 function keepLatest<T extends Timed>(map: Map<string, T>, key: string, row: T): void {
@@ -154,13 +158,14 @@ function latestByValidFor<T extends Timed>(rows: readonly T[]): T[] {
 }
 
 /**
- * Latest issue for one valid hour and one pollutant.
+ * Latest issue for one valid hour and one canonical pollutant.
  * A newer ozone row must not replace a PM2.5 row at the same hour.
+ * An equivalent label must replace it, so a stale high hour does not survive.
  */
 function latestForecastByPollutant(rows: readonly AlertForecastHour[]): AlertForecastHour[] {
   const map = new Map<string, AlertForecastHour>();
   for (const row of rows) {
-    keepLatest(map, `${row.validFor}\0${pollutantKey(row.pollutant)}`, row);
+    keepLatest(map, `${row.validFor}\0${pollutantKey(row)}`, row);
   }
   return [...map.values()];
 }
@@ -791,12 +796,27 @@ async function loadForecastHours(
   userId: string,
   placeId: string,
 ): Promise<AlertForecastHour[]> {
+  // pollutant_key matches pollutantKey: unlabeled noaa_smoke is pm25, and o3 matches ozone.
   const rows = await sql.query<ForecastAlertRow>(
-    `select distinct on (valid_for, pollutant)
+    `select distinct on (valid_for, pollutant_key)
             source, issued_at, valid_for, confidence, corrected_aqi, pollutant
-       from forecast_issued
-      where place_id = $1 and user_id = $2
-      order by valid_for asc, pollutant asc, issued_at desc, created_at desc, id desc`,
+       from (
+         select source, issued_at, valid_for, confidence, corrected_aqi, pollutant,
+                created_at, id,
+                case
+                  when label = 'pm25' or (label = '' and source = 'noaa_smoke') then 'pm25'
+                  when label in ('o3', 'ozone') then 'o3'
+                  else label
+                end as pollutant_key
+           from (
+             select source, issued_at, valid_for, confidence, corrected_aqi, pollutant,
+                    created_at, id,
+                    lower(regexp_replace(coalesce(pollutant, ''), '[^A-Za-z0-9]', '', 'g')) as label
+               from forecast_issued
+              where place_id = $1 and user_id = $2
+           ) labeled
+       ) keyed
+      order by valid_for asc, pollutant_key asc, issued_at desc, created_at desc, id desc`,
     [placeId, userId],
   );
   return rows.map((row) => ({
