@@ -40,27 +40,29 @@ Days 1-2 fire as an alert. Source `noaa_aqf`, confidence `model`, unless AirNow 
 
 `inversionRule`. Winter is November through February in `timeZone`. Every hour needs a HRRR stability sample and a PM2.5 forecast at the same `validFor`.
 
-| Input               | Threshold                                                                   |
-| ------------------- | --------------------------------------------------------------------------- |
-| `tmp80mK - tmp2mK`  | At least 1 K. HRRR temperature is Kelvin. The difference is the same in °C. |
-| 10 m wind speed     | At or under 2 m/s. Speed is `hypot(u, v)` from `ugrd10m` and `vgrd10m`.     |
-| PM2.5 corrected AQI | At least 101, from the forecast hour at that `validFor`.                    |
-| Month               | November, December, January, February.                                      |
-| Persistence         | 3 hours on, 3 hours off.                                                    |
+| Input               | Threshold                                                                      |
+| ------------------- | ------------------------------------------------------------------------------ |
+| Mixing height       | At or under 400 m. HRRR `HPBL` at the surface, meters.                         |
+| 10 m wind speed     | At or under 2 m/s. `hypot` of the mean `UGRD` and `VGRD` at 10 m above ground. |
+| PM2.5 corrected AQI | At least 101, from the forecast hour at that `validFor`.                       |
+| Month               | November, December, January, February.                                         |
+| Persistence         | 3 hours on, 3 hours off.                                                       |
 
-All four have to hold. A clean stable night stays quiet. A windy day with elevated PM stays quiet here (smoke can still fire). A one-hour or two-hour spike stays quiet.
+All of them have to hold. A clean stable night stays quiet. A windy day with elevated PM stays quiet here (smoke can still fire). A well-mixed hour stays quiet even when the wind is light and PM is high. A shallow mix in summer stays quiet. A one-hour or two-hour spike stays quiet.
 
-The source on a fired inversion is `noaa_hrrr`. Days 1-2 confidence is `valley`. A days 3-7 PM hour paired with stability is a heads up at low confidence. The ingest below only keeps lead hours 0 through 48, so the rows it writes pair with days 1-2.
+The source on a fired inversion is `noaa_hrrr`. Days 1-2 confidence is `valley`. A days 3-7 PM hour paired with stability is a heads up at low confidence. The ingest below only keeps lead hours 0 through 48, so the rows it writes pair with days 1-2. The reason quotes mixing height from the hour with the peak corrected AQI.
 
-Stability ASCII is keyless NOMADS, same host rule as smoke (`assertNoaaUrl`). The surface file is `hrrr_sfc`, variables `tmp2m`, `tmp80m`, `ugrd10m`, and `vgrd10m`. That is the same short-name pattern as `masden8m`. This branch does not call NOMADS. `stabilitySamplesFromExtracts` drops an hour with a fill (`1e20`, `-9999`), a missing component, or a lead past 48 hours. Turning a place into grid indexes is still not done.
+OpenDAP on `nomads.ncep.noaa.gov` was turned off on 23 February 2026 (Service Change Notice 25-81). A `.dds` request returns that notice, not a variable list. The live keyless file is `hrrr.tCCz.wrfsfcfHH.grib2` under `/pub/data/nccf/com/hrrr/prod/hrrr.YYYYMMDD/conus/`. The 12Z surface index for 2026-10-30 has `TMP:2 m above ground`, `UGRD` and `VGRD` at `10 m above ground`, and `HPBL:surface`. Wind is also stored at 80 m. Temperature is not. `WIND:10 m above ground` on that file is the day's maximum, so the filter does not request `var_WIND`.
 
-`stability_issued` (`migrations/0003_v1_stability.sql`) stores Kelvin temperatures and the wind speed. `recordStability` writes one hour for the owner. There is no HTTP write and no launchd job.
+`hrrrStabilityFilterUrls` builds `cgi-bin/filter_hrrr_2d.pl` for one lead hour at a time. The box is at most 0.2 degrees on a side. No API key is added. `stabilitySampleFromGrib` reads the filter's simple-packed GRIB2 and averages the cells (16 at most). Skin temperature (`TMP` on the ground surface) is ignored. `fetchNoaaGrib` is the live GET. `ingestRecordedStability` writes one decoded hour and does not open a socket. Tests use the recorded extracts and do not call NOAA.
+
+`stability_issued` (`migrations/0003_v1_stability.sql`) stores the 2 m temperature in Kelvin, mixing height in meters, and the 10 m wind speed. `recordStability` writes one hour for the owner. There is no HTTP write and no launchd job. Phase 1 smoke and air-quality URL builders still name OpenDAP ASCII. This slice does not switch them.
 
 ## Replay
 
-`fixtures/v1/inversion-replay.json` is the Dex gate. `inversionRule` fires on the stagnant inverted morning and the deeper inverted afternoon. It stays quiet on the windy mixed day (PM is elevated, the layer is not), the clean stable night (the layer is inverted, PM is not), and the two-hour spike. The hour-by-hour flip never fires, including when `asOf` steps through each hour. One clean hour inside a long inversion stays one episode and stays active through that hour.
+`fixtures/v1/inversion-replay.json` is the Dex gate. The hours are checked-in samples on either side of the thresholds, not a certified archive. `inversionRule` fires on the stagnant inverted morning and the deeper inverted afternoon. It stays quiet on the windy mixed day, the clean stable night, the well-mixed dirty afternoon, the summer shallow mix, and the two-hour spike. The hour-by-hour flip never fires, including when `asOf` steps through each hour. One clean hour inside a long inversion stays one episode and stays active through that hour.
 
-`fixtures/v1/noaa-hrrr-stability.json` is the recorded ASCII for the parser. Hour 1 is a fill and is dropped. Hour 49 is past 48 hours and is dropped. Hour 0 and hour 48 stay.
+`fixtures/v1/noaa-hrrr-stability-f00.grib2` and `noaa-hrrr-stability-f06.grib2` are NOMADS filter extracts for a small box over Boise at the 2026-10-30 12Z cycle, lead 0 and lead 6. Lead 0 averages about 277.9 K at 2 m, mixing height about 44 m, and 10 m wind under 1 m/s. Copied onto a January hour, that met fires. Left on 30 October, it stays quiet because October is not winter.
 
 ## HTTP
 

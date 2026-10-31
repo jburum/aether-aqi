@@ -22,6 +22,7 @@ Project Air phase 1 from the locked SharedBrain `v1-plan.md`. This branch adds i
 - NOAA URLs are keyless `https://nomads.ncep.noaa.gov` only. A credential query parameter is rejected.
 - HRRR-Smoke: `/dods/hrrr/hrrrYYYYMMDD/hrrr_sfc.tCCz.ascii?masden8m[hour:hour][lat:lat][lon:lon]`.
 - Air quality model: `/dods/aqm/aqmYYYYMMDD/aqm.tCCz.ascii?pm25sfc[hour:hour][lat:lat][lon:lon]`.
+- OpenDAP on this host was turned off on 23 February 2026 (Service Change Notice 25-81). Those two URL builders are unchanged. Inversion ingest uses the GRIB filter; see [ALERTS.md](./ALERTS.md).
 - Cycles used here are 00, 06, 12, and 18 UTC. The recorded ASCII is one grid cell, so both indexes on the data line are 0. Turning a latitude and longitude into those indexes is not in this branch.
 - `NaN`, `-9999`, and values on the order of `1e20` are missing cells. They are not stored as AQI 500.
 - The hourly model concentration uses the daily PM2.5 breakpoint table. NowCast weighting is not applied.
