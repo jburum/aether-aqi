@@ -44,6 +44,8 @@ struct AlertsFixtureTests {
         // 00:00Z to 08:00Z on 3 Dec is 5 PM to 1 AM in Boise (MST): it runs past midnight.
         #expect(plain(inversion.span) == "5 PM to Thu 1 AM")
         #expect(!inversion.lowConfidence)
+        // The reason is the final rule's (#15 at 8f4522f): HRRR mixing height, not an 80 m lapse.
+        #expect(inversion.reason == "Winter inversion across 8 hours: mixing height is 180 m, wind is 1.1 m/s, and PM2.5 corrected AQI peaks at 143.")
     }
 
     @Test("Ozone heads up: upcoming, labeled regional and low-confidence, with no severity color")

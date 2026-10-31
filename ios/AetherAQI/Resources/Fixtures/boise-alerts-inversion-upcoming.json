@@ -24,7 +24,7 @@
       "severity": "elevated",
       "source": "noaa_hrrr",
       "confidence": "valley",
-      "reason": "Winter inversion across 8 hours: 80 m is 2.4 K warmer than 2 m, wind is 1.1 m/s, and PM2.5 corrected AQI peaks at 143."
+      "reason": "Winter inversion across 8 hours: mixing height is 180 m, wind is 1.1 m/s, and PM2.5 corrected AQI peaks at 143."
     }
   ]
 }
