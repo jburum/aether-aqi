@@ -8,7 +8,7 @@ Project Air phase 2 alert rules, on top of the forecast store in [WEEK1.md](./WE
 
 Pure functions in `src/lib/v1/alerts.ts`: `smokeRule`, `inversionRule`, and `ozoneRule`. Each returns one decision: fired or not, `start` and `end`, severity, the source and confidence that drove it, and a short reason. A quiet rule has null start, end, severity, source, and confidence.
 
-The stored series is replayed as hourly forecast time, not as a delay after the first bad hour. Three hours at or above the line start an episode. Three quiet hours end it. A single hour the other way does not start a second episode and does not clear the one that is already going. A missing hour is a quiet hour. The latest issue wins when the same `validFor` is stored twice.
+The stored series is replayed as hourly forecast time, not as a delay after the first bad hour. Three hours at or above the line start an episode. Three quiet hours end it. A single hour the other way does not start a second episode and does not clear the one that is already going. A missing hour is a quiet hour. The latest issue wins for one `validFor` and one pollutant. An unlabeled `noaa_smoke` hour and a PM2.5 label share that pollutant, and `O3` and `ozone` share one pollutant.
 
 `start` is the first hour of the episode. `end` is exclusive: the first hour of the quiet run that cleared it, or one hour after the last hour still inside an open episode. Days 1-2 and days 3-7 do not share an episode. The cut is `classifyForecastLead`.
 
