@@ -1,10 +1,15 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 import { readAlerts, type AlertDecision, type AlertKind } from "./alerts.ts";
 import { requireOpenPlace, requireProAlerts } from "./entitlements.ts";
 import { V1RuleError } from "./errors.ts";
 import { parseTimeZone, parseUtcInstant } from "./phase2.ts";
-import { assertPayloadSeparated, buildPushPayload, type PushPayload, type PushSender } from "./push.ts";
+import {
+  assertPayloadSeparated,
+  buildPushPayload,
+  type PushPayload,
+  type PushSender,
+} from "./push.ts";
 import { requireId } from "./rules.ts";
 import type {
   Confidence,
@@ -18,9 +23,13 @@ import type {
 /**
  * One Pro push per new alert episode for one saved place.
  * The episode row is claimed before the send, so overlapping calls cannot both deliver it.
+ * A claim still open after CLAIM_STALE_MS is taken back and sent with the same idempotency key.
  * Quiet hours are a follow-up: this does not hold a push for the local night.
  * There is no scheduler and no APNs client. The sender must be the test sender.
  */
+
+/** Database-clock age after which an open claim can be taken back. */
+export const CLAIM_STALE_MS = 120_000;
 
 export interface AlertPushAttempt {
   id: string;
@@ -39,9 +48,14 @@ export interface AlertPushResult {
   failed: AlertPushAttempt[];
   /**
    * Episodes this call did not send.
-   * The row was already sent, or another caller holds the claim.
+   * The row was already sent, or another caller holds a fresh claim.
    */
   skipped: number;
+}
+
+/** Test seam. `stopAfterClaim` leaves the episode claimed and does not send. */
+export interface AlertPushControl {
+  stopAfterClaim?: boolean;
 }
 
 interface PlaceRow {
@@ -74,6 +88,18 @@ interface OfficialRow {
 
 interface AttemptRow {
   id: string;
+}
+
+interface ClaimRow {
+  id: string;
+  idempotency_key: string;
+  claim_token: string;
+}
+
+interface OpenClaim {
+  id: string;
+  idempotencyKey: string;
+  claimToken: string;
 }
 
 function iso(value: string | Date): string {
@@ -195,6 +221,27 @@ async function loadOfficial(
   };
 }
 
+/** sha256 hex of the episode. Stored once. A retry or a reclaim keeps this value. */
+function episodeIdempotencyKey(
+  userId: string,
+  placeId: string,
+  kind: AlertKind,
+  episodeStart: string,
+): string {
+  return createHash("sha256")
+    .update(`aether-aqi.alert-episode\0${userId}\0${placeId}\0${kind}\0${episodeStart}`)
+    .digest("hex");
+}
+
+function openClaim(row: ClaimRow | undefined): OpenClaim | null {
+  if (!row?.id || !row.idempotency_key || !row.claim_token) return null;
+  return {
+    id: row.id,
+    idempotencyKey: row.idempotency_key,
+    claimToken: row.claim_token,
+  };
+}
+
 /** Fast path for a finished send. The claim below is what stops a second send. */
 async function alreadySent(
   sql: Queryable,
@@ -213,9 +260,9 @@ async function alreadySent(
 
 /**
  * Claim the episode before anyone sends.
- * The insert wins only when the row is new. A finished failure has `error_text`
- * set; one update clears it and takes the retry. `error_text` stays null only
- * while the claim is held, so a second caller cannot send the same episode.
+ * The insert wins only when the row is new. A finished failure is retried at once.
+ * An open claim is retried only after CLAIM_STALE_MS. The idempotency key stays
+ * the one written on the first insert, so a reclaim cannot double-deliver.
  */
 async function claimEpisode(
   sql: Queryable,
@@ -227,14 +274,14 @@ async function claimEpisode(
     forecastId: string;
     payload: PushPayload;
   },
-): Promise<string | null> {
-  const inserted = await sql.query<AttemptRow>(
+): Promise<OpenClaim | null> {
+  const inserted = await sql.query<ClaimRow>(
     `insert into alert_push
        (id, user_id, place_id, kind, episode_start, forecast_id, payload, status,
-        sender, provider_id, error_text)
-     values ($1, $2, $3, $4, $5, $6, $7::jsonb, 'failed', 'test', null, null)
+        sender, provider_id, error_text, idempotency_key, claimed_at, claim_token)
+     values ($1, $2, $3, $4, $5, $6, $7::jsonb, 'claimed', 'test', null, null, $8, now(), $9)
      on conflict (user_id, place_id, kind, episode_start) do nothing
-     returning id`,
+     returning id, idempotency_key, claim_token`,
     [
       randomUUID(),
       input.userId,
@@ -243,14 +290,20 @@ async function claimEpisode(
       input.episodeStart,
       input.forecastId,
       JSON.stringify(input.payload),
+      episodeIdempotencyKey(input.userId, input.placeId, input.kind, input.episodeStart),
+      randomUUID(),
     ],
   );
-  if (inserted[0]?.id) return inserted[0].id;
+  const created = openClaim(inserted[0]);
+  if (created) return created;
 
-  const retried = await sql.query<AttemptRow>(
+  const retried = await sql.query<ClaimRow>(
     `update alert_push
         set forecast_id = $5,
             payload = $6::jsonb,
+            status = 'claimed',
+            claimed_at = now(),
+            claim_token = $7,
             provider_id = null,
             error_text = null,
             updated_at = now()
@@ -258,9 +311,14 @@ async function claimEpisode(
         and place_id = $2
         and kind = $3
         and episode_start = $4
-        and status = 'failed'
-        and error_text is not null
-      returning id`,
+        and (
+          status = 'failed'
+          or (
+            status = 'claimed'
+            and claimed_at <= now() - ($8::int * interval '1 millisecond')
+          )
+        )
+      returning id, idempotency_key, claim_token`,
     [
       input.userId,
       input.placeId,
@@ -268,23 +326,45 @@ async function claimEpisode(
       input.episodeStart,
       input.forecastId,
       JSON.stringify(input.payload),
+      randomUUID(),
+      CLAIM_STALE_MS,
     ],
   );
-  return retried[0]?.id ?? null;
+  return openClaim(retried[0]);
 }
 
-async function markSent(sql: Queryable, id: string, providerId: string): Promise<void> {
+function sendClaimed(
+  sender: PushSender,
+  payload: PushPayload,
+  idempotencyKey: string,
+): ReturnType<PushSender["send"]> {
+  const send = sender.send as (
+    this: PushSender,
+    payload: PushPayload,
+    idempotencyKey: string,
+  ) => ReturnType<PushSender["send"]>;
+  return send.call(sender, payload, idempotencyKey);
+}
+
+async function markSent(
+  sql: Queryable,
+  id: string,
+  providerId: string,
+  claimToken: string,
+): Promise<void> {
   const rows = await sql.query<AttemptRow>(
     `update alert_push
         set status = 'sent',
             provider_id = $2,
             error_text = null,
+            claimed_at = null,
+            claim_token = null,
             updated_at = now()
       where id = $1
-        and status = 'failed'
-        and error_text is null
+        and status = 'claimed'
+        and claim_token = $3
       returning id`,
-    [id, providerId],
+    [id, providerId, claimToken],
   );
   if (!rows[0]?.id) {
     throw new V1RuleError("alert_push_already_sent", "This alert episode was already sent.", 409);
@@ -292,18 +372,25 @@ async function markSent(sql: Queryable, id: string, providerId: string): Promise
 }
 
 /** Write the send error so a later run can claim the same row again. */
-async function releaseClaim(sql: Queryable, id: string, errorText: string): Promise<void> {
+async function releaseClaim(
+  sql: Queryable,
+  id: string,
+  claimToken: string,
+  errorText: string,
+): Promise<void> {
   const rows = await sql.query<AttemptRow>(
     `update alert_push
         set status = 'failed',
             provider_id = null,
             error_text = $2,
+            claimed_at = null,
+            claim_token = null,
             updated_at = now()
       where id = $1
-        and status = 'failed'
-        and error_text is null
+        and status = 'claimed'
+        and claim_token = $3
       returning id`,
-    [id, errorText],
+    [id, errorText, claimToken],
   );
   if (!rows[0]?.id) {
     throw new V1RuleError("alert_push_already_sent", "This alert episode was already sent.", 409);
@@ -314,7 +401,8 @@ async function releaseClaim(sql: Queryable, id: string, errorText: string): Prom
  * Read the place's alert episodes and send one test push for each new one.
  * `now` is the Pro clock. It defaults to the call time, not `asOf`.
  * Free and a locked place throw `NotEntitledError` and write nothing.
- * A send runs only after this call inserts the episode or takes a failed row.
+ * A send runs only after this call inserts the episode or takes a failed or stale claim.
+ * `control.stopAfterClaim` leaves that claim open and does not send.
  */
 export async function pushAlertEpisodes(
   sql: Queryable,
@@ -323,6 +411,7 @@ export async function pushAlertEpisodes(
   timeZone: string,
   sender: PushSender,
   now: Date = new Date(),
+  control?: AlertPushControl,
 ): Promise<AlertPushResult> {
   const asOfIso = parseUtcInstant(asOf, "asOf");
   const zone = parseTimeZone(timeZone);
@@ -367,7 +456,7 @@ export async function pushAlertEpisodes(
       official,
     });
     assertPayloadSeparated(payload);
-    const attemptId = await claimEpisode(sql, {
+    const claim = await claimEpisode(sql, {
       userId: place.user_id,
       placeId: place.id,
       kind: alert.kind,
@@ -375,22 +464,29 @@ export async function pushAlertEpisodes(
       forecastId: peak.id,
       payload,
     });
-    if (!attemptId) {
+    if (!claim) {
       skipped += 1;
       continue;
     }
+    if (control?.stopAfterClaim) {
+      throw new V1RuleError(
+        "alert_push_claim_open",
+        "The alert episode claim was left open before send.",
+        409,
+      );
+    }
     let result: Awaited<ReturnType<PushSender["send"]>>;
     try {
-      result = await sender.send(payload);
+      result = await sendClaimed(sender, payload, claim.idempotencyKey);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "";
-      await releaseClaim(sql, attemptId, failText(message));
+      await releaseClaim(sql, claim.id, claim.claimToken, failText(message));
       throw error;
     }
-    if (result.ok) await markSent(sql, attemptId, result.providerId);
-    else await releaseClaim(sql, attemptId, failText(result.error));
+    if (result.ok) await markSent(sql, claim.id, result.providerId, claim.claimToken);
+    else await releaseClaim(sql, claim.id, claim.claimToken, failText(result.error));
     const attempt: AlertPushAttempt = {
-      id: attemptId,
+      id: claim.id,
       kind: alert.kind,
       episodeStart: alert.start,
       status: result.ok ? "sent" : "failed",
