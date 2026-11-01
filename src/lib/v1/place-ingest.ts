@@ -181,34 +181,40 @@ async function storeOfficial(
   return { officialAqi: kept.officialAqi, official: oneWrite(kept.outcome) };
 }
 
+/** Decoded cycle. Forecast rows are not written here. */
+export interface LoadedPlaceCycle {
+  hrrr: ModelCell;
+  aqm: ModelCell;
+  lambert: PlaceIngestResult["lambert"];
+  /** Rows `forecastBodiesFromHours` would hand the store. The 48/49 cut is already applied. */
+  forecasts: ValidForecast[];
+  aqfError: string | null;
+  unavailableHours: number[];
+}
+
 /**
- * One saved place and one cycle. Grid rejection happens before any request.
- * Smoke is the Lambert cell nearest the saved latitude and longitude.
- * NOAA calls and the AirNow call, when it leaves, are written to the phase-4 ledger.
- * Over the AirNow hour, or a missing key, skips AirNow and does not call it.
- * A failed AQM reply still stores the smoke hours already decoded, sets `aqfError`, and still calls AirNow.
- * Hours 73 through the forecast horizon are listed on `unavailableHours` and are not stored.
+ * NOAA smoke and AQM for one coordinate. Grid rejection happens before any request.
+ * `ledger` is the phase-4 store. Omit it and the fetches do not write.
+ * Hours 73 through the forecast horizon are listed and are not turned into rows.
  */
-export async function ingestPlaceCycle(
-  sql: Queryable,
-  userId: string,
-  input: { placeId: string; cycleUtc: string; fetchImpl: typeof fetch },
-): Promise<PlaceIngestResult> {
+export async function loadPlaceCycle(input: {
+  name: string;
+  latitude: number;
+  longitude: number;
+  placeId: string;
+  cycleUtc: string;
+  fetchImpl: typeof fetch;
+  ledger?: Queryable;
+}): Promise<LoadedPlaceCycle> {
   const cycleUtc = canonicalCycle(input.cycleUtc);
-  const rows = await sql.query<{ name: string; latitude: number; longitude: number }>(
-    "select name, latitude, longitude from saved_place where id = $1 and user_id = $2",
-    [input.placeId, userId],
-  );
-  const place = rows[0];
-  if (!place) throw new V1RuleError("place_not_found", "Saved place not found.", 404);
-  const cells = cellsForPlace(place.name, place.latitude, place.longitude);
-  const latitude = Number(place.latitude);
-  const longitude = Number(place.longitude);
+  const cells = cellsForPlace(input.name, input.latitude, input.longitude);
+  const latitude = Number(input.latitude);
+  const longitude = Number(input.longitude);
   const unavailableHours = unavailableForecastHours();
   const smoke: ModelHour[] = [];
   let lambert: PlaceIngestResult["lambert"] = null;
   for (let lead = 0; lead <= SMOKE_HOUR_END; lead += 1) {
-    const message = await fetchHrrrSmokeField(cycleUtc, lead, input.fetchImpl, sql);
+    const message = await fetchHrrrSmokeField(cycleUtc, lead, input.fetchImpl, input.ledger);
     if (!message) continue;
     const point = readLambertPoint(message, latitude, longitude);
     if (!point) continue;
@@ -235,7 +241,7 @@ export async function ingestPlaceCycle(
   let aqfError: string | null = null;
   try {
     const decoded: ModelHour[] = [];
-    const messages = await fetchAqmPm25Messages(cycleUtc, input.fetchImpl, sql);
+    const messages = await fetchAqmPm25Messages(cycleUtc, input.fetchImpl, input.ledger);
     for (const { lead, message } of messages) {
       if (lead < AQM_HOUR_START || lead > AQM_HOUR_END) {
         throw new V1RuleError("noaa_aqf_parse", "AQM message is outside hours 49 through 72.");
@@ -262,43 +268,80 @@ export async function ingestPlaceCycle(
   } catch (err) {
     aqfError = err instanceof V1RuleError ? err.code : "noaa_fetch_failed";
   }
-  const forecasts = await storeForecasts(
-    sql,
-    userId,
-    forecastBodiesFromHours({
+  return {
+    hrrr: cells.hrrr,
+    aqm: cells.aqm,
+    lambert,
+    forecasts: forecastBodiesFromHours({
       placeId: input.placeId,
       issuedAt: cycleUtc,
       smoke,
       aqf,
     }),
+    aqfError,
+    unavailableHours,
+  };
+}
+
+/**
+ * One saved place and one cycle. Grid rejection happens before any request.
+ * Smoke is the Lambert cell nearest the saved latitude and longitude.
+ * NOAA calls and the AirNow call, when it leaves, are written to the phase-4 ledger.
+ * Over the AirNow hour, or a missing key, skips AirNow and does not call it.
+ * A failed AQM reply still stores the smoke hours already decoded, sets `aqfError`, and still calls AirNow.
+ * Hours 73 through the forecast horizon are listed on `unavailableHours` and are not stored.
+ */
+export async function ingestPlaceCycle(
+  sql: Queryable,
+  userId: string,
+  input: { placeId: string; cycleUtc: string; fetchImpl: typeof fetch },
+): Promise<PlaceIngestResult> {
+  const cycleUtc = canonicalCycle(input.cycleUtc);
+  const rows = await sql.query<{ name: string; latitude: number; longitude: number }>(
+    "select name, latitude, longitude from saved_place where id = $1 and user_id = $2",
+    [input.placeId, userId],
   );
+  const place = rows[0];
+  if (!place) throw new V1RuleError("place_not_found", "Saved place not found.", 404);
+  const latitude = Number(place.latitude);
+  const longitude = Number(place.longitude);
+  const loaded = await loadPlaceCycle({
+    name: place.name,
+    latitude,
+    longitude,
+    placeId: input.placeId,
+    cycleUtc,
+    fetchImpl: input.fetchImpl,
+    ledger: sql,
+  });
+  const forecasts = await storeForecasts(sql, userId, loaded.forecasts);
   const airnow = await fetchAirNowObservation({ latitude, longitude }, input.fetchImpl, sql);
   if (!airnow.ok) {
     return {
       placeId: input.placeId,
-      hrrr: cells.hrrr,
-      aqm: cells.aqm,
-      lambert,
+      hrrr: loaded.hrrr,
+      aqm: loaded.aqm,
+      lambert: loaded.lambert,
       ...forecasts,
       officialAqi: null,
       official: emptyCounts(),
-      aqfError,
+      aqfError: loaded.aqfError,
       airnowError: airnow.code,
-      unavailableHours,
+      unavailableHours: loaded.unavailableHours,
     };
   }
   const official = await storeOfficial(sql, userId, input.placeId, airnow.reading);
   return {
     placeId: input.placeId,
-    hrrr: cells.hrrr,
-    aqm: cells.aqm,
-    lambert,
+    hrrr: loaded.hrrr,
+    aqm: loaded.aqm,
+    lambert: loaded.lambert,
     ...forecasts,
     officialAqi: official.officialAqi,
     official: official.official,
-    aqfError,
+    aqfError: loaded.aqfError,
     airnowError: null,
-    unavailableHours,
+    unavailableHours: loaded.unavailableHours,
   };
 }
 
