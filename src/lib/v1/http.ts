@@ -219,6 +219,7 @@ async function route(request: Request, url: URL, rest: string[], deps: V1Deps): 
         forecastsUnchanged: place.forecastsUnchanged,
         officialAqi: place.officialAqi,
         officialStatus: place.officialStatus,
+        aqfError: place.aqfError,
         airnowError: place.airnowError,
       })),
     });

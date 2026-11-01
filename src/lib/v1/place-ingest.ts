@@ -37,6 +37,8 @@ export interface PlaceIngestResult {
   lambert: { i: number; j: number; value: number } | null;
   forecastsStored: number;
   forecastsUnchanged: number;
+  /** AQF fetch or parse code. Null when that reply was read. */
+  aqfError: string | null;
   officialAqi: number | null;
   officialStatus: "stored" | "unchanged" | "skipped";
   airnowError: string | null;
@@ -191,6 +193,7 @@ async function storeOfficial(
  * Smoke is the Lambert cell nearest the saved latitude and longitude.
  * NOAA calls and the AirNow call, when it leaves, are written to the phase-4 ledger.
  * Over the AirNow hour, or a missing key, skips AirNow and does not call it.
+ * A failed AQF reply still stores the smoke hours already decoded, sets `aqfError`, and still calls AirNow.
  */
 export async function ingestPlaceCycle(
   sql: Queryable,
@@ -232,17 +235,24 @@ export async function ingestPlaceCycle(
     if (tenths == null) continue;
     smoke.push({ hour: lead, pm25Tenths: tenths, regionalLowAqi: null });
   }
-  const aqfAscii = await fetchNoaaAscii(
-    aqfAsciiUrl({
-      cycleUtc,
-      latIndex: cells.aqm.latIndex,
-      lonIndex: cells.aqm.lonIndex,
-      hourStart: AQF_HOUR_START,
-      hourEnd: AQF_HOUR_END,
-    }),
-    input.fetchImpl,
-    sql,
-  );
+  let aqf: ModelHour[] = [];
+  let aqfError: string | null = null;
+  try {
+    const aqfAscii = await fetchNoaaAscii(
+      aqfAsciiUrl({
+        cycleUtc,
+        latIndex: cells.aqm.latIndex,
+        lonIndex: cells.aqm.lonIndex,
+        hourStart: AQF_HOUR_START,
+        hourEnd: AQF_HOUR_END,
+      }),
+      input.fetchImpl,
+      sql,
+    );
+    aqf = parseNoaaAqf(aqfAscii);
+  } catch (err) {
+    aqfError = err instanceof V1RuleError ? err.code : "noaa_fetch_failed";
+  }
   const forecasts = await storeForecasts(
     sql,
     userId,
@@ -250,7 +260,7 @@ export async function ingestPlaceCycle(
       placeId: input.placeId,
       issuedAt: cycleUtc,
       smoke,
-      aqf: parseNoaaAqf(aqfAscii),
+      aqf,
     }),
   );
   const airnow = await fetchAirNowObservation({ latitude, longitude }, input.fetchImpl, sql);
@@ -263,6 +273,7 @@ export async function ingestPlaceCycle(
       ...forecasts,
       officialAqi: null,
       officialStatus: "skipped",
+      aqfError,
       airnowError: airnow.code,
     };
   }
@@ -275,6 +286,7 @@ export async function ingestPlaceCycle(
     ...forecasts,
     officialAqi: official.officialAqi,
     officialStatus: official.officialStatus,
+    aqfError,
     airnowError: null,
   };
 }
