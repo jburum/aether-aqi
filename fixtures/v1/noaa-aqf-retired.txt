@@ -1,0 +1,3 @@
+NOTICE: Service Change Notice 25-81
+NOMADS OpenDAP for the air quality model (dods/aqm) retired on 23 February 2026.
+The ASCII pm25sfc extract is no longer published from this URL.

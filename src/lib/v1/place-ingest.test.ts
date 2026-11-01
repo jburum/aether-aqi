@@ -279,6 +279,7 @@ describe("v1 place ingest", { concurrency: 1 }, () => {
       assert.equal(stored.forecastsUnchanged, 0);
       assert.equal(stored.officialStatus, "stored");
       assert.equal(stored.officialAqi, 48);
+      assert.equal(stored.aqfError, null);
       assert.equal(stored.airnowError, null);
       const smokeUrls = fake.urls.filter((url) => url.includes("noaa-hrrr-bdp-pds"));
       assert.equal(
@@ -339,6 +340,69 @@ describe("v1 place ingest", { concurrency: 1 }, () => {
       assert.equal(dumped.includes(KEY), false);
       assert.equal(dumped.includes("nomads"), false);
       assert.equal(dumped.includes("43.615"), false);
+    } finally {
+      if (previous === undefined) delete process.env.AIRNOW_API_KEY;
+      else process.env.AIRNOW_API_KEY = previous;
+    }
+  });
+
+  it("stores decoded smoke and calls AirNow when AQF returns a retirement notice", async () => {
+    const previous = process.env.AIRNOW_API_KEY;
+    process.env.AIRNOW_API_KEY = KEY;
+    const sql = await openDb();
+    const place = await addSavedPlace(sql, "user-a", SAMPLE_PLACE);
+    const fake = fakeFetch({
+      smoke: readFixture("noaa-hrrr-smoke.ascii"),
+      aqf: readFixture("noaa-aqf-retired.txt"),
+      airnow: readFixture("airnow-current.json"),
+    });
+    try {
+      const response = await handleV1(
+        new Request("http://localhost/api/v1/ingest/run", {
+          method: "POST",
+          body: JSON.stringify({ cycleUtc: CYCLE }),
+        }),
+        { sql, userId: "user-a", sender: new TestPushSender(), fetchImpl: fake.fetchImpl },
+      );
+      assert.equal(response.status, 200);
+      const body = (await response.json()) as {
+        places: {
+          placeId: string;
+          aqfError: string | null;
+          forecastsStored: number;
+          forecastsUnchanged: number;
+          officialStatus: string;
+          officialAqi: number | null;
+          airnowError: string | null;
+        }[];
+      };
+      const stored = body.places[0];
+      assert.equal(stored?.placeId, place.id);
+      assert.equal(stored?.aqfError, "noaa_aqf_parse");
+      assert.equal(stored?.forecastsStored, 3);
+      assert.equal(stored?.forecastsUnchanged, 0);
+      assert.equal(stored?.officialStatus, "stored");
+      assert.equal(stored?.officialAqi, 48);
+      assert.equal(stored?.airnowError, null);
+      assert.equal(fake.urls.some((url) => url.includes("pm25sfc")), true);
+      assert.equal(fake.urls.at(-1)?.includes("airnowapi.org"), true);
+      const rows = await sql.query<{
+        source: string;
+        valid_for: string | Date;
+        corrected_aqi: number;
+      }>("select source, valid_for, corrected_aqi from forecast_issued order by valid_for, source");
+      assert.deepEqual(
+        rows.map((row) => ({
+          source: row.source,
+          lead: leadHours(CYCLE, row.valid_for),
+          corrected_aqi: row.corrected_aqi,
+        })),
+        [
+          { source: "noaa_smoke", lead: 0, corrected_aqi: 27 },
+          { source: "noaa_smoke", lead: 24, corrected_aqi: 63 },
+          { source: "noaa_smoke", lead: 48, corrected_aqi: 155 },
+        ],
+      );
     } finally {
       if (previous === undefined) delete process.env.AIRNOW_API_KEY;
       else process.env.AIRNOW_API_KEY = previous;
@@ -641,9 +705,12 @@ describe("v1 place ingest", { concurrency: 1 }, () => {
           placeId: string;
           hrrr: { latIndex: number; lonIndex: number };
           officialAqi: number;
+          aqfError: string | null;
         }[];
       };
       assert.equal(body.cycleUtc, CYCLE);
+      assert.equal(body.places[0]?.aqfError, null);
+      assert.equal(body.places[1]?.aqfError, null);
       assert.deepEqual(
         body.places.map((place) => place.placeId),
         [boise.id, mccall.id],

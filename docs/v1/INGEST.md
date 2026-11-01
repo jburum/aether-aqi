@@ -39,9 +39,9 @@ For each saved place of the signed-in user:
 
 1. Resolve both cells. If any saved place is outside either grid, the run stops before any request. Earlier places are not fetched.
 2. HRRR-Smoke `MASSDEN` at 8 m, one object per lead hour from 0 through 48: `hrrr.tCCz.wrfsfcfHH.grib2` on `noaa-hrrr-bdp-pds`. The run reads the `.idx`, then `Range` for that message. A 404 skips the hour. The field is template 5.3 (complex packing, order-2 spatial differencing) on the Lambert grid.
-3. AQM `pm25sfc` for lead hours 49 through 168, including 168.
+3. AQM `pm25sfc` for lead hours 49 through 168, including 168. A failed fetch, or a body that does not parse, does not drop the smoke hours already decoded and does not skip step 5. A retirement notice is `noaa_aqf_parse`. `aqfError` is that code. No air-quality row is written from the failed body.
 4. `forecastBodiesFromExtracts`, then `issueForecast`. A smoke value after 48 hours is not stored. An air-quality value at or before 48 hours is not stored. On the recorded fixtures, hour 48 smoke is corrected 155, hour 49 is the air quality forecast at 56, and hour 96 is regional low confidence at 80. The air-quality cell at hour 48 is not stored.
-5. AirNow current observation for the place, through `fetchAirNowObservation`.
+5. AirNow current observation for the place, through `fetchAirNowObservation`. This still runs when step 3 failed.
 
 Another user's places are not read and not written.
 
@@ -73,7 +73,7 @@ PurpleAir is not a client on this path. There is no PurpleAir host, key, or call
 
 The body is optional. `{}` and an empty body use the latest cycle. `cycleUtc` must be one of the four UTC hours. A bad cycle is 400 `noaa_cycle` or `invalid_time`, and nothing is fetched. GET is 405 `method_not_allowed`. A place outside the grid is 400 `outside_model_coverage`.
 
-The 200 body is `cycleUtc` and `places`. Each place has `placeId`, `hrrr`, `aqm`, `forecastsStored`, `forecastsUnchanged`, `officialAqi`, `officialStatus` (`stored`, `unchanged`, or `skipped`), and `airnowError`. `officialAqi` is null when this run did not take an official number. A skipped AirNow call does not delete an official row already stored.
+The 200 body is `cycleUtc` and `places`. Each place has `placeId`, `hrrr`, `aqm`, `forecastsStored`, `forecastsUnchanged`, `officialAqi`, `officialStatus` (`stored`, `unchanged`, or `skipped`), `aqfError`, and `airnowError`. `aqfError` is null when the air quality reply was read. `officialAqi` is null when this run did not take an official number. A skipped AirNow call does not delete an official row already stored. An AQF failure does not delete smoke rows stored on that same run.
 
 ## Checks
 
@@ -83,6 +83,6 @@ npm run lint
 npm run typecheck
 ```
 
-`npm test` stays on PGLite. It does not need `DATABASE_URL`. It does not call NOAA or AirNow. `src/lib/v1/grid.test.ts` covers Boise, McCall, and Tamarack, the halfway split, and points outside the grids. `src/lib/v1/place-ingest.test.ts` covers the 48-hour cut, the AWS index fixture `fixtures/v1/noaa-hrrr-smoke-f00.grib2`, the recorded 2026-10-31 18Z MASSDEN message `fixtures/v1/noaa-hrrr-massden-8m.grib2`, a re-ingest that does not change the forecast or the official number, two overlapping runs that collide on `official_hour_unique`, the missing AirNow key, and the hour at 500.
+`npm test` stays on PGLite. It does not need `DATABASE_URL`. It does not call NOAA or AirNow. `src/lib/v1/grid.test.ts` covers Boise, McCall, and Tamarack, the halfway split, and points outside the grids. `src/lib/v1/place-ingest.test.ts` covers the 48-hour cut, the AWS index fixture `fixtures/v1/noaa-hrrr-smoke-f00.grib2`, the recorded 2026-10-31 18Z MASSDEN message `fixtures/v1/noaa-hrrr-massden-8m.grib2`, a re-ingest that does not change the forecast or the official number, two overlapping runs that collide on `official_hour_unique`, the missing AirNow key, the hour at 500, and a retirement-notice AQF body (`fixtures/v1/noaa-aqf-retired.txt`) that still stores smoke and still calls AirNow.
 
 Dex reviews this head. Only Clint merges.
