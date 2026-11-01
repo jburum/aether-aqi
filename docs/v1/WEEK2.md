@@ -22,7 +22,7 @@ Project Air phase 1 from the locked SharedBrain `v1-plan.md`. This branch adds i
 - PurpleAir spend is not approved. There is no PurpleAir host, key, or client.
 - NOAA URLs are keyless. AQF stays on `https://nomads.ncep.noaa.gov`. HRRR smoke stays on `https://noaa-hrrr-bdp-pds.s3.amazonaws.com` with no query string. A credential query parameter is rejected.
 - HRRR-Smoke: `hrrr.YYYYMMDD/conus/hrrr.tCCz.wrfsfcfHH.grib2` and its `.idx`. The range is the `MASSDEN:8 m above ground` message. Hours 0 through 48.
-- Air quality model: `/dods/aqm/aqmYYYYMMDD/aqm.tCCz.ascii?pm25sfc[hour:hour][lat:lat][lon:lon]`.
+- Air quality model: `https://nomads.ncep.noaa.gov/pub/data/nccf/com/aqm/prod/aqm.YYYYMMDD/CC/aqm.tCCz.ave_1hr_pm25_bc.227.grib2` (`CC` is 06 or 12), and `ave_1hr_pm25.227.grib2` in that same directory when the bias-corrected object is missing. The retired OpenDAP path `/dods/aqm/...ascii` is not a live source.
 - OpenDAP on NOMADS was turned off on 23 February 2026 (Service Change Notice 25-81). Place ingest does not call `/dods/hrrr/`. The recorded ASCII fixture is still what `parseHrrrSmoke` reads. Inversion ingest uses the GRIB filter; see [ALERTS.md](./ALERTS.md).
 - Cycles used here are 00, 06, 12, and 18 UTC. The recorded ASCII is one grid cell, so both indexes on the data line are 0. Turning a latitude and longitude into those indexes is not in this branch.
 - `NaN`, `-9999`, and values on the order of `1e20` are missing cells. They are not stored as AQI 500.
@@ -34,7 +34,7 @@ Project Air phase 1 from the locked SharedBrain `v1-plan.md`. This branch adds i
 
 ## What's left
 
-- Resolving a saved place to HRRR and AQM grid indexes, then running the live fetch on a schedule. This branch does not add launchd or a Mini job.
+- Running the live fetch on a schedule. A saved place already resolves to the nearest Lambert point. This branch does not add launchd or a Mini job.
 - NowCast. Hours in the air-quality file that have no model cell and no explicit regional integer stay unstored.
 - The AirNow key itself. The name is documented. The value is not in the repo.
 - PurpleAir, until spend is approved.
