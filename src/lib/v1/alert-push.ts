@@ -1,0 +1,349 @@
+import { randomUUID } from "node:crypto";
+
+import { readAlerts, type AlertDecision, type AlertKind } from "./alerts.ts";
+import { requireOpenPlace, requireProAlerts } from "./entitlements.ts";
+import { V1RuleError } from "./errors.ts";
+import { parseTimeZone, parseUtcInstant } from "./phase2.ts";
+import { assertPayloadSeparated, buildPushPayload, type PushPayload, type PushSender } from "./push.ts";
+import { requireId } from "./rules.ts";
+import type {
+  Confidence,
+  ForecastSource,
+  Horizon,
+  OfficialBeside,
+  Queryable,
+  SpatialScale,
+} from "./types.ts";
+
+/**
+ * One Pro push per new alert episode for one saved place.
+ * Quiet hours are a follow-up: this does not hold a push for the local night.
+ * There is no scheduler and no APNs client. The sender must be the test sender.
+ */
+
+export interface AlertPushAttempt {
+  id: string;
+  kind: AlertKind;
+  episodeStart: string;
+  status: "sent" | "failed";
+  providerId: string | null;
+  payload: PushPayload;
+}
+
+export interface AlertPushResult {
+  placeId: string;
+  userId: string;
+  asOf: string;
+  sent: AlertPushAttempt[];
+  failed: AlertPushAttempt[];
+  /** Episodes already marked sent. A rerun does not send them again. */
+  skipped: number;
+}
+
+interface PlaceRow {
+  id: string;
+  user_id: string;
+  name: string;
+}
+
+interface PeakRow {
+  id: string;
+  source: ForecastSource;
+  issued_at: string | Date;
+  valid_for: string | Date;
+  horizon: Horizon;
+  spatial_scale: SpatialScale;
+  confidence: Confidence;
+  corrected_aqi: number;
+  pollutant: string | null;
+}
+
+interface OfficialRow {
+  id: string;
+  official_aqi: number;
+  official_raw: string;
+  preliminary: boolean;
+  attribution: string;
+  source: string;
+  observed_at: string | Date;
+}
+
+interface AttemptRow {
+  id: string;
+}
+
+function iso(value: string | Date): string {
+  if (value instanceof Date) return value.toISOString();
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new V1RuleError("invalid_time", "Stored timestamp is unreadable.");
+  }
+  return parsed.toISOString();
+}
+
+/** Same pollutant key as `pollutantKey` in alerts.ts. */
+function pollutantKey(source: string, pollutant: string | null): string {
+  const label = (pollutant ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (label === "pm25" || (label === "" && source === "noaa_smoke")) return "pm25";
+  if (label === "o3" || label === "ozone") return "o3";
+  return label;
+}
+
+function episodePollutant(kind: AlertKind): "pm25" | "o3" {
+  return kind === "ozone" ? "o3" : "pm25";
+}
+
+function failText(error: string): string {
+  const text = error.trim() || "push send failed";
+  return text.length <= 500 ? text : text.slice(0, 500);
+}
+
+async function loadPlace(sql: Queryable, placeId: string): Promise<PlaceRow | null> {
+  const rows = await sql.query<PlaceRow>(
+    `select id, user_id, name from saved_place where id = $1`,
+    [placeId],
+  );
+  return rows[0] ?? null;
+}
+
+/**
+ * Latest corrected hour inside the episode.
+ * A null published peak means AirNow owns the episode. The official number
+ * is not a candidate here. The stored corrected AQI is.
+ */
+async function loadPeakForecast(
+  sql: Queryable,
+  userId: string,
+  placeId: string,
+  alert: AlertDecision,
+): Promise<PeakRow> {
+  if (!alert.start || !alert.end) {
+    throw new V1RuleError("invalid_time", "A fired alert episode needs a start and an end.");
+  }
+  const rows = await sql.query<PeakRow>(
+    `select id, source, issued_at, valid_for, horizon, spatial_scale, confidence,
+            corrected_aqi, pollutant
+       from forecast_issued
+      where place_id = $1 and user_id = $2
+        and valid_for >= $3 and valid_for < $4
+      order by valid_for asc, issued_at desc, created_at desc, id desc`,
+    [placeId, userId, alert.start, alert.end],
+  );
+  const wanted = episodePollutant(alert.kind);
+  const latest = new Map<string, PeakRow>();
+  for (const row of rows) {
+    const key = `${iso(row.valid_for)}\0${pollutantKey(row.source, row.pollutant)}`;
+    if (!latest.has(key)) latest.set(key, row);
+  }
+  const candidates = [...latest.values()].filter(
+    (row) => pollutantKey(row.source, row.pollutant) === wanted,
+  );
+  const ranked =
+    alert.peakAqi == null
+      ? candidates.sort((a, b) => {
+          const byAqi = Number(b.corrected_aqi) - Number(a.corrected_aqi);
+          if (byAqi !== 0) return byAqi;
+          return Date.parse(iso(a.valid_for)) - Date.parse(iso(b.valid_for));
+        })
+      : candidates
+          .filter((row) => Number(row.corrected_aqi) === alert.peakAqi)
+          .sort((a, b) => Date.parse(iso(a.valid_for)) - Date.parse(iso(b.valid_for)));
+  const peak = ranked[0];
+  if (!peak) {
+    throw new V1RuleError(
+      "alert_forecast_missing",
+      "The alert episode has no stored corrected forecast hour to quote.",
+    );
+  }
+  return peak;
+}
+
+async function loadOfficial(
+  sql: Queryable,
+  userId: string,
+  placeId: string,
+  asOf: string,
+): Promise<OfficialBeside | null> {
+  const rows = await sql.query<OfficialRow>(
+    `select id, official_aqi, official_raw, preliminary, attribution, source, observed_at
+       from official_reading
+      where place_id = $1 and user_id = $2 and observed_at <= $3
+      order by observed_at desc, created_at desc, id desc
+      limit 1`,
+    [placeId, userId, asOf],
+  );
+  const row = rows[0];
+  if (!row) return null;
+  if (row.preliminary !== true || row.source !== "airnow") {
+    throw new V1RuleError(
+      "official_not_preliminary",
+      "Stored official readings must stay preliminary AirNow rows.",
+    );
+  }
+  return {
+    id: row.id,
+    aqi: Number(row.official_aqi),
+    raw: row.official_raw,
+    preliminary: true,
+    attribution: row.attribution,
+    source: "airnow",
+    observedAt: iso(row.observed_at),
+  };
+}
+
+async function alreadySent(
+  sql: Queryable,
+  userId: string,
+  placeId: string,
+  kind: AlertKind,
+  episodeStart: string,
+): Promise<boolean> {
+  const rows = await sql.query<{ status: string }>(
+    `select status from alert_push
+      where user_id = $1 and place_id = $2 and kind = $3 and episode_start = $4`,
+    [userId, placeId, kind, episodeStart],
+  );
+  return rows[0]?.status === "sent";
+}
+
+async function recordAttempt(
+  sql: Queryable,
+  input: {
+    userId: string;
+    placeId: string;
+    kind: AlertKind;
+    episodeStart: string;
+    forecastId: string;
+    payload: PushPayload;
+    status: "sent" | "failed";
+    providerId: string | null;
+    errorText: string | null;
+  },
+): Promise<string> {
+  const rows = await sql.query<AttemptRow>(
+    `insert into alert_push
+       (id, user_id, place_id, kind, episode_start, forecast_id, payload, status,
+        sender, provider_id, error_text)
+     values ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, 'test', $9, $10)
+     on conflict (user_id, place_id, kind, episode_start)
+     do update set
+       forecast_id = excluded.forecast_id,
+       payload = excluded.payload,
+       status = excluded.status,
+       provider_id = excluded.provider_id,
+       error_text = excluded.error_text,
+       updated_at = now()
+     where alert_push.status = 'failed'
+     returning id`,
+    [
+      randomUUID(),
+      input.userId,
+      input.placeId,
+      input.kind,
+      input.episodeStart,
+      input.forecastId,
+      JSON.stringify(input.payload),
+      input.status,
+      input.providerId,
+      input.errorText,
+    ],
+  );
+  const id = rows[0]?.id;
+  if (!id) {
+    throw new V1RuleError("alert_push_already_sent", "This alert episode was already sent.", 409);
+  }
+  return id;
+}
+
+/**
+ * Read the place's alert episodes and send one test push for each new one.
+ * `now` is the Pro clock. It defaults to the call time, not `asOf`.
+ * Free and a locked place throw `NotEntitledError` and write nothing.
+ */
+export async function pushAlertEpisodes(
+  sql: Queryable,
+  placeId: string,
+  asOf: string,
+  timeZone: string,
+  sender: PushSender,
+  now: Date = new Date(),
+): Promise<AlertPushResult> {
+  const asOfIso = parseUtcInstant(asOf, "asOf");
+  const zone = parseTimeZone(timeZone);
+  const id = requireId(placeId, "placeId");
+  if (sender.name !== "test") {
+    throw new V1RuleError(
+      "push_sender_is_test_only",
+      "Alert delivery uses the test sender. There is no APNs key and no paid push vendor.",
+    );
+  }
+  const place = await loadPlace(sql, id);
+  if (!place) throw new V1RuleError("place_not_found", "Saved place not found.", 404);
+  await requireOpenPlace(sql, place.user_id, place.id, now);
+  await requireProAlerts(sql, place.user_id, now);
+
+  const body = await readAlerts(sql, place.user_id, place.id, asOfIso, zone);
+  const official = await loadOfficial(sql, place.user_id, place.id, asOfIso);
+  const sent: AlertPushAttempt[] = [];
+  const failed: AlertPushAttempt[] = [];
+  let skipped = 0;
+
+  for (const alert of body.alerts) {
+    if (!alert.fired || !alert.start) continue;
+    if (await alreadySent(sql, place.user_id, place.id, alert.kind, alert.start)) {
+      skipped += 1;
+      continue;
+    }
+    const peak = await loadPeakForecast(sql, place.user_id, place.id, alert);
+    const payload = buildPushPayload({
+      placeId: place.id,
+      placeName: place.name,
+      issuedAt: iso(peak.issued_at),
+      validFor: iso(peak.valid_for),
+      forecast: {
+        id: peak.id,
+        source: peak.source,
+        correctedAqi: Number(peak.corrected_aqi),
+        horizon: peak.horizon,
+        spatialScale: peak.spatial_scale,
+        confidence: peak.confidence,
+      },
+      official,
+    });
+    assertPayloadSeparated(payload);
+    const result = await sender.send(payload);
+    const status = result.ok ? "sent" : "failed";
+    const providerId = result.ok ? result.providerId : null;
+    const errorText = result.ok ? null : failText(result.error);
+    const attemptId = await recordAttempt(sql, {
+      userId: place.user_id,
+      placeId: place.id,
+      kind: alert.kind,
+      episodeStart: alert.start,
+      forecastId: peak.id,
+      payload,
+      status,
+      providerId,
+      errorText,
+    });
+    const attempt: AlertPushAttempt = {
+      id: attemptId,
+      kind: alert.kind,
+      episodeStart: alert.start,
+      status,
+      providerId,
+      payload,
+    };
+    if (result.ok) sent.push(attempt);
+    else failed.push(attempt);
+  }
+
+  return {
+    placeId: place.id,
+    userId: place.user_id,
+    asOf: asOfIso,
+    sent,
+    failed,
+    skipped,
+  };
+}
