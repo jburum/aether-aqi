@@ -1,4 +1,8 @@
-import { recordUpstreamCall } from "./monitoring.ts";
+import {
+  finishUpstreamCall,
+  logLedgerFailure,
+  reserveAirNowCall,
+} from "./monitoring.ts";
 import { AIRNOW_ATTRIBUTION } from "./rules.ts";
 import type { Queryable } from "./types.ts";
 
@@ -194,24 +198,31 @@ export function parseAirNowCurrent(text: string): AirNowClientResult {
   return { ok: true, reading: winner };
 }
 
-async function noteAirNowCall(
+async function settleAirNowCall(
   ledger: Queryable | undefined,
-  calledAt: Date,
+  reservationId: string | null,
   outcome: "ok" | "error",
 ): Promise<void> {
-  await recordUpstreamCall(ledger, {
-    source: "airnow",
-    endpointKind: "airnow_current",
-    calledAt,
-    outcome,
-    errorCode: outcome === "error" ? "airnow_fetch_failed" : null,
-  });
+  if (!ledger || reservationId == null) return;
+  try {
+    await finishUpstreamCall(
+      ledger,
+      reservationId,
+      outcome,
+      outcome === "error" ? "airnow_fetch_failed" : null,
+    );
+  } catch (err) {
+    logLedgerFailure(err);
+  }
 }
 
 /**
  * Calls AirNow only when `AIRNOW_API_KEY` is set. A missing key returns
  * `airnow_api_key_missing` and does not call `fetchImpl` or write a ledger row.
- * A call that does leave is counted when `ledger` is set. The key is not stored.
+ * When `ledger` is set, a slot in the open hour is reserved before the request.
+ * Request 501 returns `airnow_hourly_limit` and does not call out.
+ * A ledger write that throws is logged and does not leave this function.
+ * The key is not stored.
  */
 export async function fetchAirNowObservation(
   point: { latitude: number; longitude: number },
@@ -238,6 +249,24 @@ export async function fetchAirNowObservation(
   url.searchParams.set("distance", "25");
   url.searchParams.set("API_KEY", key);
   const calledAt = new Date();
+  let reservationId: string | null = null;
+  if (ledger) {
+    try {
+      reservationId = await reserveAirNowCall(ledger, calledAt);
+    } catch (err) {
+      logLedgerFailure(err);
+      return fail(
+        "airnow_ledger_failed",
+        "The AirNow ledger write failed. The client did not call out.",
+      );
+    }
+    if (reservationId == null) {
+      return fail(
+        "airnow_hourly_limit",
+        "AirNow is at 500 requests this hour. The client did not call out.",
+      );
+    }
+  }
   let response: Response;
   try {
     response = await fetchImpl(url.toString(), {
@@ -246,20 +275,20 @@ export async function fetchAirNowObservation(
       signal: AbortSignal.timeout(15_000),
     });
   } catch {
-    await noteAirNowCall(ledger, calledAt, "error");
+    await settleAirNowCall(ledger, reservationId, "error");
     return fail("airnow_fetch_failed", "The AirNow client could not complete the request.");
   }
   if (!response.ok) {
-    await noteAirNowCall(ledger, calledAt, "error");
+    await settleAirNowCall(ledger, reservationId, "error");
     return fail("airnow_fetch_failed", `AirNow responded ${response.status}.`);
   }
   let body: string;
   try {
     body = await response.text();
   } catch {
-    await noteAirNowCall(ledger, calledAt, "error");
+    await settleAirNowCall(ledger, reservationId, "error");
     return fail("airnow_fetch_failed", "The AirNow client could not complete the request.");
   }
-  await noteAirNowCall(ledger, calledAt, "ok");
+  await settleAirNowCall(ledger, reservationId, "ok");
   return parseAirNowCurrent(body);
 }

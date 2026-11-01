@@ -27,6 +27,7 @@ import {
   purpleAirPoints,
   readMonitoringStatus,
   recordUpstreamCall,
+  reserveAirNowCall,
   sourceHealth,
   type MonitoringStatus,
 } from "./monitoring.ts";
@@ -606,6 +607,186 @@ describe("v1 phase 4 monitoring", { concurrency: 1 }, () => {
       ]);
       const dumped = JSON.stringify(rows);
       assert.equal(dumped.includes(KEY), false);
+    } finally {
+      if (previous === undefined) delete process.env.AIRNOW_API_KEY;
+      else process.env.AIRNOW_API_KEY = previous;
+    }
+  });
+
+  it("refuses the 501st AirNow request in the hour", async () => {
+    const sql = await openDb();
+    const previous = process.env.AIRNOW_API_KEY;
+    process.env.AIRNOW_API_KEY = KEY;
+    const body = JSON.stringify([
+      {
+        DateObserved: "2026-10-30",
+        HourObserved: 12,
+        LocalTimeZone: "MST",
+        AQI: 48,
+        ParameterName: "PM2.5",
+      },
+    ]);
+    let calls = 0;
+    const fetchImpl: typeof fetch = async (url) => {
+      calls += 1;
+      assert.equal(new URL(String(url)).searchParams.get("API_KEY"), KEY);
+      return new Response(body, { status: 200 });
+    };
+    try {
+      for (let i = 0; i < AIRNOW_HOURLY_LIMIT; i += 1) {
+        const allowed = await fetchAirNowObservation(
+          { latitude: 43.6151, longitude: -116.2029 },
+          fetchImpl,
+          sql,
+        );
+        assert.equal(allowed.ok, true, `request ${i + 1}`);
+      }
+      const refused = await fetchAirNowObservation(
+        { latitude: 43.6151, longitude: -116.2029 },
+        fetchImpl,
+        sql,
+      );
+      assert.equal(calls, AIRNOW_HOURLY_LIMIT);
+      assert.equal(refused.ok, false);
+      if (!refused.ok) {
+        assert.equal(refused.code, "airnow_hourly_limit");
+        assert.equal(refused.message.includes(KEY), false);
+      }
+      const rows = await sql.query<{ outcome: string; error_code: string | null }>(
+        "select outcome, error_code from upstream_call",
+      );
+      assert.equal(rows.length, AIRNOW_HOURLY_LIMIT);
+      assert.equal(
+        rows.every((row) => row.outcome === "ok" && row.error_code == null),
+        true,
+      );
+      assert.equal(JSON.stringify(rows).includes(KEY), false);
+    } finally {
+      if (previous === undefined) delete process.env.AIRNOW_API_KEY;
+      else process.env.AIRNOW_API_KEY = previous;
+    }
+  });
+
+  it("keeps an AirNow call from exactly one hour ago outside the reserved hour", async () => {
+    const sql = await openDb();
+    const now = new Date("2026-10-30T20:00:00.000Z");
+    const exactlyOneHourAgo = new Date(now.getTime() - HOUR_MS);
+    for (let i = 0; i < AIRNOW_HOURLY_LIMIT; i += 1) {
+      await recordUpstreamCall(sql, {
+        source: "airnow",
+        endpointKind: "airnow_current",
+        calledAt: exactlyOneHourAgo,
+        outcome: "ok",
+      });
+    }
+    for (let i = 0; i < 3; i += 1) {
+      await recordUpstreamCall(sql, {
+        source: "noaa",
+        endpointKind: "hrrr_smoke_ascii",
+        calledAt: now,
+        outcome: "ok",
+      });
+    }
+    const reserved = await reserveAirNowCall(sql, now);
+    assert.equal(typeof reserved, "string");
+    const stillInside = await reserveAirNowCall(sql, new Date(now.getTime() - 1));
+    assert.equal(stillInside, null);
+  });
+
+  it("persists NOAA when the AirNow ledger write is rejected", async () => {
+    const previous = process.env.AIRNOW_API_KEY;
+    process.env.AIRNOW_API_KEY = KEY;
+    const smoke = readFileSync(join(root, "fixtures/v1/noaa-hrrr-smoke.ascii"), "utf8");
+    const observation = JSON.stringify([
+      {
+        DateObserved: "2026-10-30",
+        HourObserved: 12,
+        LocalTimeZone: "MST",
+        AQI: 48,
+        ParameterName: "PM2.5",
+      },
+    ]);
+    const samples = [
+      { location: "indoor" as const, pmCf1: 80, relativeHumidity: 30 },
+      { location: "outdoor" as const, pmCf1: null, relativeHumidity: 30 },
+    ];
+    try {
+      const blocked = await openDb();
+      const blockedPlace = await addPlace(blocked, "owner-alpha-441", "Monitor Ridge");
+      let blockedCalls = 0;
+      const blockedFetch: typeof fetch = async () => {
+        blockedCalls += 1;
+        return new Response(observation, { status: 200 });
+      };
+      const rejectLedger: Queryable = {
+        query: async <T>(text: string, params: unknown[] = []) => {
+          if (/upstream_call|airnow_reserve/i.test(text)) {
+            throw new Error("ledger insert rejected");
+          }
+          return blocked.query<T>(text, params);
+        },
+      };
+      const dropped = await fallbackSensorDropout(rejectLedger, "owner-alpha-441", {
+        samples,
+        placeId: blockedPlace.id,
+        issuedAt: CYCLE,
+        smokeAscii: smoke,
+        point: { latitude: 43.6151, longitude: -116.2029 },
+        fetchImpl: blockedFetch,
+      });
+      assert.equal(blockedCalls, 0);
+      assert.equal(dropped.airnowError, "airnow_ledger_failed");
+      assert.equal(dropped.officialAqi, null);
+      assert.equal(dropped.forecast.source, "noaa_smoke");
+      const blockedForecasts = await blocked.query<{ n: number }>(
+        "select count(*)::int as n from forecast_issued",
+      );
+      assert.equal(blockedForecasts[0]?.n, 1);
+      const blockedOfficial = await blocked.query<{ n: number }>(
+        "select count(*)::int as n from official_reading",
+      );
+      assert.equal(blockedOfficial[0]?.n, 0);
+
+      const partial = await openDb();
+      const partialPlace = await addPlace(partial, "owner-alpha-441", "Monitor Ridge");
+      let partialCalls = 0;
+      const partialFetch: typeof fetch = async () => {
+        partialCalls += 1;
+        return new Response(observation, { status: 200 });
+      };
+      const rejectUpdate: Queryable = {
+        query: async <T>(text: string, params: unknown[] = []) => {
+          if (/update\s+upstream_call/i.test(text)) {
+            throw new Error("ledger update rejected");
+          }
+          return partial.query<T>(text, params);
+        },
+      };
+      const kept = await fallbackSensorDropout(rejectUpdate, "owner-alpha-441", {
+        samples,
+        placeId: partialPlace.id,
+        issuedAt: CYCLE,
+        smokeAscii: smoke,
+        point: { latitude: 43.6151, longitude: -116.2029 },
+        fetchImpl: partialFetch,
+      });
+      assert.equal(partialCalls, 1);
+      assert.equal(kept.airnowError, null);
+      assert.equal(kept.officialAqi, 48);
+      assert.equal(kept.forecast.source, "noaa_smoke");
+      const forecasts = await partial.query<{ n: number }>(
+        "select count(*)::int as n from forecast_issued",
+      );
+      assert.equal(forecasts[0]?.n, 1);
+      const official = await partial.query<{ official_aqi: number }>(
+        "select official_aqi from official_reading",
+      );
+      assert.equal(official[0]?.official_aqi, 48);
+      const ledger = await partial.query<{ outcome: string; error_code: string | null }>(
+        "select outcome, error_code from upstream_call",
+      );
+      assert.deepEqual(ledger, [{ outcome: "error", error_code: "airnow_reserved" }]);
+      assert.equal(JSON.stringify(ledger).includes(KEY), false);
     } finally {
       if (previous === undefined) delete process.env.AIRNOW_API_KEY;
       else process.env.AIRNOW_API_KEY = previous;

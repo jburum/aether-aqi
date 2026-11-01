@@ -173,6 +173,56 @@ export async function recordUpstreamCall(
   );
 }
 
+/**
+ * Claims one AirNow slot in the open hour, or returns null when the hour is
+ * already at `AIRNOW_HOURLY_LIMIT`. The claim is one statement: the lock, the
+ * count, and the insert commit together. A refused hour inserts nothing.
+ * The row starts as `error` / `airnow_reserved` until `finishUpstreamCall`.
+ */
+export async function reserveAirNowCall(
+  sql: Queryable,
+  calledAt: Date,
+): Promise<string | null> {
+  if (!(calledAt instanceof Date) || Number.isNaN(calledAt.getTime())) {
+    throw new V1RuleError("invalid_time", "calledAt must be a UTC timestamp.");
+  }
+  const id = randomUUID();
+  const rows = await sql.query<{ reserved_id: string | null }>(
+    "select airnow_reserve($1, $2, $3) as reserved_id",
+    [id, calledAt.toISOString(), AIRNOW_HOURLY_LIMIT],
+  );
+  const reserved = rows[0]?.reserved_id;
+  if (typeof reserved !== "string" || reserved.length === 0) return null;
+  return reserved;
+}
+
+/** Writes the attempt's real outcome over the in-flight reservation. */
+export async function finishUpstreamCall(
+  sql: Queryable,
+  id: string,
+  outcome: "ok" | "error",
+  errorCode: string | null,
+): Promise<void> {
+  if (outcome === "error") {
+    if (errorCode == null || !/^[a-z0-9_]{1,64}$/.test(errorCode)) {
+      throw new V1RuleError("upstream_call", "Upstream error codes are short tokens.");
+    }
+  } else if (errorCode) {
+    throw new V1RuleError("upstream_call", "An ok upstream call has no error code.");
+  }
+  await sql.query("update upstream_call set outcome = $2, error_code = $3 where id = $1", [
+    id,
+    outcome,
+    errorCode,
+  ]);
+}
+
+/** Ledger failures are logged and swallowed. The driver text has no key and no URL. */
+export function logLedgerFailure(err: unknown): void {
+  const message = err instanceof Error ? err.message : "ledger write failed";
+  console.error("[monitoring] upstream ledger write failed:", message);
+}
+
 export interface AirNowBudget {
   requestsInLastHour: number;
   limitPerHour: typeof AIRNOW_HOURLY_LIMIT;
@@ -184,7 +234,10 @@ function inWindow(calledAtMs: number, nowMs: number, windowMs: number): boolean 
   return calledAtMs > nowMs - windowMs && calledAtMs <= nowMs;
 }
 
-/** Counts every outbound AirNow attempt in the open-closed hour ending at `nowMs`. */
+/**
+ * Counts every outbound AirNow attempt in the open-closed hour ending at `nowMs`.
+ * This reports the hour. `reserveAirNowCall` is what refuses request 501.
+ */
 export function airNowBudget(
   calls: readonly { calledAtMs: number }[],
   nowMs: number,
