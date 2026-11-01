@@ -24,6 +24,8 @@ import type {
  * One Pro push per new alert episode for one saved place.
  * The episode row is claimed before the send, so overlapping calls cannot both deliver it.
  * A claim still open after CLAIM_STALE_MS is taken back and sent with the same idempotency key.
+ * The sender delivers at most once per key (`PushSender` in push.ts), so a run that crashed after
+ * its send but before `markSent` does not cause a second delivery when the claim is reclaimed.
  * Quiet hours are a follow-up: this does not hold a push for the local night.
  * There is no scheduler and no APNs client. The sender must be the test sender.
  */
@@ -333,19 +335,6 @@ async function claimEpisode(
   return openClaim(retried[0]);
 }
 
-function sendClaimed(
-  sender: PushSender,
-  payload: PushPayload,
-  idempotencyKey: string,
-): ReturnType<PushSender["send"]> {
-  const send = sender.send as (
-    this: PushSender,
-    payload: PushPayload,
-    idempotencyKey: string,
-  ) => ReturnType<PushSender["send"]>;
-  return send.call(sender, payload, idempotencyKey);
-}
-
 async function markSent(
   sql: Queryable,
   id: string,
@@ -477,7 +466,7 @@ export async function pushAlertEpisodes(
     }
     let result: Awaited<ReturnType<PushSender["send"]>>;
     try {
-      result = await sendClaimed(sender, payload, claim.idempotencyKey);
+      result = await sender.send(payload, claim.idempotencyKey);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "";
       await releaseClaim(sql, claim.id, claim.claimToken, failText(message));

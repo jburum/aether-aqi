@@ -120,6 +120,16 @@ The dedup record is `alert_push` (`migrations/0009_v1_alert_push.sql`). `push_de
 
 The sender has to be the test sender. Anything else is `push_sender_is_test_only`. There is no APNs key, no `push_device` read, and no environment variable.
 
+### Sender idempotency contract
+
+`PushSender.send(payload, idempotencyKey)` takes the key as a required argument (`src/lib/v1/push.ts`). A sender delivers at most once per key. A repeat of a key that already delivered returns `ok: true` with the first delivery's `providerId` and does not reach the device again. A failed send does not use up its key, so a retry can still deliver. The claim alone cannot give this: a run can crash after the device got the push and before `markSent`, and the reclaim after `CLAIM_STALE_MS` then sends the same episode again. Only the sender can recognise that second send. `TestPushSender` keeps the keys it delivered in memory. `alert-push.test.ts` checks a crash after send followed by a reclaim with the shipped sender, and expects exactly one delivery. `POST /api/v1/push/deliver` passes each `push_delivery` row id as its key, so every manual delivery stays its own push.
+
+A future APNs sender has to keep the same contract, and APNs alone does not provide it:
+- APNs has no provider-side dedupe. The sender needs its own durable record per key and device, written before the HTTP/2 request goes out. It returns the stored `apns-id` instead of sending again. An in-memory map is not enough across processes or restarts.
+- Set `apns-collapse-id` to the idempotency key. The sha256 hex is 64 bytes, which is the APNs limit. Then a duplicate that still gets through replaces the first notification on the device instead of stacking beside it. That is a backstop for display, not a delivery guarantee. Without the durable record, the device still wakes twice and the duplicate is still counted.
+- `apns-id` can be a UUID derived from the key, so the provider id stays the same across a resend.
+- The key is per episode. A sender that delivers to several devices dedupes by key plus device.
+
 The payload is `buildPushPayload` for the corrected hour that owns the episode peak. The title and body stay that forecast envelope. The episode kind is stored on `alert_push.kind`. `forecast.correctedAqi` is that stored forecast. `official` is the latest AirNow reading at or before `asOf`, or null. The two numbers stay on those two objects. `assertPayloadSeparated` runs inside `buildPushPayload`. An AirNow-owned episode has `peakAqi` null. The push still quotes the stored corrected hour, not the official number. An inversion push quotes the PM2.5 forecast hour, because the push envelope has no HRRR source.
 
 ## Checks

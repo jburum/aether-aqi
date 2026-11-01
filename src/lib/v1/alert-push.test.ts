@@ -172,18 +172,15 @@ async function ageOpenClaim(sql: Queryable): Promise<void> {
   );
 }
 
-function keyedSender(hold = false): {
+/**
+ * The shipped TestPushSender, with the run "crashing" after the device got the push: the send
+ * reaches `inner` (which delivers it), then the caller stalls before `markSent` until released.
+ */
+function crashAfterSend(inner: TestPushSender): {
   sender: PushSender;
   entered: Promise<void>;
   release: () => void;
-  calls: () => number;
-  deliveries: () => number;
-  keys: () => string[];
-  seed: (key: string, providerId: string) => void;
 } {
-  const delivered = new Map<string, string>();
-  const seen: string[] = [];
-  let calls = 0;
   let opened = false;
   let releaseHold!: () => void;
   let markEntered!: () => void;
@@ -198,33 +195,15 @@ function keyedSender(hold = false): {
     };
   });
   const sender: PushSender = {
-    name: "test",
-    async send(payload: PushPayload, idempotencyKey?: string) {
-      calls += 1;
-      assert.equal(typeof idempotencyKey, "string");
-      assert.ok(idempotencyKey);
-      seen.push(idempotencyKey);
-      assertPayloadSeparated(payload);
-      const existing = delivered.get(idempotencyKey);
-      if (existing) return { ok: true, providerId: existing };
-      const providerId = `test-${delivered.size + 1}`;
-      delivered.set(idempotencyKey, providerId);
+    name: inner.name,
+    async send(payload: PushPayload, idempotencyKey: string) {
+      const result = await inner.send(payload, idempotencyKey);
       markEntered();
-      if (hold) await gate;
-      return { ok: true, providerId };
+      await gate;
+      return result;
     },
   };
-  return {
-    sender,
-    entered,
-    release: () => releaseHold(),
-    calls: () => calls,
-    deliveries: () => delivered.size,
-    keys: () => seen,
-    seed(key: string, providerId: string) {
-      delivered.set(key, providerId);
-    },
-  };
+  return { sender, entered, release: () => releaseHold() };
 }
 
 function holdSend(): {
@@ -690,14 +669,12 @@ describe("v1 alert episode pushes", { concurrency: 1 }, () => {
     assert.equal(still[0]?.idempotency_key, claimed.idempotency_key);
 
     await ageOpenClaim(sql);
-    const sender = keyedSender();
-    const recovered = await pushAlertEpisodes(sql, place.id, AS_OF, ZONE, sender.sender, NOW);
+    const sender = new TestPushSender();
+    const recovered = await pushAlertEpisodes(sql, place.id, AS_OF, ZONE, sender, NOW);
     assert.equal(recovered.sent.length, 1);
     assert.equal(recovered.failed.length, 0);
     assert.equal(recovered.skipped, 0);
-    assert.equal(sender.deliveries(), 1);
-    assert.equal(sender.calls(), 1);
-    assert.deepEqual(sender.keys(), [claimed.idempotency_key]);
+    assert.equal(sender.sent.length, 1);
     const won = recovered.sent[0];
     assert.ok(won);
     assert.equal(won.id, claimed.id);
@@ -712,14 +689,66 @@ describe("v1 alert episode pushes", { concurrency: 1 }, () => {
     assert.equal(stored[0]?.claim_token, null);
     assert.equal(stored[0]?.claimed_at, null);
     assert.equal(stored[0]?.error_text, null);
+    const resend = await sender.send(won.payload, claimed.idempotency_key);
+    assert.deepEqual(resend, { ok: true, providerId: won.providerId });
+    assert.equal(sender.sent.length, 1);
 
-    const again = await pushAlertEpisodes(sql, place.id, AS_OF, ZONE, sender.sender, NOW);
+    const again = await pushAlertEpisodes(sql, place.id, AS_OF, ZONE, sender, NOW);
     assert.equal(again.sent.length, 0);
     assert.equal(again.skipped, 1);
-    assert.equal(sender.deliveries(), 1);
-    assert.equal(sender.calls(), 1);
+    assert.equal(sender.sent.length, 1);
     assert.equal(await countOf(sql, "alert_push"), 1);
     assert.equal(await countOf(sql, "push_delivery"), 0);
+  });
+
+  it("delivers once when a run crashed after its send and the claim is reclaimed", async () => {
+    const sql = await openDb();
+    await grantPro(sql, "user-a");
+    const place = await boise(sql, "user-a");
+    await seedSmoke(sql, "user-a", place.id, 148, { hours: 4 });
+    await seedOfficial(sql, "user-a", place.id, 200);
+    const sender = new TestPushSender();
+
+    // The crashed run: it claimed the episode and its send reached the device, then it died
+    // before markSent, so the row is still an open claim.
+    await assert.rejects(
+      () => pushAlertEpisodes(sql, place.id, AS_OF, ZONE, sender, NOW, { stopAfterClaim: true }),
+      (err: unknown) => {
+        assert.equal(err instanceof Error && "code" in err && err.code, "alert_push_claim_open");
+        return true;
+      },
+    );
+    const open = await sql.query<OpenPushRow & { payload: PushPayload }>(
+      `select id, status, error_text, provider_id, idempotency_key, claim_token, claimed_at, payload
+         from alert_push`,
+    );
+    assert.equal(open.length, 1);
+    const claimed = open[0];
+    assert.ok(claimed);
+    assert.equal(claimed.status, "claimed");
+    assert.equal(claimed.idempotency_key.length, 64);
+    const crashed = await sender.send(claimed.payload, claimed.idempotency_key);
+    assert.deepEqual(crashed, { ok: true, providerId: "test-1" });
+    assert.equal(sender.sent.length, 1);
+
+    await ageOpenClaim(sql);
+    const recovered = await pushAlertEpisodes(sql, place.id, AS_OF, ZONE, sender, NOW);
+    assert.equal(recovered.sent.length, 1);
+    assert.equal(recovered.failed.length, 0);
+    assert.equal(recovered.sent[0]?.id, claimed.id);
+    assert.equal(recovered.sent[0]?.providerId, "test-1");
+    numbersStayApart(recovered.sent[0]?.payload as PushPayload, 148, 200);
+    assert.equal(sender.sent.length, 1, "the reclaim must not deliver a second time");
+    const stored = await openPush(sql);
+    assert.equal(stored.length, 1);
+    assert.equal(stored[0]?.status, "sent");
+    assert.equal(stored[0]?.provider_id, "test-1");
+    assert.equal(stored[0]?.idempotency_key, claimed.idempotency_key);
+
+    const again = await pushAlertEpisodes(sql, place.id, AS_OF, ZONE, sender, NOW);
+    assert.equal(again.sent.length, 0);
+    assert.equal(again.skipped, 1);
+    assert.equal(sender.sent.length, 1);
   });
 
   it("reclaims with the same key when the first send already went out", async () => {
@@ -728,15 +757,15 @@ describe("v1 alert episode pushes", { concurrency: 1 }, () => {
     const place = await boise(sql, "user-a");
     await seedSmoke(sql, "user-a", place.id, 148, { hours: 4 });
     await seedOfficial(sql, "user-a", place.id, 200);
-    const gate = keyedSender(true);
+    const shipped = new TestPushSender();
+    const gate = crashAfterSend(shipped);
     const first = pushAlertEpisodes(sql, place.id, AS_OF, ZONE, gate.sender, NOW);
     const firstSettled = first.then(
       (value) => ({ ok: true as const, value }),
       (error: unknown) => ({ ok: false as const, error }),
     );
     await waitForSend(gate.entered);
-    assert.equal(gate.deliveries(), 1);
-    assert.equal(gate.calls(), 1);
+    assert.equal(shipped.sent.length, 1);
     const open = await openPush(sql);
     assert.equal(open[0]?.status, "claimed");
     assert.equal(open[0]?.error_text, null);
@@ -744,12 +773,10 @@ describe("v1 alert episode pushes", { concurrency: 1 }, () => {
     assert.equal(key?.length, 64);
 
     await ageOpenClaim(sql);
-    const recovered = await pushAlertEpisodes(sql, place.id, AS_OF, ZONE, gate.sender, NOW);
+    const recovered = await pushAlertEpisodes(sql, place.id, AS_OF, ZONE, shipped, NOW);
     assert.equal(recovered.sent.length, 1);
     assert.equal(recovered.failed.length, 0);
-    assert.equal(gate.deliveries(), 1);
-    assert.equal(gate.calls(), 2);
-    assert.deepEqual(gate.keys(), [key, key]);
+    assert.equal(shipped.sent.length, 1);
     assert.equal(recovered.sent[0]?.providerId, "test-1");
     numbersStayApart(recovered.sent[0]?.payload as PushPayload, 148, 200);
     const stored = await openPush(sql);
@@ -771,13 +798,63 @@ describe("v1 alert episode pushes", { concurrency: 1 }, () => {
     assert.equal(after.length, 1);
     assert.equal(after[0]?.status, "sent");
     assert.equal(after[0]?.provider_id, "test-1");
-    assert.equal(gate.deliveries(), 1);
+    assert.equal(shipped.sent.length, 1);
 
     const later = new TestPushSender();
     const third = await pushAlertEpisodes(sql, place.id, AS_OF, ZONE, later, NOW);
     assert.equal(third.sent.length, 0);
     assert.equal(third.skipped, 1);
     assert.equal(later.sent.length, 0);
-    assert.equal(gate.deliveries(), 1);
+    assert.equal(shipped.sent.length, 1);
+  });
+});
+
+describe("TestPushSender idempotency", () => {
+  const payload = (): PushPayload => ({
+    kind: "aqi.forecast",
+    placeId: "place-1",
+    placeName: "Boise",
+    title: "Boise forecast",
+    body: "Corrected forecast 148 (NOAA smoke, valley scale). No official AirNow reading for this hour.",
+    issuedAt: ISSUED_AT,
+    validFor: FIRST,
+    forecast: {
+      id: "f-1",
+      source: "noaa_smoke",
+      correctedAqi: 148,
+      horizon: "day_1_2_valley",
+      spatialScale: "valley",
+      confidence: "valley",
+    },
+    official: null,
+  });
+
+  it("delivers once per key and returns the first delivery id for a repeat", async () => {
+    const sender = new TestPushSender();
+    assert.deepEqual(await sender.send(payload(), "key-a"), { ok: true, providerId: "test-1" });
+    assert.deepEqual(await sender.send(payload(), "key-a"), { ok: true, providerId: "test-1" });
+    assert.equal(sender.sent.length, 1);
+    assert.deepEqual(await sender.send(payload(), "key-b"), { ok: true, providerId: "test-2" });
+    assert.equal(sender.sent.length, 2);
+  });
+
+  it("does not use up a key on a failed send", async () => {
+    const sender = new TestPushSender();
+    sender.failNext = true;
+    assert.deepEqual(await sender.send(payload(), "key-a"), { ok: false, error: "test sender refused" });
+    assert.deepEqual(await sender.send(payload(), "key-a"), { ok: true, providerId: "test-1" });
+    assert.equal(sender.sent.length, 1);
+  });
+
+  it("refuses a send without a key", async () => {
+    const sender = new TestPushSender();
+    await assert.rejects(
+      () => sender.send(payload(), " "),
+      (err: unknown) => {
+        assert.equal(err instanceof Error && "code" in err && err.code, "push_key_missing");
+        return true;
+      },
+    );
+    assert.equal(sender.sent.length, 0);
   });
 });
