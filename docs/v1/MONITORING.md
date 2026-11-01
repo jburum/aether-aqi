@@ -19,7 +19,9 @@ Project Air phase 4 from the locked plan: a call ledger, budget checks, and feed
 
 The table has no URL, key, user, or place. Field names used to price a PurpleAir attempt are not stored.
 
-`fetchNoaaAscii`, `fetchNoaaGrib`, and `fetchAirNowObservation` write a row when the caller passes the store. A URL that is refused before the request writes nothing. A missing `AIRNOW_API_KEY` writes nothing and does not call out. `fallbackSensorDropout` passes the store for a live AirNow call. `ingestRecordedNoaa`, `ingestRecordedAirNow`, and `ingestRecordedStability` do not call out, so they write no ledger row.
+`fetchNoaaAscii`, `fetchNoaaGrib`, and `fetchAirNowObservation` write a row when the caller passes the store. A URL that is refused before the request writes nothing. A missing `AIRNOW_API_KEY` writes nothing and does not call out. An AirNow hour that is already at 500 writes nothing and does not call out. `fallbackSensorDropout` passes the store for a live AirNow call. `ingestRecordedNoaa`, `ingestRecordedAirNow`, and `ingestRecordedStability` do not call out, so they write no ledger row.
+
+A ledger insert or update that throws is logged and does not leave `fetchAirNowObservation`. `fallbackSensorDropout` still stores the NOAA forecast. The log line is the driver text. It has no key and no URL.
 
 There is still no PurpleAir client. A PurpleAir ledger row exists only when a test, or a later caller, records one. Recording one does not open a socket.
 
@@ -28,6 +30,8 @@ There is still no PurpleAir client. A PurpleAir ledger row exists only when a te
 Pure functions in `src/lib/v1/monitoring.ts`.
 
 AirNow stays under 500 requests an hour. The window is `(asOf - 1 hour, asOf]`. A call exactly one hour old is outside it. Ok and error rows both count. Warn at 400, which is 80% of 500. 399 is `ok`, 400 through 499 is `warn`, 500 and up is `over`. NOAA rows do not count toward this hour.
+
+`airNowBudget` reports that hour. `reserveAirNowCall` enforces it. Before `fetchAirNowObservation` calls out, and only when a store was passed, one statement locks, counts AirNow rows in `(calledAt - 1 hour, calledAt]`, and inserts the attempt when the count is under 500. Request 501 returns `airnow_hourly_limit` and does not call `fetch`. The inserted row is `error` / `airnow_reserved` until the attempt finishes, then `ok` or `error` / `airnow_fetch_failed`. A crash leaves the reservation, and it still counts. A call with no store is not reserved and not counted. The dropout path always passes the store. A reservation that throws returns `airnow_ledger_failed` and does not call out.
 
 PurpleAir points follow the published points-per-field rule: add the point value of each requested field, then multiply by the number of rows returned. Rows are sensors on a sensor read, or history averages on a history read. A repeated field counts once.
 
