@@ -788,6 +788,7 @@ describe("v1 place ingest", { concurrency: 1 }, () => {
   // Public HRRR-Smoke, 2026-10-31 18Z f00, MASSDEN at 8 m.
   // noaa-hrrr-bdp-pds hrrr.20261031/conus/hrrr.t18z.wrfsfcf00.grib2
   // idx offsets 42413962:43135923. Ni is 1799, so the packed index is j * 1799 + i.
+  // Values are the ecCodes nearest-cell doubles (grib_power decimal scale).
   it("reads named Lambert points from the recorded HRRR MASSDEN message", async () => {
     const grib = readFileSync(join(root, "fixtures/v1/noaa-hrrr-massden-8m.grib2"));
     assert.equal(grib.byteLength, 721_961);
@@ -806,7 +807,7 @@ describe("v1 place ingest", { concurrency: 1 }, () => {
         i: 399,
         j: 770,
         index: 1_385_629,
-        value: 8.000000088467129e-11,
+        value: 8.00000008846713146464e-11,
         correctedAqi: 0,
       },
       {
@@ -817,7 +818,7 @@ describe("v1 place ingest", { concurrency: 1 }, () => {
         i: 411,
         j: 817,
         index: 1_470_194,
-        value: 6.240000008846712e-10,
+        value: 6.24000000884671439414e-10,
         correctedAqi: 3,
       },
       {
@@ -828,7 +829,7 @@ describe("v1 place ingest", { concurrency: 1 }, () => {
         i: 409,
         j: 808,
         index: 1_454_001,
-        value: 4.160000008846713e-10,
+        value: 4.16000000884671382205e-10,
         correctedAqi: 2,
       },
     ];
@@ -874,10 +875,7 @@ describe("v1 place ingest", { concurrency: 1 }, () => {
           expected.index,
           expected.name,
         );
-        assert.ok(
-          stored.lambert != null && Math.abs(stored.lambert.value - expected.value) < 1e-18,
-          expected.name,
-        );
+        assert.equal(stored.lambert?.value, expected.value, expected.name);
         const rows = await sql.query<{ corrected_aqi: number }>(
           "select corrected_aqi from forecast_issued where place_id = $1 and source = 'noaa_smoke'",
           [place.id],
