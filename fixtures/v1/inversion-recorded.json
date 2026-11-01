@@ -1,0 +1,4256 @@
+{
+  "timeZone": "America/Boise",
+  "place": {
+    "name": "Boise",
+    "latitude": 43.615,
+    "longitude": -116.202
+  },
+  "station": {
+    "aqsid": "160010017",
+    "name": "White Pine",
+    "area": "Boise",
+    "latitude": 43.577603,
+    "longitude": -116.178156,
+    "gmtOffsetHours": -7
+  },
+  "provenance": {
+    "retrievedAt": "2026-11-01T12:26:25Z",
+    "window": {
+      "from": "2025-12-01",
+      "through": "2026-02-28"
+    },
+    "note": "White Pine HourlyAQObs for 1 December 2025 through 28 February 2026, and the HRRR f00 analysis byte ranges for the three inversion days and two control days. No API key. Decoding the Boise cell and running inversionRule is the next run.",
+    "airnow": {
+      "host": "https://files.airnowtech.org",
+      "object": "airnow/YYYY/YYYYMMDD/HourlyAQObs_YYYYMMDDHH.dat",
+      "mirror": "https://s3-us-west-1.amazonaws.com/files.airnowtech.org/",
+      "clock": "ValidDate and ValidTime match the UTC hour in the file name. Local date is America/Boise, UTC-7 for this window.",
+      "columns": {
+        "AQSID": 0,
+        "SiteName": 1,
+        "Status": 2,
+        "Latitude": 4,
+        "Longitude": 5,
+        "GMTOffset": 7,
+        "ValidDate": 10,
+        "ValidTime": 11,
+        "ReportingArea_PipeDelimited": 13,
+        "PM25_AQI": 16,
+        "PM25": 22,
+        "PM25_Unit": 23
+      },
+      "value": "PM25 is the hourly concentration in UG/M3. PM25_AQI is the integer in that column, copied as reported. It is not recomputed from PM25."
+    },
+    "hrrr": {
+      "host": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com",
+      "object": "hrrr.YYYYMMDD/conus/hrrr.tHHz.wrfsfcf00.grib2",
+      "index": "The sibling .idx. start is the byte offset on that line. end is the next message offset.",
+      "lead": 0,
+      "ftime": "anl",
+      "localHours": [
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22
+      ],
+      "fields": {
+        "TMP": "2 m above ground",
+        "UGRD": "10 m above ground",
+        "VGRD": "10 m above ground",
+        "HPBL": "surface",
+        "MASSDEN": "8 m above ground"
+      },
+      "grid": "Each range is the full CONUS message. The Boise Lambert cell is not extracted in this file."
+    },
+    "screen": {
+      "localHours": [
+        7,
+        11,
+        15,
+        19
+      ],
+      "usgUgM3": 35.5,
+      "result": "No screened day reached 35.5 ug/m3. The highest were 1 January and 14 December at 30 ug/m3. The 15:00Z probe on 15 December sits outside the four screen hours, so that day's screen count is 5."
+    },
+    "selection": "13-15 January 2026 are the inversion days. 14 and 15 January are the only full days whose hourly PM2.5 crossed 35.5 ug/m3, at 37 and 38. 13 January is the buildup day before that pair, at 31 ug/m3. Reported PM25_AQI on those three peaks is 86, 94, and 98. The highest reported PM25_AQI on 14 January is also 94, on the following hour at 32 ug/m3. 17 December 2025 and 24 December 2025 are the control days. Hourly peaks are 7 ug/m3 (reported PM25_AQI 21 at that hour, 24 an hour later) and 3 ug/m3 (reported PM25_AQI 28). 16 February peaked at 7 ug/m3, with reported PM25_AQI 39, and was left out because 24 December's hourly peak was 3. 8 January peaked at 15 ug/m3 and was not used as a control."
+  },
+  "selection": {
+    "inversion": [
+      "2026-01-13",
+      "2026-01-14",
+      "2026-01-15"
+    ],
+    "control": [
+      "2025-12-17",
+      "2025-12-24"
+    ],
+    "run": [
+      "2026-01-11",
+      "2026-01-12",
+      "2026-01-13",
+      "2026-01-14",
+      "2026-01-15"
+    ]
+  },
+  "compared": [
+    {
+      "localDate": "2026-01-11",
+      "kept": "run, day before the buildup",
+      "screenMaxUgM3": 20.0,
+      "screenN": 4,
+      "fullDayMaxUgM3": 20.0,
+      "fullDayN": 24,
+      "peakUtc": "2026-01-12T02:00:00Z"
+    },
+    {
+      "localDate": "2026-01-12",
+      "kept": "run, day before the buildup",
+      "screenMaxUgM3": 15.0,
+      "screenN": 4,
+      "fullDayMaxUgM3": 16.0,
+      "fullDayN": 24,
+      "peakUtc": "2026-01-13T06:00:00Z"
+    },
+    {
+      "localDate": "2026-01-16",
+      "kept": "run, day after the peak",
+      "screenMaxUgM3": 12.0,
+      "screenN": 4,
+      "fullDayMaxUgM3": 27.0,
+      "fullDayN": 24,
+      "peakUtc": "2026-01-17T03:00:00Z"
+    },
+    {
+      "localDate": "2025-12-13",
+      "kept": "december rise, full-day peak under 35.5 ug/m3",
+      "screenMaxUgM3": 19.0,
+      "screenN": 4,
+      "fullDayMaxUgM3": 34.0,
+      "fullDayN": 24,
+      "peakUtc": "2025-12-14T05:00:00Z"
+    },
+    {
+      "localDate": "2025-12-14",
+      "kept": "december rise, full-day peak under 35.5 ug/m3",
+      "screenMaxUgM3": 30.0,
+      "screenN": 4,
+      "fullDayMaxUgM3": 30.0,
+      "fullDayN": 24,
+      "peakUtc": "2025-12-15T02:00:00Z"
+    },
+    {
+      "localDate": "2025-12-15",
+      "kept": "december rise, full-day peak under 35.5 ug/m3",
+      "screenMaxUgM3": 14.0,
+      "screenN": 5,
+      "fullDayMaxUgM3": 25.0,
+      "fullDayN": 24,
+      "peakUtc": "2025-12-15T07:00:00Z"
+    },
+    {
+      "localDate": "2026-01-08",
+      "kept": "dropped control stand-in, full-day peak 15 ug/m3",
+      "screenMaxUgM3": 3.0,
+      "screenN": 4,
+      "fullDayMaxUgM3": 15.0,
+      "fullDayN": 20,
+      "peakUtc": "2026-01-09T06:00:00Z"
+    },
+    {
+      "localDate": "2026-02-16",
+      "kept": "other clean candidate, not kept",
+      "screenMaxUgM3": 2.0,
+      "screenN": 4,
+      "fullDayMaxUgM3": 7.0,
+      "fullDayN": 22,
+      "peakUtc": "2026-02-16T09:00:00Z",
+      "reportedAqiAtPeak": 32,
+      "maxReportedAqi": 39,
+      "maxReportedAqiUtc": "2026-02-16T07:00:00Z"
+    }
+  ],
+  "days": [
+    {
+      "localDate": "2026-01-13",
+      "kind": "inversion",
+      "screen": {
+        "localHours": [
+          7,
+          11,
+          15,
+          19
+        ],
+        "n": 4,
+        "maxUgM3": 27.0,
+        "peakUtc": "2026-01-14T02:00:00Z"
+      },
+      "airnow": {
+        "n": 24,
+        "missingLocalHours": [],
+        "maxUgM3": 31.0,
+        "peakUtc": "2026-01-14T04:00:00Z",
+        "reportedAqiAtPeak": 86,
+        "maxReportedAqi": 86,
+        "maxReportedAqiUtc": "2026-01-14T04:00:00Z",
+        "hours": [
+          {
+            "utc": "2026-01-13T07:00:00Z",
+            "localHour": 0,
+            "ugM3": 10.0,
+            "reportedAqi": 57,
+            "url": "https://files.airnowtech.org/airnow/2026/20260113/HourlyAQObs_2026011307.dat"
+          },
+          {
+            "utc": "2026-01-13T08:00:00Z",
+            "localHour": 1,
+            "ugM3": 9.0,
+            "reportedAqi": 54,
+            "url": "https://files.airnowtech.org/airnow/2026/20260113/HourlyAQObs_2026011308.dat"
+          },
+          {
+            "utc": "2026-01-13T09:00:00Z",
+            "localHour": 2,
+            "ugM3": 9.0,
+            "reportedAqi": 52,
+            "url": "https://files.airnowtech.org/airnow/2026/20260113/HourlyAQObs_2026011309.dat"
+          },
+          {
+            "utc": "2026-01-13T10:00:00Z",
+            "localHour": 3,
+            "ugM3": 8.0,
+            "reportedAqi": 49,
+            "url": "https://files.airnowtech.org/airnow/2026/20260113/HourlyAQObs_2026011310.dat"
+          },
+          {
+            "utc": "2026-01-13T11:00:00Z",
+            "localHour": 4,
+            "ugM3": 10.0,
+            "reportedAqi": 52,
+            "url": "https://files.airnowtech.org/airnow/2026/20260113/HourlyAQObs_2026011311.dat"
+          },
+          {
+            "utc": "2026-01-13T12:00:00Z",
+            "localHour": 5,
+            "ugM3": 11.0,
+            "reportedAqi": 53,
+            "url": "https://files.airnowtech.org/airnow/2026/20260113/HourlyAQObs_2026011312.dat"
+          },
+          {
+            "utc": "2026-01-13T13:00:00Z",
+            "localHour": 6,
+            "ugM3": 9.0,
+            "reportedAqi": 52,
+            "url": "https://files.airnowtech.org/airnow/2026/20260113/HourlyAQObs_2026011313.dat"
+          },
+          {
+            "utc": "2026-01-13T14:00:00Z",
+            "localHour": 7,
+            "ugM3": 10.0,
+            "reportedAqi": 52,
+            "url": "https://files.airnowtech.org/airnow/2026/20260113/HourlyAQObs_2026011314.dat"
+          },
+          {
+            "utc": "2026-01-13T15:00:00Z",
+            "localHour": 8,
+            "ugM3": 10.0,
+            "reportedAqi": 52,
+            "url": "https://files.airnowtech.org/airnow/2026/20260113/HourlyAQObs_2026011315.dat"
+          },
+          {
+            "utc": "2026-01-13T16:00:00Z",
+            "localHour": 9,
+            "ugM3": 8.0,
+            "reportedAqi": 49,
+            "url": "https://files.airnowtech.org/airnow/2026/20260113/HourlyAQObs_2026011316.dat"
+          },
+          {
+            "utc": "2026-01-13T17:00:00Z",
+            "localHour": 10,
+            "ugM3": 11.0,
+            "reportedAqi": 52,
+            "url": "https://files.airnowtech.org/airnow/2026/20260113/HourlyAQObs_2026011317.dat"
+          },
+          {
+            "utc": "2026-01-13T18:00:00Z",
+            "localHour": 11,
+            "ugM3": 12.0,
+            "reportedAqi": 54,
+            "url": "https://files.airnowtech.org/airnow/2026/20260113/HourlyAQObs_2026011318.dat"
+          },
+          {
+            "utc": "2026-01-13T19:00:00Z",
+            "localHour": 12,
+            "ugM3": 11.0,
+            "reportedAqi": 54,
+            "url": "https://files.airnowtech.org/airnow/2026/20260113/HourlyAQObs_2026011319.dat"
+          },
+          {
+            "utc": "2026-01-13T20:00:00Z",
+            "localHour": 13,
+            "ugM3": 10.0,
+            "reportedAqi": 53,
+            "url": "https://files.airnowtech.org/airnow/2026/20260113/HourlyAQObs_2026011320.dat"
+          },
+          {
+            "utc": "2026-01-13T21:00:00Z",
+            "localHour": 14,
+            "ugM3": 15.0,
+            "reportedAqi": 58,
+            "url": "https://files.airnowtech.org/airnow/2026/20260113/HourlyAQObs_2026011321.dat"
+          },
+          {
+            "utc": "2026-01-13T22:00:00Z",
+            "localHour": 15,
+            "ugM3": 13.0,
+            "reportedAqi": 58,
+            "url": "https://files.airnowtech.org/airnow/2026/20260113/HourlyAQObs_2026011322.dat"
+          },
+          {
+            "utc": "2026-01-13T23:00:00Z",
+            "localHour": 16,
+            "ugM3": 11.0,
+            "reportedAqi": 56,
+            "url": "https://files.airnowtech.org/airnow/2026/20260113/HourlyAQObs_2026011323.dat"
+          },
+          {
+            "utc": "2026-01-14T00:00:00Z",
+            "localHour": 17,
+            "ugM3": 15.0,
+            "reportedAqi": 59,
+            "url": "https://files.airnowtech.org/airnow/2026/20260114/HourlyAQObs_2026011400.dat"
+          },
+          {
+            "utc": "2026-01-14T01:00:00Z",
+            "localHour": 18,
+            "ugM3": 24.0,
+            "reportedAqi": 69,
+            "url": "https://files.airnowtech.org/airnow/2026/20260114/HourlyAQObs_2026011401.dat"
+          },
+          {
+            "utc": "2026-01-14T02:00:00Z",
+            "localHour": 19,
+            "ugM3": 27.0,
+            "reportedAqi": 77,
+            "url": "https://files.airnowtech.org/airnow/2026/20260114/HourlyAQObs_2026011402.dat"
+          },
+          {
+            "utc": "2026-01-14T03:00:00Z",
+            "localHour": 20,
+            "ugM3": 26.0,
+            "reportedAqi": 80,
+            "url": "https://files.airnowtech.org/airnow/2026/20260114/HourlyAQObs_2026011403.dat"
+          },
+          {
+            "utc": "2026-01-14T04:00:00Z",
+            "localHour": 21,
+            "ugM3": 31.0,
+            "reportedAqi": 86,
+            "url": "https://files.airnowtech.org/airnow/2026/20260114/HourlyAQObs_2026011404.dat"
+          },
+          {
+            "utc": "2026-01-14T05:00:00Z",
+            "localHour": 22,
+            "ugM3": 21.0,
+            "reportedAqi": 79,
+            "url": "https://files.airnowtech.org/airnow/2026/20260114/HourlyAQObs_2026011405.dat"
+          },
+          {
+            "utc": "2026-01-14T06:00:00Z",
+            "localHour": 23,
+            "ugM3": 20.0,
+            "reportedAqi": 75,
+            "url": "https://files.airnowtech.org/airnow/2026/20260114/HourlyAQObs_2026011406.dat"
+          }
+        ]
+      },
+      "hrrr": [
+        {
+          "utc": "2026-01-13T12:00:00Z",
+          "localHour": 5,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260113/conus/hrrr.t12z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260113/conus/hrrr.t12z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 37293284,
+              "end": 38585697,
+              "template": 3,
+              "idx": "71:37293284:d=2026011312:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 45313969,
+              "end": 47695584,
+              "template": 0,
+              "idx": "77:45313969:d=2026011312:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 47695584,
+              "end": 50077199,
+              "template": 0,
+              "idx": "78:47695584:d=2026011312:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 110425418,
+              "end": 113228384,
+              "template": 3,
+              "idx": "150:110425418:d=2026011312:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 44346564,
+              "end": 45313969,
+              "template": 3,
+              "idx": "76:44346564:d=2026011312:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        },
+        {
+          "utc": "2026-01-13T13:00:00Z",
+          "localHour": 6,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260113/conus/hrrr.t13z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260113/conus/hrrr.t13z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 37239117,
+              "end": 38528176,
+              "template": 3,
+              "idx": "71:37239117:d=2026011313:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 45264900,
+              "end": 47646515,
+              "template": 0,
+              "idx": "77:45264900:d=2026011313:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 47646515,
+              "end": 50028130,
+              "template": 0,
+              "idx": "78:47646515:d=2026011313:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 113390968,
+              "end": 116200375,
+              "template": 3,
+              "idx": "150:113390968:d=2026011313:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 44294223,
+              "end": 45264900,
+              "template": 3,
+              "idx": "76:44294223:d=2026011313:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        },
+        {
+          "utc": "2026-01-13T14:00:00Z",
+          "localHour": 7,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260113/conus/hrrr.t14z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260113/conus/hrrr.t14z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 37191110,
+              "end": 38455119,
+              "template": 3,
+              "idx": "71:37191110:d=2026011314:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 45147676,
+              "end": 47529291,
+              "template": 0,
+              "idx": "77:45147676:d=2026011314:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 47529291,
+              "end": 49910906,
+              "template": 0,
+              "idx": "78:47529291:d=2026011314:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 115302984,
+              "end": 118094560,
+              "template": 3,
+              "idx": "150:115302984:d=2026011314:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 44174750,
+              "end": 45147676,
+              "template": 3,
+              "idx": "76:44174750:d=2026011314:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        },
+        {
+          "utc": "2026-01-13T15:00:00Z",
+          "localHour": 8,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260113/conus/hrrr.t15z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260113/conus/hrrr.t15z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 37211592,
+              "end": 38455521,
+              "template": 3,
+              "idx": "71:37211592:d=2026011315:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 45246852,
+              "end": 47628467,
+              "template": 0,
+              "idx": "77:45246852:d=2026011315:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 47628467,
+              "end": 50010082,
+              "template": 0,
+              "idx": "78:47628467:d=2026011315:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 117106926,
+              "end": 119892752,
+              "template": 3,
+              "idx": "150:117106926:d=2026011315:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 44123345,
+              "end": 45246852,
+              "template": 3,
+              "idx": "76:44123345:d=2026011315:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        },
+        {
+          "utc": "2026-01-13T16:00:00Z",
+          "localHour": 9,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260113/conus/hrrr.t16z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260113/conus/hrrr.t16z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 37233494,
+              "end": 38462623,
+              "template": 3,
+              "idx": "71:37233494:d=2026011316:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 45170861,
+              "end": 47552476,
+              "template": 0,
+              "idx": "77:45170861:d=2026011316:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 47552476,
+              "end": 49934091,
+              "template": 0,
+              "idx": "78:47552476:d=2026011316:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 118934102,
+              "end": 121714322,
+              "template": 3,
+              "idx": "150:118934102:d=2026011316:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 44065441,
+              "end": 45170861,
+              "template": 3,
+              "idx": "76:44065441:d=2026011316:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        },
+        {
+          "utc": "2026-01-13T17:00:00Z",
+          "localHour": 10,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260113/conus/hrrr.t17z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260113/conus/hrrr.t17z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 37186352,
+              "end": 38404082,
+              "template": 3,
+              "idx": "71:37186352:d=2026011317:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 45057680,
+              "end": 47439295,
+              "template": 0,
+              "idx": "77:45057680:d=2026011317:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 47439295,
+              "end": 49820910,
+              "template": 0,
+              "idx": "78:47439295:d=2026011317:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 120055145,
+              "end": 122829814,
+              "template": 3,
+              "idx": "150:120055145:d=2026011317:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 43965481,
+              "end": 45057680,
+              "template": 3,
+              "idx": "76:43965481:d=2026011317:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        },
+        {
+          "utc": "2026-01-13T23:00:00Z",
+          "localHour": 16,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260113/conus/hrrr.t23z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260113/conus/hrrr.t23z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 36267794,
+              "end": 37459371,
+              "template": 3,
+              "idx": "71:36267794:d=2026011323:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 43295964,
+              "end": 45677579,
+              "template": 0,
+              "idx": "77:43295964:d=2026011323:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 45677579,
+              "end": 48059194,
+              "template": 0,
+              "idx": "78:45677579:d=2026011323:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 110706580,
+              "end": 113526467,
+              "template": 3,
+              "idx": "150:110706580:d=2026011323:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 42856745,
+              "end": 43295964,
+              "template": 3,
+              "idx": "76:42856745:d=2026011323:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        },
+        {
+          "utc": "2026-01-14T00:00:00Z",
+          "localHour": 17,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260114/conus/hrrr.t00z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260114/conus/hrrr.t00z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 36629339,
+              "end": 37814679,
+              "template": 3,
+              "idx": "71:36629339:d=2026011400:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 43718243,
+              "end": 46099858,
+              "template": 0,
+              "idx": "77:43718243:d=2026011400:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 46099858,
+              "end": 48481473,
+              "template": 0,
+              "idx": "78:46099858:d=2026011400:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 108233750,
+              "end": 111090290,
+              "template": 3,
+              "idx": "150:108233750:d=2026011400:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 43272866,
+              "end": 43718243,
+              "template": 3,
+              "idx": "76:43272866:d=2026011400:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        },
+        {
+          "utc": "2026-01-14T01:00:00Z",
+          "localHour": 18,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260114/conus/hrrr.t01z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260114/conus/hrrr.t01z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 36818337,
+              "end": 38003826,
+              "template": 3,
+              "idx": "71:36818337:d=2026011401:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 44030549,
+              "end": 46174021,
+              "template": 0,
+              "idx": "77:44030549:d=2026011401:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 46174021,
+              "end": 48555636,
+              "template": 0,
+              "idx": "78:46174021:d=2026011401:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 106041165,
+              "end": 108882491,
+              "template": 3,
+              "idx": "150:106041165:d=2026011401:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 43462946,
+              "end": 44030549,
+              "template": 3,
+              "idx": "76:43462946:d=2026011401:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        },
+        {
+          "utc": "2026-01-14T02:00:00Z",
+          "localHour": 19,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260114/conus/hrrr.t02z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260114/conus/hrrr.t02z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 37172421,
+              "end": 38372042,
+              "template": 3,
+              "idx": "71:37172421:d=2026011402:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 44446393,
+              "end": 46828008,
+              "template": 0,
+              "idx": "77:44446393:d=2026011402:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 46828008,
+              "end": 49209623,
+              "template": 0,
+              "idx": "78:46828008:d=2026011402:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 106998030,
+              "end": 109830344,
+              "template": 3,
+              "idx": "150:106998030:d=2026011402:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 43883885,
+              "end": 44446393,
+              "template": 3,
+              "idx": "76:43883885:d=2026011402:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        },
+        {
+          "utc": "2026-01-14T03:00:00Z",
+          "localHour": 20,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260114/conus/hrrr.t03z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260114/conus/hrrr.t03z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 37068267,
+              "end": 38279317,
+              "template": 3,
+              "idx": "71:37068267:d=2026011403:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 44568880,
+              "end": 46950495,
+              "template": 0,
+              "idx": "77:44568880:d=2026011403:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 46950495,
+              "end": 49332110,
+              "template": 0,
+              "idx": "78:46950495:d=2026011403:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 107339606,
+              "end": 110159679,
+              "template": 3,
+              "idx": "150:107339606:d=2026011403:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 43819207,
+              "end": 44568880,
+              "template": 3,
+              "idx": "76:43819207:d=2026011403:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        },
+        {
+          "utc": "2026-01-14T04:00:00Z",
+          "localHour": 21,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260114/conus/hrrr.t04z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260114/conus/hrrr.t04z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 37089478,
+              "end": 38308236,
+              "template": 3,
+              "idx": "71:37089478:d=2026011404:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 44630207,
+              "end": 47011822,
+              "template": 0,
+              "idx": "77:44630207:d=2026011404:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 47011822,
+              "end": 49393437,
+              "template": 0,
+              "idx": "78:47011822:d=2026011404:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 108213195,
+              "end": 111012533,
+              "template": 3,
+              "idx": "150:108213195:d=2026011404:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 43874277,
+              "end": 44630207,
+              "template": 3,
+              "idx": "76:43874277:d=2026011404:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        },
+        {
+          "utc": "2026-01-14T05:00:00Z",
+          "localHour": 22,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260114/conus/hrrr.t05z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260114/conus/hrrr.t05z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 37021532,
+              "end": 38243726,
+              "template": 3,
+              "idx": "71:37021532:d=2026011405:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 44557751,
+              "end": 46939366,
+              "template": 0,
+              "idx": "77:44557751:d=2026011405:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 46939366,
+              "end": 49320981,
+              "template": 0,
+              "idx": "78:46939366:d=2026011405:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 107685756,
+              "end": 110496948,
+              "template": 3,
+              "idx": "150:107685756:d=2026011405:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 43813692,
+              "end": 44557751,
+              "template": 3,
+              "idx": "76:43813692:d=2026011405:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "localDate": "2026-01-14",
+      "kind": "inversion",
+      "screen": {
+        "localHours": [
+          7,
+          11,
+          15,
+          19
+        ],
+        "n": 4,
+        "maxUgM3": 29.0,
+        "peakUtc": "2026-01-15T02:00:00Z"
+      },
+      "airnow": {
+        "n": 24,
+        "missingLocalHours": [],
+        "maxUgM3": 37.0,
+        "peakUtc": "2026-01-15T04:00:00Z",
+        "reportedAqiAtPeak": 94,
+        "maxReportedAqi": 94,
+        "maxReportedAqiUtc": "2026-01-15T05:00:00Z",
+        "hours": [
+          {
+            "utc": "2026-01-14T07:00:00Z",
+            "localHour": 0,
+            "ugM3": 22.0,
+            "reportedAqi": 75,
+            "url": "https://files.airnowtech.org/airnow/2026/20260114/HourlyAQObs_2026011407.dat"
+          },
+          {
+            "utc": "2026-01-14T08:00:00Z",
+            "localHour": 1,
+            "ugM3": 22.0,
+            "reportedAqi": 75,
+            "url": "https://files.airnowtech.org/airnow/2026/20260114/HourlyAQObs_2026011408.dat"
+          },
+          {
+            "utc": "2026-01-14T09:00:00Z",
+            "localHour": 2,
+            "ugM3": 19.0,
+            "reportedAqi": 72,
+            "url": "https://files.airnowtech.org/airnow/2026/20260114/HourlyAQObs_2026011409.dat"
+          },
+          {
+            "utc": "2026-01-14T10:00:00Z",
+            "localHour": 3,
+            "ugM3": 10.0,
+            "reportedAqi": 62,
+            "url": "https://files.airnowtech.org/airnow/2026/20260114/HourlyAQObs_2026011410.dat"
+          },
+          {
+            "utc": "2026-01-14T11:00:00Z",
+            "localHour": 4,
+            "ugM3": 11.0,
+            "reportedAqi": 58,
+            "url": "https://files.airnowtech.org/airnow/2026/20260114/HourlyAQObs_2026011411.dat"
+          },
+          {
+            "utc": "2026-01-14T12:00:00Z",
+            "localHour": 5,
+            "ugM3": 10.0,
+            "reportedAqi": 55,
+            "url": "https://files.airnowtech.org/airnow/2026/20260114/HourlyAQObs_2026011412.dat"
+          },
+          {
+            "utc": "2026-01-14T13:00:00Z",
+            "localHour": 6,
+            "ugM3": 8.0,
+            "reportedAqi": 52,
+            "url": "https://files.airnowtech.org/airnow/2026/20260114/HourlyAQObs_2026011413.dat"
+          },
+          {
+            "utc": "2026-01-14T14:00:00Z",
+            "localHour": 7,
+            "ugM3": 8.0,
+            "reportedAqi": 49,
+            "url": "https://files.airnowtech.org/airnow/2026/20260114/HourlyAQObs_2026011414.dat"
+          },
+          {
+            "utc": "2026-01-14T15:00:00Z",
+            "localHour": 8,
+            "ugM3": 10.0,
+            "reportedAqi": 52,
+            "url": "https://files.airnowtech.org/airnow/2026/20260114/HourlyAQObs_2026011415.dat"
+          },
+          {
+            "utc": "2026-01-14T16:00:00Z",
+            "localHour": 9,
+            "ugM3": 8.0,
+            "reportedAqi": 48,
+            "url": "https://files.airnowtech.org/airnow/2026/20260114/HourlyAQObs_2026011416.dat"
+          },
+          {
+            "utc": "2026-01-14T17:00:00Z",
+            "localHour": 10,
+            "ugM3": 4.0,
+            "reportedAqi": 35,
+            "url": "https://files.airnowtech.org/airnow/2026/20260114/HourlyAQObs_2026011417.dat"
+          },
+          {
+            "utc": "2026-01-14T18:00:00Z",
+            "localHour": 11,
+            "ugM3": 5.0,
+            "reportedAqi": 31,
+            "url": "https://files.airnowtech.org/airnow/2026/20260114/HourlyAQObs_2026011418.dat"
+          },
+          {
+            "utc": "2026-01-14T19:00:00Z",
+            "localHour": 12,
+            "ugM3": 5.0,
+            "reportedAqi": 29,
+            "url": "https://files.airnowtech.org/airnow/2026/20260114/HourlyAQObs_2026011419.dat"
+          },
+          {
+            "utc": "2026-01-14T20:00:00Z",
+            "localHour": 13,
+            "ugM3": 9.0,
+            "reportedAqi": 39,
+            "url": "https://files.airnowtech.org/airnow/2026/20260114/HourlyAQObs_2026011420.dat"
+          },
+          {
+            "utc": "2026-01-14T21:00:00Z",
+            "localHour": 14,
+            "ugM3": 10.0,
+            "reportedAqi": 47,
+            "url": "https://files.airnowtech.org/airnow/2026/20260114/HourlyAQObs_2026011421.dat"
+          },
+          {
+            "utc": "2026-01-14T22:00:00Z",
+            "localHour": 15,
+            "ugM3": 9.0,
+            "reportedAqi": 48,
+            "url": "https://files.airnowtech.org/airnow/2026/20260114/HourlyAQObs_2026011422.dat"
+          },
+          {
+            "utc": "2026-01-14T23:00:00Z",
+            "localHour": 16,
+            "ugM3": 12.0,
+            "reportedAqi": 53,
+            "url": "https://files.airnowtech.org/airnow/2026/20260114/HourlyAQObs_2026011423.dat"
+          },
+          {
+            "utc": "2026-01-15T00:00:00Z",
+            "localHour": 17,
+            "ugM3": 19.0,
+            "reportedAqi": 61,
+            "url": "https://files.airnowtech.org/airnow/2026/20260115/HourlyAQObs_2026011500.dat"
+          },
+          {
+            "utc": "2026-01-15T01:00:00Z",
+            "localHour": 18,
+            "ugM3": 26.0,
+            "reportedAqi": 72,
+            "url": "https://files.airnowtech.org/airnow/2026/20260115/HourlyAQObs_2026011501.dat"
+          },
+          {
+            "utc": "2026-01-15T02:00:00Z",
+            "localHour": 19,
+            "ugM3": 29.0,
+            "reportedAqi": 80,
+            "url": "https://files.airnowtech.org/airnow/2026/20260115/HourlyAQObs_2026011502.dat"
+          },
+          {
+            "utc": "2026-01-15T03:00:00Z",
+            "localHour": 20,
+            "ugM3": 31.0,
+            "reportedAqi": 86,
+            "url": "https://files.airnowtech.org/airnow/2026/20260115/HourlyAQObs_2026011503.dat"
+          },
+          {
+            "utc": "2026-01-15T04:00:00Z",
+            "localHour": 21,
+            "ugM3": 37.0,
+            "reportedAqi": 94,
+            "url": "https://files.airnowtech.org/airnow/2026/20260115/HourlyAQObs_2026011504.dat"
+          },
+          {
+            "utc": "2026-01-15T05:00:00Z",
+            "localHour": 22,
+            "ugM3": 32.0,
+            "reportedAqi": 94,
+            "url": "https://files.airnowtech.org/airnow/2026/20260115/HourlyAQObs_2026011505.dat"
+          },
+          {
+            "utc": "2026-01-15T06:00:00Z",
+            "localHour": 23,
+            "ugM3": 31.0,
+            "reportedAqi": 93,
+            "url": "https://files.airnowtech.org/airnow/2026/20260115/HourlyAQObs_2026011506.dat"
+          }
+        ]
+      },
+      "hrrr": [
+        {
+          "utc": "2026-01-14T12:00:00Z",
+          "localHour": 5,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260114/conus/hrrr.t12z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260114/conus/hrrr.t12z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 37808983,
+              "end": 39059311,
+              "template": 3,
+              "idx": "71:37808983:d=2026011412:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 45661695,
+              "end": 48043310,
+              "template": 0,
+              "idx": "77:45661695:d=2026011412:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 48043310,
+              "end": 50424925,
+              "template": 0,
+              "idx": "78:48043310:d=2026011412:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 109915123,
+              "end": 112722131,
+              "template": 3,
+              "idx": "150:109915123:d=2026011412:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 44664395,
+              "end": 45661695,
+              "template": 3,
+              "idx": "76:44664395:d=2026011412:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        },
+        {
+          "utc": "2026-01-14T13:00:00Z",
+          "localHour": 6,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260114/conus/hrrr.t13z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260114/conus/hrrr.t13z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 37806815,
+              "end": 39058316,
+              "template": 3,
+              "idx": "71:37806815:d=2026011413:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 45667165,
+              "end": 48048780,
+              "template": 0,
+              "idx": "77:45667165:d=2026011413:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 48048780,
+              "end": 50430395,
+              "template": 0,
+              "idx": "78:48048780:d=2026011413:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 112847289,
+              "end": 115668040,
+              "template": 3,
+              "idx": "150:112847289:d=2026011413:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 44671572,
+              "end": 45667165,
+              "template": 3,
+              "idx": "76:44671572:d=2026011413:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        },
+        {
+          "utc": "2026-01-14T14:00:00Z",
+          "localHour": 7,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260114/conus/hrrr.t14z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260114/conus/hrrr.t14z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 38147998,
+              "end": 39395920,
+              "template": 3,
+              "idx": "71:38147998:d=2026011414:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 46171668,
+              "end": 48553283,
+              "template": 0,
+              "idx": "77:46171668:d=2026011414:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 48553283,
+              "end": 50934898,
+              "template": 0,
+              "idx": "78:48553283:d=2026011414:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 116049356,
+              "end": 118875916,
+              "template": 3,
+              "idx": "150:116049356:d=2026011414:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 45012534,
+              "end": 46171668,
+              "template": 3,
+              "idx": "76:45012534:d=2026011414:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        },
+        {
+          "utc": "2026-01-14T15:00:00Z",
+          "localHour": 8,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260114/conus/hrrr.t15z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260114/conus/hrrr.t15z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 37711305,
+              "end": 38949316,
+              "template": 3,
+              "idx": "71:37711305:d=2026011415:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 45534619,
+              "end": 47916234,
+              "template": 0,
+              "idx": "77:45534619:d=2026011415:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 47916234,
+              "end": 50297849,
+              "template": 0,
+              "idx": "78:47916234:d=2026011415:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 117724133,
+              "end": 120522166,
+              "template": 3,
+              "idx": "150:117724133:d=2026011415:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 44555625,
+              "end": 45534619,
+              "template": 3,
+              "idx": "76:44555625:d=2026011415:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        },
+        {
+          "utc": "2026-01-14T16:00:00Z",
+          "localHour": 9,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260114/conus/hrrr.t16z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260114/conus/hrrr.t16z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 37662816,
+              "end": 38887683,
+              "template": 3,
+              "idx": "71:37662816:d=2026011416:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 45423232,
+              "end": 47804847,
+              "template": 0,
+              "idx": "77:45423232:d=2026011416:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 47804847,
+              "end": 50186462,
+              "template": 0,
+              "idx": "78:47804847:d=2026011416:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 119674852,
+              "end": 122472830,
+              "template": 3,
+              "idx": "150:119674852:d=2026011416:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 44440464,
+              "end": 45423232,
+              "template": 3,
+              "idx": "76:44440464:d=2026011416:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        },
+        {
+          "utc": "2026-01-14T17:00:00Z",
+          "localHour": 10,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260114/conus/hrrr.t17z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260114/conus/hrrr.t17z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 38033671,
+              "end": 39249482,
+              "template": 3,
+              "idx": "71:38033671:d=2026011417:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 45613263,
+              "end": 47994878,
+              "template": 0,
+              "idx": "77:45613263:d=2026011417:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 47994878,
+              "end": 50376493,
+              "template": 0,
+              "idx": "78:47994878:d=2026011417:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 120852961,
+              "end": 123660094,
+              "template": 3,
+              "idx": "150:120852961:d=2026011417:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 44775880,
+              "end": 45613263,
+              "template": 3,
+              "idx": "76:44775880:d=2026011417:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        },
+        {
+          "utc": "2026-01-14T23:00:00Z",
+          "localHour": 16,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260114/conus/hrrr.t23z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260114/conus/hrrr.t23z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 37332065,
+              "end": 38536502,
+              "template": 3,
+              "idx": "71:37332065:d=2026011423:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 44432100,
+              "end": 46813715,
+              "template": 0,
+              "idx": "77:44432100:d=2026011423:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 46813715,
+              "end": 49195330,
+              "template": 0,
+              "idx": "78:46813715:d=2026011423:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 110964006,
+              "end": 113794615,
+              "template": 3,
+              "idx": "150:110964006:d=2026011423:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 43893296,
+              "end": 44432100,
+              "template": 3,
+              "idx": "76:43893296:d=2026011423:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        },
+        {
+          "utc": "2026-01-15T00:00:00Z",
+          "localHour": 17,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260115/conus/hrrr.t00z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260115/conus/hrrr.t00z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 37616366,
+              "end": 38829063,
+              "template": 3,
+              "idx": "71:37616366:d=2026011500:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 44773304,
+              "end": 47154919,
+              "template": 0,
+              "idx": "77:44773304:d=2026011500:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 47154919,
+              "end": 49536534,
+              "template": 0,
+              "idx": "78:47154919:d=2026011500:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 109468960,
+              "end": 112341484,
+              "template": 3,
+              "idx": "150:109468960:d=2026011500:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 44218412,
+              "end": 44773304,
+              "template": 3,
+              "idx": "76:44218412:d=2026011500:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        },
+        {
+          "utc": "2026-01-15T01:00:00Z",
+          "localHour": 18,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260115/conus/hrrr.t01z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260115/conus/hrrr.t01z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 37858266,
+              "end": 39073773,
+              "template": 3,
+              "idx": "71:37858266:d=2026011501:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 45212155,
+              "end": 47593770,
+              "template": 0,
+              "idx": "77:45212155:d=2026011501:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 47593770,
+              "end": 49975385,
+              "template": 0,
+              "idx": "78:47593770:d=2026011501:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 107143819,
+              "end": 110046358,
+              "template": 3,
+              "idx": "150:107143819:d=2026011501:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 44508282,
+              "end": 45212155,
+              "template": 3,
+              "idx": "76:44508282:d=2026011501:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        },
+        {
+          "utc": "2026-01-15T02:00:00Z",
+          "localHour": 19,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260115/conus/hrrr.t02z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260115/conus/hrrr.t02z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 37891609,
+              "end": 39122855,
+              "template": 3,
+              "idx": "71:37891609:d=2026011502:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 45321467,
+              "end": 47703082,
+              "template": 0,
+              "idx": "77:45321467:d=2026011502:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 47703082,
+              "end": 50084697,
+              "template": 0,
+              "idx": "78:47703082:d=2026011502:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 105805873,
+              "end": 108689523,
+              "template": 3,
+              "idx": "150:105805873:d=2026011502:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 44617558,
+              "end": 45321467,
+              "template": 3,
+              "idx": "76:44617558:d=2026011502:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        },
+        {
+          "utc": "2026-01-15T03:00:00Z",
+          "localHour": 20,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260115/conus/hrrr.t03z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260115/conus/hrrr.t03z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 38094167,
+              "end": 39339174,
+              "template": 3,
+              "idx": "71:38094167:d=2026011503:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 45713093,
+              "end": 48094708,
+              "template": 0,
+              "idx": "77:45713093:d=2026011503:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 48094708,
+              "end": 50476323,
+              "template": 0,
+              "idx": "78:48094708:d=2026011503:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 106426335,
+              "end": 109295868,
+              "template": 3,
+              "idx": "150:106426335:d=2026011503:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 44875207,
+              "end": 45713093,
+              "template": 3,
+              "idx": "76:44875207:d=2026011503:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        },
+        {
+          "utc": "2026-01-15T04:00:00Z",
+          "localHour": 21,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260115/conus/hrrr.t04z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260115/conus/hrrr.t04z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 38154954,
+              "end": 39397240,
+              "template": 3,
+              "idx": "71:38154954:d=2026011504:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 45818747,
+              "end": 48200362,
+              "template": 0,
+              "idx": "77:45818747:d=2026011504:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 48200362,
+              "end": 50581977,
+              "template": 0,
+              "idx": "78:48200362:d=2026011504:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 106328743,
+              "end": 109173216,
+              "template": 3,
+              "idx": "150:106328743:d=2026011504:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 44971124,
+              "end": 45818747,
+              "template": 3,
+              "idx": "76:44971124:d=2026011504:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        },
+        {
+          "utc": "2026-01-15T05:00:00Z",
+          "localHour": 22,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260115/conus/hrrr.t05z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260115/conus/hrrr.t05z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 38085027,
+              "end": 39335841,
+              "template": 3,
+              "idx": "71:38085027:d=2026011505:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 45789967,
+              "end": 48171582,
+              "template": 0,
+              "idx": "77:45789967:d=2026011505:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 48171582,
+              "end": 50553197,
+              "template": 0,
+              "idx": "78:48171582:d=2026011505:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 106553378,
+              "end": 109396358,
+              "template": 3,
+              "idx": "150:106553378:d=2026011505:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 44934341,
+              "end": 45789967,
+              "template": 3,
+              "idx": "76:44934341:d=2026011505:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "localDate": "2026-01-15",
+      "kind": "inversion",
+      "screen": {
+        "localHours": [
+          7,
+          11,
+          15,
+          19
+        ],
+        "n": 3,
+        "maxUgM3": 29.0,
+        "peakUtc": "2026-01-16T02:00:00Z"
+      },
+      "airnow": {
+        "n": 23,
+        "missingLocalHours": [
+          11
+        ],
+        "maxUgM3": 38.0,
+        "peakUtc": "2026-01-15T10:00:00Z",
+        "reportedAqiAtPeak": 98,
+        "maxReportedAqi": 98,
+        "maxReportedAqiUtc": "2026-01-15T10:00:00Z",
+        "hours": [
+          {
+            "utc": "2026-01-15T07:00:00Z",
+            "localHour": 0,
+            "ugM3": 32.0,
+            "reportedAqi": 93,
+            "url": "https://files.airnowtech.org/airnow/2026/20260115/HourlyAQObs_2026011507.dat"
+          },
+          {
+            "utc": "2026-01-15T08:00:00Z",
+            "localHour": 1,
+            "ugM3": 28.0,
+            "reportedAqi": 90,
+            "url": "https://files.airnowtech.org/airnow/2026/20260115/HourlyAQObs_2026011508.dat"
+          },
+          {
+            "utc": "2026-01-15T09:00:00Z",
+            "localHour": 2,
+            "ugM3": 31.0,
+            "reportedAqi": 91,
+            "url": "https://files.airnowtech.org/airnow/2026/20260115/HourlyAQObs_2026011509.dat"
+          },
+          {
+            "utc": "2026-01-15T10:00:00Z",
+            "localHour": 3,
+            "ugM3": 38.0,
+            "reportedAqi": 98,
+            "url": "https://files.airnowtech.org/airnow/2026/20260115/HourlyAQObs_2026011510.dat"
+          },
+          {
+            "utc": "2026-01-15T11:00:00Z",
+            "localHour": 4,
+            "ugM3": 25.0,
+            "reportedAqi": 89,
+            "url": "https://files.airnowtech.org/airnow/2026/20260115/HourlyAQObs_2026011511.dat"
+          },
+          {
+            "utc": "2026-01-15T12:00:00Z",
+            "localHour": 5,
+            "ugM3": 26.0,
+            "reportedAqi": 88,
+            "url": "https://files.airnowtech.org/airnow/2026/20260115/HourlyAQObs_2026011512.dat"
+          },
+          {
+            "utc": "2026-01-15T13:00:00Z",
+            "localHour": 6,
+            "ugM3": 25.0,
+            "reportedAqi": 85,
+            "url": "https://files.airnowtech.org/airnow/2026/20260115/HourlyAQObs_2026011513.dat"
+          },
+          {
+            "utc": "2026-01-15T14:00:00Z",
+            "localHour": 7,
+            "ugM3": 21.0,
+            "reportedAqi": 79,
+            "url": "https://files.airnowtech.org/airnow/2026/20260115/HourlyAQObs_2026011514.dat"
+          },
+          {
+            "utc": "2026-01-15T15:00:00Z",
+            "localHour": 8,
+            "ugM3": 27.0,
+            "reportedAqi": 81,
+            "url": "https://files.airnowtech.org/airnow/2026/20260115/HourlyAQObs_2026011515.dat"
+          },
+          {
+            "utc": "2026-01-15T16:00:00Z",
+            "localHour": 9,
+            "ugM3": 15.0,
+            "reportedAqi": 71,
+            "url": "https://files.airnowtech.org/airnow/2026/20260115/HourlyAQObs_2026011516.dat"
+          },
+          {
+            "utc": "2026-01-15T17:00:00Z",
+            "localHour": 10,
+            "ugM3": 19.0,
+            "reportedAqi": 70,
+            "url": "https://files.airnowtech.org/airnow/2026/20260115/HourlyAQObs_2026011517.dat"
+          },
+          {
+            "utc": "2026-01-15T19:00:00Z",
+            "localHour": 12,
+            "ugM3": 25.0,
+            "reportedAqi": 77,
+            "url": "https://files.airnowtech.org/airnow/2026/20260115/HourlyAQObs_2026011519.dat"
+          },
+          {
+            "utc": "2026-01-15T20:00:00Z",
+            "localHour": 13,
+            "ugM3": 14.0,
+            "reportedAqi": 67,
+            "url": "https://files.airnowtech.org/airnow/2026/20260115/HourlyAQObs_2026011520.dat"
+          },
+          {
+            "utc": "2026-01-15T21:00:00Z",
+            "localHour": 14,
+            "ugM3": 13.0,
+            "reportedAqi": 63,
+            "url": "https://files.airnowtech.org/airnow/2026/20260115/HourlyAQObs_2026011521.dat"
+          },
+          {
+            "utc": "2026-01-15T22:00:00Z",
+            "localHour": 15,
+            "ugM3": 15.0,
+            "reportedAqi": 62,
+            "url": "https://files.airnowtech.org/airnow/2026/20260115/HourlyAQObs_2026011522.dat"
+          },
+          {
+            "utc": "2026-01-15T23:00:00Z",
+            "localHour": 16,
+            "ugM3": 18.0,
+            "reportedAqi": 65,
+            "url": "https://files.airnowtech.org/airnow/2026/20260115/HourlyAQObs_2026011523.dat"
+          },
+          {
+            "utc": "2026-01-16T00:00:00Z",
+            "localHour": 17,
+            "ugM3": 15.0,
+            "reportedAqi": 63,
+            "url": "https://files.airnowtech.org/airnow/2026/20260116/HourlyAQObs_2026011600.dat"
+          },
+          {
+            "utc": "2026-01-16T01:00:00Z",
+            "localHour": 18,
+            "ugM3": 16.0,
+            "reportedAqi": 63,
+            "url": "https://files.airnowtech.org/airnow/2026/20260116/HourlyAQObs_2026011601.dat"
+          },
+          {
+            "utc": "2026-01-16T02:00:00Z",
+            "localHour": 19,
+            "ugM3": 29.0,
+            "reportedAqi": 76,
+            "url": "https://files.airnowtech.org/airnow/2026/20260116/HourlyAQObs_2026011602.dat"
+          },
+          {
+            "utc": "2026-01-16T03:00:00Z",
+            "localHour": 20,
+            "ugM3": 15.0,
+            "reportedAqi": 69,
+            "url": "https://files.airnowtech.org/airnow/2026/20260116/HourlyAQObs_2026011603.dat"
+          },
+          {
+            "utc": "2026-01-16T04:00:00Z",
+            "localHour": 21,
+            "ugM3": 19.0,
+            "reportedAqi": 69,
+            "url": "https://files.airnowtech.org/airnow/2026/20260116/HourlyAQObs_2026011604.dat"
+          },
+          {
+            "utc": "2026-01-16T05:00:00Z",
+            "localHour": 22,
+            "ugM3": 16.0,
+            "reportedAqi": 66,
+            "url": "https://files.airnowtech.org/airnow/2026/20260116/HourlyAQObs_2026011605.dat"
+          },
+          {
+            "utc": "2026-01-16T06:00:00Z",
+            "localHour": 23,
+            "ugM3": 21.0,
+            "reportedAqi": 70,
+            "url": "https://files.airnowtech.org/airnow/2026/20260116/HourlyAQObs_2026011606.dat"
+          }
+        ]
+      },
+      "hrrr": [
+        {
+          "utc": "2026-01-15T12:00:00Z",
+          "localHour": 5,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260115/conus/hrrr.t12z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260115/conus/hrrr.t12z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 38068134,
+              "end": 39358522,
+              "template": 3,
+              "idx": "71:38068134:d=2026011512:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 46270497,
+              "end": 48652112,
+              "template": 0,
+              "idx": "77:46270497:d=2026011512:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 48652112,
+              "end": 51033727,
+              "template": 0,
+              "idx": "78:48652112:d=2026011512:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 108130776,
+              "end": 110959309,
+              "template": 3,
+              "idx": "150:108130776:d=2026011512:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 45016637,
+              "end": 46270497,
+              "template": 3,
+              "idx": "76:45016637:d=2026011512:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        },
+        {
+          "utc": "2026-01-15T13:00:00Z",
+          "localHour": 6,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260115/conus/hrrr.t13z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260115/conus/hrrr.t13z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 38393948,
+              "end": 39686860,
+              "template": 3,
+              "idx": "71:38393948:d=2026011513:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 46627145,
+              "end": 49008760,
+              "template": 0,
+              "idx": "77:46627145:d=2026011513:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 49008760,
+              "end": 51390375,
+              "template": 0,
+              "idx": "78:49008760:d=2026011513:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 111724869,
+              "end": 114558076,
+              "template": 3,
+              "idx": "150:111724869:d=2026011513:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 45391359,
+              "end": 46627145,
+              "template": 3,
+              "idx": "76:45391359:d=2026011513:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        },
+        {
+          "utc": "2026-01-15T14:00:00Z",
+          "localHour": 7,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260115/conus/hrrr.t14z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260115/conus/hrrr.t14z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 38483020,
+              "end": 39765964,
+              "template": 3,
+              "idx": "71:38483020:d=2026011514:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 46690147,
+              "end": 49071762,
+              "template": 0,
+              "idx": "77:46690147:d=2026011514:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 49071762,
+              "end": 51453377,
+              "template": 0,
+              "idx": "78:49071762:d=2026011514:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 114080449,
+              "end": 116917861,
+              "template": 3,
+              "idx": "150:114080449:d=2026011514:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 45443201,
+              "end": 46690147,
+              "template": 3,
+              "idx": "76:45443201:d=2026011514:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        },
+        {
+          "utc": "2026-01-15T15:00:00Z",
+          "localHour": 8,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260115/conus/hrrr.t15z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260115/conus/hrrr.t15z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 38294570,
+              "end": 39547034,
+              "template": 3,
+              "idx": "71:38294570:d=2026011515:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 46411650,
+              "end": 48793265,
+              "template": 0,
+              "idx": "77:46411650:d=2026011515:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 48793265,
+              "end": 51174880,
+              "template": 0,
+              "idx": "78:48793265:d=2026011515:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 116658659,
+              "end": 119488757,
+              "template": 3,
+              "idx": "150:116658659:d=2026011515:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 45165342,
+              "end": 46411650,
+              "template": 3,
+              "idx": "76:45165342:d=2026011515:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        },
+        {
+          "utc": "2026-01-15T16:00:00Z",
+          "localHour": 9,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260115/conus/hrrr.t16z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260115/conus/hrrr.t16z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 38326551,
+              "end": 39555282,
+              "template": 3,
+              "idx": "71:38326551:d=2026011516:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 46358372,
+              "end": 48739987,
+              "template": 0,
+              "idx": "77:46358372:d=2026011516:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 48739987,
+              "end": 51121602,
+              "template": 0,
+              "idx": "78:48739987:d=2026011516:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 118109281,
+              "end": 120941222,
+              "template": 3,
+              "idx": "150:118109281:d=2026011516:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 45122201,
+              "end": 46358372,
+              "template": 3,
+              "idx": "76:45122201:d=2026011516:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        },
+        {
+          "utc": "2026-01-15T17:00:00Z",
+          "localHour": 10,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260115/conus/hrrr.t17z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260115/conus/hrrr.t17z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 38425089,
+              "end": 39636610,
+              "template": 3,
+              "idx": "71:38425089:d=2026011517:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 46152860,
+              "end": 48534475,
+              "template": 0,
+              "idx": "77:46152860:d=2026011517:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 48534475,
+              "end": 50677947,
+              "template": 0,
+              "idx": "78:48534475:d=2026011517:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 119929858,
+              "end": 122744116,
+              "template": 3,
+              "idx": "150:119929858:d=2026011517:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 45158825,
+              "end": 46152860,
+              "template": 3,
+              "idx": "76:45158825:d=2026011517:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        },
+        {
+          "utc": "2026-01-15T23:00:00Z",
+          "localHour": 16,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260115/conus/hrrr.t23z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260115/conus/hrrr.t23z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 37643843,
+              "end": 38855337,
+              "template": 3,
+              "idx": "71:37643843:d=2026011523:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 44791822,
+              "end": 47173437,
+              "template": 0,
+              "idx": "77:44791822:d=2026011523:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 47173437,
+              "end": 49555052,
+              "template": 0,
+              "idx": "78:47173437:d=2026011523:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 111159758,
+              "end": 114028462,
+              "template": 3,
+              "idx": "150:111159758:d=2026011523:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 44194077,
+              "end": 44791822,
+              "template": 3,
+              "idx": "76:44194077:d=2026011523:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        },
+        {
+          "utc": "2026-01-16T00:00:00Z",
+          "localHour": 17,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260116/conus/hrrr.t00z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260116/conus/hrrr.t00z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 37882637,
+              "end": 39100120,
+              "template": 3,
+              "idx": "71:37882637:d=2026011600:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 45202050,
+              "end": 47583665,
+              "template": 0,
+              "idx": "77:45202050:d=2026011600:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 47583665,
+              "end": 49965280,
+              "template": 0,
+              "idx": "78:47583665:d=2026011600:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 109171025,
+              "end": 112069738,
+              "template": 3,
+              "idx": "150:109171025:d=2026011600:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 44488560,
+              "end": 45202050,
+              "template": 3,
+              "idx": "76:44488560:d=2026011600:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        },
+        {
+          "utc": "2026-01-16T01:00:00Z",
+          "localHour": 18,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260116/conus/hrrr.t01z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260116/conus/hrrr.t01z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 38217121,
+              "end": 39428320,
+              "template": 3,
+              "idx": "71:38217121:d=2026011601:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 45619134,
+              "end": 48000749,
+              "template": 0,
+              "idx": "77:45619134:d=2026011601:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 48000749,
+              "end": 50382364,
+              "template": 0,
+              "idx": "78:48000749:d=2026011601:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 108062816,
+              "end": 110967128,
+              "template": 3,
+              "idx": "150:108062816:d=2026011601:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 44901913,
+              "end": 45619134,
+              "template": 3,
+              "idx": "76:44901913:d=2026011601:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        },
+        {
+          "utc": "2026-01-16T02:00:00Z",
+          "localHour": 19,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260116/conus/hrrr.t02z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260116/conus/hrrr.t02z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 38414593,
+              "end": 39644917,
+              "template": 3,
+              "idx": "71:38414593:d=2026011602:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 45948763,
+              "end": 48330378,
+              "template": 0,
+              "idx": "77:45948763:d=2026011602:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 48330378,
+              "end": 50711993,
+              "template": 0,
+              "idx": "78:48330378:d=2026011602:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 106716174,
+              "end": 109620916,
+              "template": 3,
+              "idx": "150:106716174:d=2026011602:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 45179753,
+              "end": 45948763,
+              "template": 3,
+              "idx": "76:45179753:d=2026011602:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        },
+        {
+          "utc": "2026-01-16T03:00:00Z",
+          "localHour": 20,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260116/conus/hrrr.t03z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260116/conus/hrrr.t03z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 38531943,
+              "end": 39788495,
+              "template": 3,
+              "idx": "71:38531943:d=2026011603:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 46313498,
+              "end": 48695113,
+              "template": 0,
+              "idx": "77:46313498:d=2026011603:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 48695113,
+              "end": 51076728,
+              "template": 0,
+              "idx": "78:48695113:d=2026011603:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 107509425,
+              "end": 110404717,
+              "template": 3,
+              "idx": "150:107509425:d=2026011603:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 45388406,
+              "end": 46313498,
+              "template": 3,
+              "idx": "76:45388406:d=2026011603:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        },
+        {
+          "utc": "2026-01-16T04:00:00Z",
+          "localHour": 21,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260116/conus/hrrr.t04z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260116/conus/hrrr.t04z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 38724888,
+              "end": 39976533,
+              "template": 3,
+              "idx": "71:38724888:d=2026011604:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 46493109,
+              "end": 48874724,
+              "template": 0,
+              "idx": "77:46493109:d=2026011604:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 48874724,
+              "end": 51256339,
+              "template": 0,
+              "idx": "78:48874724:d=2026011604:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 107883494,
+              "end": 110772271,
+              "template": 3,
+              "idx": "150:107883494:d=2026011604:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 45570930,
+              "end": 46493109,
+              "template": 3,
+              "idx": "76:45570930:d=2026011604:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        },
+        {
+          "utc": "2026-01-16T05:00:00Z",
+          "localHour": 22,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260116/conus/hrrr.t05z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20260116/conus/hrrr.t05z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 38596977,
+              "end": 39868472,
+              "template": 3,
+              "idx": "71:38596977:d=2026011605:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 46372795,
+              "end": 48754410,
+              "template": 0,
+              "idx": "77:46372795:d=2026011605:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 48754410,
+              "end": 51136025,
+              "template": 0,
+              "idx": "78:48754410:d=2026011605:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 107702017,
+              "end": 110568527,
+              "template": 3,
+              "idx": "150:107702017:d=2026011605:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 45443956,
+              "end": 46372795,
+              "template": 3,
+              "idx": "76:45443956:d=2026011605:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "localDate": "2025-12-17",
+      "kind": "control",
+      "screen": {
+        "localHours": [
+          7,
+          11,
+          15,
+          19
+        ],
+        "n": 4,
+        "maxUgM3": 4.0,
+        "peakUtc": "2025-12-17T14:00:00Z"
+      },
+      "airnow": {
+        "n": 21,
+        "missingLocalHours": [
+          5,
+          6,
+          14
+        ],
+        "maxUgM3": 7.0,
+        "peakUtc": "2025-12-18T03:00:00Z",
+        "reportedAqiAtPeak": 21,
+        "maxReportedAqi": 24,
+        "maxReportedAqiUtc": "2025-12-18T04:00:00Z",
+        "hours": [
+          {
+            "utc": "2025-12-17T07:00:00Z",
+            "localHour": 0,
+            "ugM3": 3.0,
+            "reportedAqi": 11,
+            "url": "https://files.airnowtech.org/airnow/2025/20251217/HourlyAQObs_2025121707.dat"
+          },
+          {
+            "utc": "2025-12-17T08:00:00Z",
+            "localHour": 1,
+            "ugM3": 0.0,
+            "reportedAqi": 5,
+            "url": "https://files.airnowtech.org/airnow/2025/20251217/HourlyAQObs_2025121708.dat"
+          },
+          {
+            "utc": "2025-12-17T09:00:00Z",
+            "localHour": 2,
+            "ugM3": 2.0,
+            "reportedAqi": 8,
+            "url": "https://files.airnowtech.org/airnow/2025/20251217/HourlyAQObs_2025121709.dat"
+          },
+          {
+            "utc": "2025-12-17T10:00:00Z",
+            "localHour": 3,
+            "ugM3": 3.0,
+            "reportedAqi": 12,
+            "url": "https://files.airnowtech.org/airnow/2025/20251217/HourlyAQObs_2025121710.dat"
+          },
+          {
+            "utc": "2025-12-17T11:00:00Z",
+            "localHour": 4,
+            "ugM3": 1.0,
+            "reportedAqi": 9,
+            "url": "https://files.airnowtech.org/airnow/2025/20251217/HourlyAQObs_2025121711.dat"
+          },
+          {
+            "utc": "2025-12-17T14:00:00Z",
+            "localHour": 7,
+            "ugM3": 4.0,
+            "reportedAqi": 8,
+            "url": "https://files.airnowtech.org/airnow/2025/20251217/HourlyAQObs_2025121714.dat"
+          },
+          {
+            "utc": "2025-12-17T15:00:00Z",
+            "localHour": 8,
+            "ugM3": 3.0,
+            "reportedAqi": 12,
+            "url": "https://files.airnowtech.org/airnow/2025/20251217/HourlyAQObs_2025121715.dat"
+          },
+          {
+            "utc": "2025-12-17T16:00:00Z",
+            "localHour": 9,
+            "ugM3": 2.0,
+            "reportedAqi": 12,
+            "url": "https://files.airnowtech.org/airnow/2025/20251217/HourlyAQObs_2025121716.dat"
+          },
+          {
+            "utc": "2025-12-17T17:00:00Z",
+            "localHour": 10,
+            "ugM3": 2.0,
+            "reportedAqi": 11,
+            "url": "https://files.airnowtech.org/airnow/2025/20251217/HourlyAQObs_2025121717.dat"
+          },
+          {
+            "utc": "2025-12-17T18:00:00Z",
+            "localHour": 11,
+            "ugM3": 0.0,
+            "reportedAqi": 6,
+            "url": "https://files.airnowtech.org/airnow/2025/20251217/HourlyAQObs_2025121718.dat"
+          },
+          {
+            "utc": "2025-12-17T19:00:00Z",
+            "localHour": 12,
+            "ugM3": 0.0,
+            "reportedAqi": 3,
+            "url": "https://files.airnowtech.org/airnow/2025/20251217/HourlyAQObs_2025121719.dat"
+          },
+          {
+            "utc": "2025-12-17T20:00:00Z",
+            "localHour": 13,
+            "ugM3": 1.0,
+            "reportedAqi": 4,
+            "url": "https://files.airnowtech.org/airnow/2025/20251217/HourlyAQObs_2025121720.dat"
+          },
+          {
+            "utc": "2025-12-17T22:00:00Z",
+            "localHour": 15,
+            "ugM3": 1.0,
+            "reportedAqi": 5,
+            "url": "https://files.airnowtech.org/airnow/2025/20251217/HourlyAQObs_2025121722.dat"
+          },
+          {
+            "utc": "2025-12-17T23:00:00Z",
+            "localHour": 16,
+            "ugM3": 1.0,
+            "reportedAqi": 5,
+            "url": "https://files.airnowtech.org/airnow/2025/20251217/HourlyAQObs_2025121723.dat"
+          },
+          {
+            "utc": "2025-12-18T00:00:00Z",
+            "localHour": 17,
+            "ugM3": 1.0,
+            "reportedAqi": 5,
+            "url": "https://files.airnowtech.org/airnow/2025/20251218/HourlyAQObs_2025121800.dat"
+          },
+          {
+            "utc": "2025-12-18T01:00:00Z",
+            "localHour": 18,
+            "ugM3": 0.0,
+            "reportedAqi": 2,
+            "url": "https://files.airnowtech.org/airnow/2025/20251218/HourlyAQObs_2025121801.dat"
+          },
+          {
+            "utc": "2025-12-18T02:00:00Z",
+            "localHour": 19,
+            "ugM3": 1.0,
+            "reportedAqi": 4,
+            "url": "https://files.airnowtech.org/airnow/2025/20251218/HourlyAQObs_2025121802.dat"
+          },
+          {
+            "utc": "2025-12-18T03:00:00Z",
+            "localHour": 20,
+            "ugM3": 7.0,
+            "reportedAqi": 21,
+            "url": "https://files.airnowtech.org/airnow/2025/20251218/HourlyAQObs_2025121803.dat"
+          },
+          {
+            "utc": "2025-12-18T04:00:00Z",
+            "localHour": 21,
+            "ugM3": 5.0,
+            "reportedAqi": 24,
+            "url": "https://files.airnowtech.org/airnow/2025/20251218/HourlyAQObs_2025121804.dat"
+          },
+          {
+            "utc": "2025-12-18T05:00:00Z",
+            "localHour": 22,
+            "ugM3": 4.0,
+            "reportedAqi": 23,
+            "url": "https://files.airnowtech.org/airnow/2025/20251218/HourlyAQObs_2025121805.dat"
+          },
+          {
+            "utc": "2025-12-18T06:00:00Z",
+            "localHour": 23,
+            "ugM3": 1.0,
+            "reportedAqi": 14,
+            "url": "https://files.airnowtech.org/airnow/2025/20251218/HourlyAQObs_2025121806.dat"
+          }
+        ]
+      },
+      "hrrr": [
+        {
+          "utc": "2025-12-17T12:00:00Z",
+          "localHour": 5,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20251217/conus/hrrr.t12z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20251217/conus/hrrr.t12z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 39409575,
+              "end": 40679740,
+              "template": 3,
+              "idx": "71:39409575:d=2025121712:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 47566943,
+              "end": 49948558,
+              "template": 0,
+              "idx": "77:47566943:d=2025121712:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 49948558,
+              "end": 52330173,
+              "template": 0,
+              "idx": "78:49948558:d=2025121712:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 115237801,
+              "end": 118077613,
+              "template": 3,
+              "idx": "150:115237801:d=2025121712:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 46352230,
+              "end": 47566943,
+              "template": 3,
+              "idx": "76:46352230:d=2025121712:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        },
+        {
+          "utc": "2025-12-17T13:00:00Z",
+          "localHour": 6,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20251217/conus/hrrr.t13z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20251217/conus/hrrr.t13z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 39818349,
+              "end": 41103750,
+              "template": 3,
+              "idx": "71:39818349:d=2025121713:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 48000583,
+              "end": 50382198,
+              "template": 0,
+              "idx": "77:48000583:d=2025121713:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 50382198,
+              "end": 52763813,
+              "template": 0,
+              "idx": "78:50382198:d=2025121713:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 118302352,
+              "end": 121170770,
+              "template": 3,
+              "idx": "150:118302352:d=2025121713:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 46790889,
+              "end": 48000583,
+              "template": 3,
+              "idx": "76:46790889:d=2025121713:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        },
+        {
+          "utc": "2025-12-17T14:00:00Z",
+          "localHour": 7,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20251217/conus/hrrr.t14z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20251217/conus/hrrr.t14z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 39745988,
+              "end": 41021204,
+              "template": 3,
+              "idx": "71:39745988:d=2025121714:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 47893300,
+              "end": 50274915,
+              "template": 0,
+              "idx": "77:47893300:d=2025121714:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 50274915,
+              "end": 52656530,
+              "template": 0,
+              "idx": "78:50274915:d=2025121714:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 121181173,
+              "end": 124058717,
+              "template": 3,
+              "idx": "150:121181173:d=2025121714:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 46693990,
+              "end": 47893300,
+              "template": 3,
+              "idx": "76:46693990:d=2025121714:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        },
+        {
+          "utc": "2025-12-17T15:00:00Z",
+          "localHour": 8,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20251217/conus/hrrr.t15z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20251217/conus/hrrr.t15z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 39995830,
+              "end": 41254263,
+              "template": 3,
+              "idx": "71:39995830:d=2025121715:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 47842889,
+              "end": 50224504,
+              "template": 0,
+              "idx": "77:47842889:d=2025121715:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 50224504,
+              "end": 52606119,
+              "template": 0,
+              "idx": "78:50224504:d=2025121715:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 123908659,
+              "end": 126791404,
+              "template": 3,
+              "idx": "150:123908659:d=2025121715:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 46873916,
+              "end": 47842889,
+              "template": 3,
+              "idx": "76:46873916:d=2025121715:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        },
+        {
+          "utc": "2025-12-17T16:00:00Z",
+          "localHour": 9,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20251217/conus/hrrr.t16z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20251217/conus/hrrr.t16z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 39850261,
+              "end": 41076858,
+              "template": 3,
+              "idx": "71:39850261:d=2025121716:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 47424277,
+              "end": 49805892,
+              "template": 0,
+              "idx": "77:47424277:d=2025121716:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 49805892,
+              "end": 52187507,
+              "template": 0,
+              "idx": "78:49805892:d=2025121716:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 124978074,
+              "end": 127853504,
+              "template": 3,
+              "idx": "150:124978074:d=2025121716:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 46606307,
+              "end": 47424277,
+              "template": 3,
+              "idx": "76:46606307:d=2025121716:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        },
+        {
+          "utc": "2025-12-17T17:00:00Z",
+          "localHour": 10,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20251217/conus/hrrr.t17z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20251217/conus/hrrr.t17z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 39328067,
+              "end": 40537416,
+              "template": 3,
+              "idx": "71:39328067:d=2025121717:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 46789265,
+              "end": 49170880,
+              "template": 0,
+              "idx": "77:46789265:d=2025121717:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 49170880,
+              "end": 51552495,
+              "template": 0,
+              "idx": "78:49170880:d=2025121717:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 124548178,
+              "end": 127412440,
+              "template": 3,
+              "idx": "150:124548178:d=2025121717:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 45991521,
+              "end": 46789265,
+              "template": 3,
+              "idx": "76:45991521:d=2025121717:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        },
+        {
+          "utc": "2025-12-17T23:00:00Z",
+          "localHour": 16,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20251217/conus/hrrr.t23z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20251217/conus/hrrr.t23z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 38313070,
+              "end": 39509355,
+              "template": 3,
+              "idx": "71:38313070:d=2025121723:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 45177564,
+              "end": 47559179,
+              "template": 0,
+              "idx": "77:45177564:d=2025121723:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 47559179,
+              "end": 49940794,
+              "template": 0,
+              "idx": "78:47559179:d=2025121723:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 113581494,
+              "end": 116457384,
+              "template": 3,
+              "idx": "150:113581494:d=2025121723:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 44663863,
+              "end": 45177564,
+              "template": 3,
+              "idx": "76:44663863:d=2025121723:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        },
+        {
+          "utc": "2025-12-18T00:00:00Z",
+          "localHour": 17,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20251218/conus/hrrr.t00z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20251218/conus/hrrr.t00z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 38966124,
+              "end": 40171883,
+              "template": 3,
+              "idx": "71:38966124:d=2025121800:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 45962755,
+              "end": 48344370,
+              "template": 0,
+              "idx": "77:45962755:d=2025121800:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 48344370,
+              "end": 50725985,
+              "template": 0,
+              "idx": "78:48344370:d=2025121800:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 112244378,
+              "end": 115135612,
+              "template": 3,
+              "idx": "150:112244378:d=2025121800:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 45432429,
+              "end": 45962755,
+              "template": 3,
+              "idx": "76:45432429:d=2025121800:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        },
+        {
+          "utc": "2025-12-18T01:00:00Z",
+          "localHour": 18,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20251218/conus/hrrr.t01z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20251218/conus/hrrr.t01z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 39233504,
+              "end": 40443283,
+              "template": 3,
+              "idx": "71:39233504:d=2025121801:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 46401904,
+              "end": 48783519,
+              "template": 0,
+              "idx": "77:46401904:d=2025121801:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 48783519,
+              "end": 51165134,
+              "template": 0,
+              "idx": "78:48783519:d=2025121801:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 110517039,
+              "end": 113406015,
+              "template": 3,
+              "idx": "150:110517039:d=2025121801:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 45763573,
+              "end": 46401904,
+              "template": 3,
+              "idx": "76:45763573:d=2025121801:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        },
+        {
+          "utc": "2025-12-18T02:00:00Z",
+          "localHour": 19,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20251218/conus/hrrr.t02z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20251218/conus/hrrr.t02z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 39238272,
+              "end": 40455143,
+              "template": 3,
+              "idx": "71:39238272:d=2025121802:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 46496432,
+              "end": 48878047,
+              "template": 0,
+              "idx": "77:46496432:d=2025121802:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 48878047,
+              "end": 51259662,
+              "template": 0,
+              "idx": "78:48878047:d=2025121802:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 110679884,
+              "end": 113529514,
+              "template": 3,
+              "idx": "150:110679884:d=2025121802:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 45805855,
+              "end": 46496432,
+              "template": 3,
+              "idx": "76:45805855:d=2025121802:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        },
+        {
+          "utc": "2025-12-18T03:00:00Z",
+          "localHour": 20,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20251218/conus/hrrr.t03z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20251218/conus/hrrr.t03z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 39355356,
+              "end": 40576625,
+              "template": 3,
+              "idx": "71:39355356:d=2025121803:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 46674518,
+              "end": 49056133,
+              "template": 0,
+              "idx": "77:46674518:d=2025121803:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 49056133,
+              "end": 51437748,
+              "template": 0,
+              "idx": "78:49056133:d=2025121803:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 110854129,
+              "end": 113695587,
+              "template": 3,
+              "idx": "150:110854129:d=2025121803:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 45971166,
+              "end": 46674518,
+              "template": 3,
+              "idx": "76:45971166:d=2025121803:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        },
+        {
+          "utc": "2025-12-18T04:00:00Z",
+          "localHour": 21,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20251218/conus/hrrr.t04z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20251218/conus/hrrr.t04z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 39419266,
+              "end": 40643621,
+              "template": 3,
+              "idx": "71:39419266:d=2025121804:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 46850245,
+              "end": 49231860,
+              "template": 0,
+              "idx": "77:46850245:d=2025121804:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 49231860,
+              "end": 51613475,
+              "template": 0,
+              "idx": "78:49231860:d=2025121804:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 111611998,
+              "end": 114448493,
+              "template": 3,
+              "idx": "150:111611998:d=2025121804:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 46032367,
+              "end": 46850245,
+              "template": 3,
+              "idx": "76:46032367:d=2025121804:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        },
+        {
+          "utc": "2025-12-18T05:00:00Z",
+          "localHour": 22,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20251218/conus/hrrr.t05z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20251218/conus/hrrr.t05z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 39377864,
+              "end": 40605217,
+              "template": 3,
+              "idx": "71:39377864:d=2025121805:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 46993298,
+              "end": 49374913,
+              "template": 0,
+              "idx": "77:46993298:d=2025121805:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 49374913,
+              "end": 51756528,
+              "template": 0,
+              "idx": "78:49374913:d=2025121805:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 112271201,
+              "end": 115104272,
+              "template": 3,
+              "idx": "150:112271201:d=2025121805:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 46026071,
+              "end": 46993298,
+              "template": 3,
+              "idx": "76:46026071:d=2025121805:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "localDate": "2025-12-24",
+      "kind": "control",
+      "screen": {
+        "localHours": [
+          7,
+          11,
+          15,
+          19
+        ],
+        "n": 4,
+        "maxUgM3": 0.0,
+        "peakUtc": "2025-12-24T14:00:00Z"
+      },
+      "airnow": {
+        "n": 23,
+        "missingLocalHours": [
+          16
+        ],
+        "maxUgM3": 3.0,
+        "peakUtc": "2025-12-24T07:00:00Z",
+        "reportedAqiAtPeak": 28,
+        "maxReportedAqi": 28,
+        "maxReportedAqiUtc": "2025-12-24T07:00:00Z",
+        "hours": [
+          {
+            "utc": "2025-12-24T07:00:00Z",
+            "localHour": 0,
+            "ugM3": 3.0,
+            "reportedAqi": 28,
+            "url": "https://files.airnowtech.org/airnow/2025/20251224/HourlyAQObs_2025122407.dat"
+          },
+          {
+            "utc": "2025-12-24T08:00:00Z",
+            "localHour": 1,
+            "ugM3": 3.0,
+            "reportedAqi": 22,
+            "url": "https://files.airnowtech.org/airnow/2025/20251224/HourlyAQObs_2025122408.dat"
+          },
+          {
+            "utc": "2025-12-24T09:00:00Z",
+            "localHour": 2,
+            "ugM3": 2.0,
+            "reportedAqi": 17,
+            "url": "https://files.airnowtech.org/airnow/2025/20251224/HourlyAQObs_2025122409.dat"
+          },
+          {
+            "utc": "2025-12-24T10:00:00Z",
+            "localHour": 3,
+            "ugM3": 2.0,
+            "reportedAqi": 14,
+            "url": "https://files.airnowtech.org/airnow/2025/20251224/HourlyAQObs_2025122410.dat"
+          },
+          {
+            "utc": "2025-12-24T11:00:00Z",
+            "localHour": 4,
+            "ugM3": 1.0,
+            "reportedAqi": 9,
+            "url": "https://files.airnowtech.org/airnow/2025/20251224/HourlyAQObs_2025122411.dat"
+          },
+          {
+            "utc": "2025-12-24T12:00:00Z",
+            "localHour": 5,
+            "ugM3": 1.0,
+            "reportedAqi": 7,
+            "url": "https://files.airnowtech.org/airnow/2025/20251224/HourlyAQObs_2025122412.dat"
+          },
+          {
+            "utc": "2025-12-24T13:00:00Z",
+            "localHour": 6,
+            "ugM3": 0.0,
+            "reportedAqi": 3,
+            "url": "https://files.airnowtech.org/airnow/2025/20251224/HourlyAQObs_2025122413.dat"
+          },
+          {
+            "utc": "2025-12-24T14:00:00Z",
+            "localHour": 7,
+            "ugM3": 0.0,
+            "reportedAqi": 2,
+            "url": "https://files.airnowtech.org/airnow/2025/20251224/HourlyAQObs_2025122414.dat"
+          },
+          {
+            "utc": "2025-12-24T15:00:00Z",
+            "localHour": 8,
+            "ugM3": 2.0,
+            "reportedAqi": 6,
+            "url": "https://files.airnowtech.org/airnow/2025/20251224/HourlyAQObs_2025122415.dat"
+          },
+          {
+            "utc": "2025-12-24T16:00:00Z",
+            "localHour": 9,
+            "ugM3": 1.0,
+            "reportedAqi": 6,
+            "url": "https://files.airnowtech.org/airnow/2025/20251224/HourlyAQObs_2025122416.dat"
+          },
+          {
+            "utc": "2025-12-24T17:00:00Z",
+            "localHour": 10,
+            "ugM3": 2.0,
+            "reportedAqi": 8,
+            "url": "https://files.airnowtech.org/airnow/2025/20251224/HourlyAQObs_2025122417.dat"
+          },
+          {
+            "utc": "2025-12-24T18:00:00Z",
+            "localHour": 11,
+            "ugM3": 0.0,
+            "reportedAqi": 4,
+            "url": "https://files.airnowtech.org/airnow/2025/20251224/HourlyAQObs_2025122418.dat"
+          },
+          {
+            "utc": "2025-12-24T19:00:00Z",
+            "localHour": 12,
+            "ugM3": 0.0,
+            "reportedAqi": 2,
+            "url": "https://files.airnowtech.org/airnow/2025/20251224/HourlyAQObs_2025122419.dat"
+          },
+          {
+            "utc": "2025-12-24T20:00:00Z",
+            "localHour": 13,
+            "ugM3": 2.0,
+            "reportedAqi": 6,
+            "url": "https://files.airnowtech.org/airnow/2025/20251224/HourlyAQObs_2025122420.dat"
+          },
+          {
+            "utc": "2025-12-24T21:00:00Z",
+            "localHour": 14,
+            "ugM3": 1.0,
+            "reportedAqi": 6,
+            "url": "https://files.airnowtech.org/airnow/2025/20251224/HourlyAQObs_2025122421.dat"
+          },
+          {
+            "utc": "2025-12-24T22:00:00Z",
+            "localHour": 15,
+            "ugM3": 0.0,
+            "reportedAqi": 3,
+            "url": "https://files.airnowtech.org/airnow/2025/20251224/HourlyAQObs_2025122422.dat"
+          },
+          {
+            "utc": "2025-12-25T00:00:00Z",
+            "localHour": 17,
+            "ugM3": 0.0,
+            "reportedAqi": 0,
+            "url": "https://files.airnowtech.org/airnow/2025/20251225/HourlyAQObs_2025122500.dat"
+          },
+          {
+            "utc": "2025-12-25T01:00:00Z",
+            "localHour": 18,
+            "ugM3": 2.0,
+            "reportedAqi": 4,
+            "url": "https://files.airnowtech.org/airnow/2025/20251225/HourlyAQObs_2025122501.dat"
+          },
+          {
+            "utc": "2025-12-25T02:00:00Z",
+            "localHour": 19,
+            "ugM3": 0.0,
+            "reportedAqi": 2,
+            "url": "https://files.airnowtech.org/airnow/2025/20251225/HourlyAQObs_2025122502.dat"
+          },
+          {
+            "utc": "2025-12-25T03:00:00Z",
+            "localHour": 20,
+            "ugM3": 3.0,
+            "reportedAqi": 9,
+            "url": "https://files.airnowtech.org/airnow/2025/20251225/HourlyAQObs_2025122503.dat"
+          },
+          {
+            "utc": "2025-12-25T04:00:00Z",
+            "localHour": 21,
+            "ugM3": 3.0,
+            "reportedAqi": 13,
+            "url": "https://files.airnowtech.org/airnow/2025/20251225/HourlyAQObs_2025122504.dat"
+          },
+          {
+            "utc": "2025-12-25T05:00:00Z",
+            "localHour": 22,
+            "ugM3": 3.0,
+            "reportedAqi": 14,
+            "url": "https://files.airnowtech.org/airnow/2025/20251225/HourlyAQObs_2025122505.dat"
+          },
+          {
+            "utc": "2025-12-25T06:00:00Z",
+            "localHour": 23,
+            "ugM3": 3.0,
+            "reportedAqi": 16,
+            "url": "https://files.airnowtech.org/airnow/2025/20251225/HourlyAQObs_2025122506.dat"
+          }
+        ]
+      },
+      "hrrr": [
+        {
+          "utc": "2025-12-24T12:00:00Z",
+          "localHour": 5,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20251224/conus/hrrr.t12z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20251224/conus/hrrr.t12z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 38643327,
+              "end": 39905124,
+              "template": 3,
+              "idx": "71:38643327:d=2025122412:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 46817189,
+              "end": 49198804,
+              "template": 0,
+              "idx": "77:46817189:d=2025122412:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 49198804,
+              "end": 51580419,
+              "template": 0,
+              "idx": "78:49198804:d=2025122412:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 115209756,
+              "end": 118103782,
+              "template": 3,
+              "idx": "150:115209756:d=2025122412:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 45488864,
+              "end": 46817189,
+              "template": 3,
+              "idx": "76:45488864:d=2025122412:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        },
+        {
+          "utc": "2025-12-24T13:00:00Z",
+          "localHour": 6,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20251224/conus/hrrr.t13z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20251224/conus/hrrr.t13z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 38797342,
+              "end": 40040632,
+              "template": 3,
+              "idx": "71:38797342:d=2025122413:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 46949899,
+              "end": 49331514,
+              "template": 0,
+              "idx": "77:46949899:d=2025122413:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 49331514,
+              "end": 51713129,
+              "template": 0,
+              "idx": "78:49331514:d=2025122413:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 116971827,
+              "end": 119890774,
+              "template": 3,
+              "idx": "150:116971827:d=2025122413:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 45628885,
+              "end": 46949899,
+              "template": 3,
+              "idx": "76:45628885:d=2025122413:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        },
+        {
+          "utc": "2025-12-24T14:00:00Z",
+          "localHour": 7,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20251224/conus/hrrr.t14z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20251224/conus/hrrr.t14z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 38935052,
+              "end": 40169550,
+              "template": 3,
+              "idx": "71:38935052:d=2025122414:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 47042327,
+              "end": 49423942,
+              "template": 0,
+              "idx": "77:47042327:d=2025122414:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 49423942,
+              "end": 51805557,
+              "template": 0,
+              "idx": "78:49423942:d=2025122414:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 120075869,
+              "end": 122988716,
+              "template": 3,
+              "idx": "150:120075869:d=2025122414:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 45719785,
+              "end": 47042327,
+              "template": 3,
+              "idx": "76:45719785:d=2025122414:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        },
+        {
+          "utc": "2025-12-24T15:00:00Z",
+          "localHour": 8,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20251224/conus/hrrr.t15z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20251224/conus/hrrr.t15z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 38784278,
+              "end": 40012994,
+              "template": 3,
+              "idx": "71:38784278:d=2025122415:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 46592369,
+              "end": 48973984,
+              "template": 0,
+              "idx": "77:46592369:d=2025122415:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 48973984,
+              "end": 51355599,
+              "template": 0,
+              "idx": "78:48973984:d=2025122415:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 122025017,
+              "end": 124916944,
+              "template": 3,
+              "idx": "150:122025017:d=2025122415:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 45470889,
+              "end": 46592369,
+              "template": 3,
+              "idx": "76:45470889:d=2025122415:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        },
+        {
+          "utc": "2025-12-24T16:00:00Z",
+          "localHour": 9,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20251224/conus/hrrr.t16z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20251224/conus/hrrr.t16z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 38897220,
+              "end": 40088717,
+              "template": 3,
+              "idx": "71:38897220:d=2025122416:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 46579983,
+              "end": 48961598,
+              "template": 0,
+              "idx": "77:46579983:d=2025122416:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 48961598,
+              "end": 51343213,
+              "template": 0,
+              "idx": "78:48961598:d=2025122416:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 123937641,
+              "end": 126825075,
+              "template": 3,
+              "idx": "150:123937641:d=2025122416:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 45461808,
+              "end": 46579983,
+              "template": 3,
+              "idx": "76:45461808:d=2025122416:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        },
+        {
+          "utc": "2025-12-24T17:00:00Z",
+          "localHour": 10,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20251224/conus/hrrr.t17z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20251224/conus/hrrr.t17z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 38582193,
+              "end": 39771799,
+              "template": 3,
+              "idx": "71:38582193:d=2025122417:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 45992629,
+              "end": 48374244,
+              "template": 0,
+              "idx": "77:45992629:d=2025122417:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 48374244,
+              "end": 50755859,
+              "template": 0,
+              "idx": "78:48374244:d=2025122417:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 124161185,
+              "end": 127021260,
+              "template": 3,
+              "idx": "150:124161185:d=2025122417:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 45106751,
+              "end": 45992629,
+              "template": 3,
+              "idx": "76:45106751:d=2025122417:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        },
+        {
+          "utc": "2025-12-24T23:00:00Z",
+          "localHour": 16,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20251224/conus/hrrr.t23z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20251224/conus/hrrr.t23z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 37703949,
+              "end": 38897742,
+              "template": 3,
+              "idx": "71:37703949:d=2025122423:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 44850118,
+              "end": 47231733,
+              "template": 0,
+              "idx": "77:44850118:d=2025122423:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 47231733,
+              "end": 49613348,
+              "template": 0,
+              "idx": "78:47231733:d=2025122423:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 114942054,
+              "end": 117853956,
+              "template": 3,
+              "idx": "150:114942054:d=2025122423:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 44158868,
+              "end": 44850118,
+              "template": 3,
+              "idx": "76:44158868:d=2025122423:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        },
+        {
+          "utc": "2025-12-25T00:00:00Z",
+          "localHour": 17,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20251225/conus/hrrr.t00z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20251225/conus/hrrr.t00z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 38018430,
+              "end": 39202368,
+              "template": 3,
+              "idx": "71:38018430:d=2025122500:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 45092265,
+              "end": 47473880,
+              "template": 0,
+              "idx": "77:45092265:d=2025122500:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 47473880,
+              "end": 49855495,
+              "template": 0,
+              "idx": "78:47473880:d=2025122500:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 112084511,
+              "end": 114998663,
+              "template": 3,
+              "idx": "150:112084511:d=2025122500:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 44540315,
+              "end": 45092265,
+              "template": 3,
+              "idx": "76:44540315:d=2025122500:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        },
+        {
+          "utc": "2025-12-25T01:00:00Z",
+          "localHour": 18,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20251225/conus/hrrr.t01z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20251225/conus/hrrr.t01z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 38121030,
+              "end": 39325767,
+              "template": 3,
+              "idx": "71:38121030:d=2025122501:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 45688352,
+              "end": 48069967,
+              "template": 0,
+              "idx": "77:45688352:d=2025122501:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 48069967,
+              "end": 50451582,
+              "template": 0,
+              "idx": "78:48069967:d=2025122501:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 110932699,
+              "end": 113840108,
+              "template": 3,
+              "idx": "150:110932699:d=2025122501:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 44714620,
+              "end": 45688352,
+              "template": 3,
+              "idx": "76:44714620:d=2025122501:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        },
+        {
+          "utc": "2025-12-25T02:00:00Z",
+          "localHour": 19,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20251225/conus/hrrr.t02z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20251225/conus/hrrr.t02z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 38348323,
+              "end": 39544399,
+              "template": 3,
+              "idx": "71:38348323:d=2025122502:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 45979824,
+              "end": 48361439,
+              "template": 0,
+              "idx": "77:45979824:d=2025122502:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 48361439,
+              "end": 50743054,
+              "template": 0,
+              "idx": "78:48361439:d=2025122502:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 110988841,
+              "end": 113881252,
+              "template": 3,
+              "idx": "150:110988841:d=2025122502:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 44964224,
+              "end": 45979824,
+              "template": 3,
+              "idx": "76:44964224:d=2025122502:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        },
+        {
+          "utc": "2025-12-25T03:00:00Z",
+          "localHour": 20,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20251225/conus/hrrr.t03z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20251225/conus/hrrr.t03z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 38395718,
+              "end": 39610070,
+              "template": 3,
+              "idx": "71:38395718:d=2025122503:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 46064834,
+              "end": 48446449,
+              "template": 0,
+              "idx": "77:46064834:d=2025122503:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 48446449,
+              "end": 50828064,
+              "template": 0,
+              "idx": "78:48446449:d=2025122503:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 111919580,
+              "end": 114808312,
+              "template": 3,
+              "idx": "150:111919580:d=2025122503:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 45057967,
+              "end": 46064834,
+              "template": 3,
+              "idx": "76:45057967:d=2025122503:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        },
+        {
+          "utc": "2025-12-25T04:00:00Z",
+          "localHour": 21,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20251225/conus/hrrr.t04z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20251225/conus/hrrr.t04z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 38313816,
+              "end": 39534625,
+              "template": 3,
+              "idx": "71:38313816:d=2025122504:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 46206977,
+              "end": 48588592,
+              "template": 0,
+              "idx": "77:46206977:d=2025122504:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 48588592,
+              "end": 50970207,
+              "template": 0,
+              "idx": "78:48588592:d=2025122504:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 112219746,
+              "end": 115108420,
+              "template": 3,
+              "idx": "150:112219746:d=2025122504:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 45023836,
+              "end": 46206977,
+              "template": 3,
+              "idx": "76:45023836:d=2025122504:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        },
+        {
+          "utc": "2025-12-25T05:00:00Z",
+          "localHour": 22,
+          "grib": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20251225/conus/hrrr.t05z.wrfsfcf00.grib2",
+          "idxUrl": "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/hrrr.20251225/conus/hrrr.t05z.wrfsfcf00.grib2.idx",
+          "fields": {
+            "TMP": {
+              "level": "2 m above ground",
+              "ftime": "anl",
+              "start": 38433676,
+              "end": 39655759,
+              "template": 3,
+              "idx": "71:38433676:d=2025122505:TMP:2 m above ground:anl:"
+            },
+            "UGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 46315221,
+              "end": 48696836,
+              "template": 0,
+              "idx": "77:46315221:d=2025122505:UGRD:10 m above ground:anl:"
+            },
+            "VGRD": {
+              "level": "10 m above ground",
+              "ftime": "anl",
+              "start": 48696836,
+              "end": 51078451,
+              "template": 0,
+              "idx": "78:48696836:d=2025122505:VGRD:10 m above ground:anl:"
+            },
+            "HPBL": {
+              "level": "surface",
+              "ftime": "anl",
+              "start": 112381137,
+              "end": 115272976,
+              "template": 3,
+              "idx": "150:112381137:d=2025122505:HPBL:surface:anl:"
+            },
+            "MASSDEN": {
+              "level": "8 m above ground",
+              "ftime": "anl",
+              "start": 45149785,
+              "end": 46315221,
+              "template": 3,
+              "idx": "76:45149785:d=2025122505:MASSDEN:8 m above ground:anl:"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
