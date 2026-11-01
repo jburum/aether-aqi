@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
@@ -667,10 +668,52 @@ describe("v1 phase 4 monitoring", { concurrency: 1 }, () => {
     }
   });
 
+  it("refuses an earlier AirNow reservation after a later stamp took the last slot", async () => {
+    const sql = await openDb();
+    const clock = await sql.query<{ t: string | Date }>("select clock_timestamp() as t");
+    const dbNow = new Date(clock[0].t);
+    const inside = new Date(dbNow.getTime() - 60_000);
+    for (let i = 0; i < AIRNOW_HOURLY_LIMIT - 1; i += 1) {
+      await recordUpstreamCall(sql, {
+        source: "airnow",
+        endpointKind: "airnow_current",
+        calledAt: inside,
+        outcome: "ok",
+      });
+    }
+    // The later stamp reserves first. Under the old window that row sits past
+    // the earlier stamp, so called_at <= earlier still sees 499 and inserts.
+    const later = new Date(dbNow.getTime() + 60 * 60 * 1000);
+    const earlier = new Date(dbNow.getTime() - 1000);
+    const first = await sql.query<{ reserved_id: string | null }>(
+      "select airnow_reserve($1, $2, $3) as reserved_id",
+      [randomUUID(), later.toISOString(), AIRNOW_HOURLY_LIMIT],
+    );
+    const second = await sql.query<{ reserved_id: string | null }>(
+      "select airnow_reserve($1, $2, $3) as reserved_id",
+      [randomUUID(), earlier.toISOString(), AIRNOW_HOURLY_LIMIT],
+    );
+    assert.equal(typeof first[0]?.reserved_id, "string");
+    assert.equal(second[0]?.reserved_id, null);
+    const count = await sql.query<{ n: number }>(
+      "select count(*)::int as n from upstream_call where source = 'airnow'",
+    );
+    assert.equal(count[0]?.n, AIRNOW_HOURLY_LIMIT);
+    const stored = await sql.query<{ called_at: string | Date }>(
+      "select called_at from upstream_call where id = $1",
+      [first[0]?.reserved_id],
+    );
+    const storedAt = new Date(stored[0].called_at).getTime();
+    assert.equal(Number.isNaN(storedAt), false);
+    assert.ok(storedAt > inside.getTime());
+    assert.ok(later.getTime() - storedAt > 30 * 60 * 1000);
+  });
+
   it("keeps an AirNow call from exactly one hour ago outside the reserved hour", async () => {
     const sql = await openDb();
-    const now = new Date("2026-10-30T20:00:00.000Z");
-    const exactlyOneHourAgo = new Date(now.getTime() - HOUR_MS);
+    const clock = await sql.query<{ t: string | Date }>("select clock_timestamp() as t");
+    const dbNow = new Date(clock[0].t);
+    const exactlyOneHourAgo = new Date(dbNow.getTime() - HOUR_MS);
     for (let i = 0; i < AIRNOW_HOURLY_LIMIT; i += 1) {
       await recordUpstreamCall(sql, {
         source: "airnow",
@@ -683,14 +726,19 @@ describe("v1 phase 4 monitoring", { concurrency: 1 }, () => {
       await recordUpstreamCall(sql, {
         source: "noaa",
         endpointKind: "hrrr_smoke_ascii",
-        calledAt: now,
+        calledAt: dbNow,
         outcome: "ok",
       });
     }
-    const reserved = await reserveAirNowCall(sql, now);
+    const reserved = await reserveAirNowCall(sql);
     assert.equal(typeof reserved, "string");
-    const stillInside = await reserveAirNowCall(sql, new Date(now.getTime() - 1));
-    assert.equal(stillInside, null);
+    const counted = await sql.query<{ n: number }>(
+      `select count(*)::int as n from upstream_call
+        where source = 'airnow'
+          and called_at > clock_timestamp() - interval '1 hour'
+          and called_at <= clock_timestamp()`,
+    );
+    assert.equal(counted[0]?.n, 1);
   });
 
   it("persists NOAA when the AirNow ledger write is rejected", async () => {

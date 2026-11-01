@@ -248,11 +248,10 @@ export async function fetchAirNowObservation(
   url.searchParams.set("longitude", String(point.longitude));
   url.searchParams.set("distance", "25");
   url.searchParams.set("API_KEY", key);
-  const calledAt = new Date();
   let reservationId: string | null = null;
   if (ledger) {
     try {
-      reservationId = await reserveAirNowCall(ledger, calledAt);
+      reservationId = await reserveAirNowCall(ledger);
     } catch (err) {
       logLedgerFailure(err);
       return fail(

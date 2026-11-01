@@ -176,20 +176,16 @@ export async function recordUpstreamCall(
 /**
  * Claims one AirNow slot in the open hour, or returns null when the hour is
  * already at `AIRNOW_HOURLY_LIMIT`. The claim is one statement: the lock, the
- * count, and the insert commit together. A refused hour inserts nothing.
+ * database clock, the count, and the insert commit together. The clock is
+ * read after the lock. This function does not take a caller timestamp.
+ * A refused hour inserts nothing.
  * The row starts as `error` / `airnow_reserved` until `finishUpstreamCall`.
  */
-export async function reserveAirNowCall(
-  sql: Queryable,
-  calledAt: Date,
-): Promise<string | null> {
-  if (!(calledAt instanceof Date) || Number.isNaN(calledAt.getTime())) {
-    throw new V1RuleError("invalid_time", "calledAt must be a UTC timestamp.");
-  }
+export async function reserveAirNowCall(sql: Queryable): Promise<string | null> {
   const id = randomUUID();
   const rows = await sql.query<{ reserved_id: string | null }>(
     "select airnow_reserve($1, $2, $3) as reserved_id",
-    [id, calledAt.toISOString(), AIRNOW_HOURLY_LIMIT],
+    [id, null, AIRNOW_HOURLY_LIMIT],
   );
   const reserved = rows[0]?.reserved_id;
   if (typeof reserved !== "string" || reserved.length === 0) return null;
