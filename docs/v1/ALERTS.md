@@ -70,6 +70,34 @@ OpenDAP on `nomads.ncep.noaa.gov` was turned off on 23 February 2026 (Service Ch
 
 `fixtures/v1/noaa-hrrr-stability-f00.grib2` and `noaa-hrrr-stability-f06.grib2` are NOMADS filter extracts for a small box over Boise at the 2026-10-30 12Z cycle, lead 0 and lead 6. Lead 0 averages about 277.9 K at 2 m, mixing height about 44 m, and 10 m wind under 1 m/s. Copied onto a January hour, that met fires. Left on 30 October, it stays quiet because October is not winter.
 
+## PM input options (for Jason)
+
+`inversionRule` is unchanged. These four options are the PM term only, computed from `fixtures/v1/inversion-recorded.json`. The days are the three inversion days and the two controls in that file. Each day is the 13 HRRR hours at local 05–10 and 16–22. Local 11–15 are absent, so a morning run and an evening run stay separate. A missing AirNow hour is a quiet PM hour. Three hours on still start an episode, and three quiet hours still end it.
+
+HRRR corrected AQI is the highest MASSDEN hour `inversionRule` already reads. On 13–15 January that hour is 0, and so is every other sampled hour. White Pine PM2.5 is the full-day hourly peak. Reported AQI is `PM25_AQI` on that peak hour, copied as reported, not recomputed from the µg/m³. 13 January local 05 is 11 µg/m³ and reported AQI 53.
+
+| Local day   | Kind      | HRRR corrected AQI | PM2.5 µg/m³ | Reported AQI at that peak | Mixing height and wind                                      |
+| ----------- | --------- | -----------------: | ----------: | ------------------------: | ----------------------------------------------------------- |
+| 13 Jan 2026 | inversion |                  0 |          31 |                        86 | Yes. Local 05–10 and local 17–22.                           |
+| 14 Jan 2026 | inversion |                  0 |          37 |                        94 | Yes. Local 05–10 and local 19–22.                           |
+| 15 Jan 2026 | inversion |                  0 |          38 |                        98 | Yes. All 13 sampled hours.                                  |
+| 17 Dec 2025 | control   |                  2 |           7 |                        21 | No. Only local 21–22, two hours.                            |
+| 24 Dec 2025 | control   |                  1 |           3 |                        28 | No. Mixing height at least 422 m and wind at least 3.7 m/s. |
+
+14 January local 16 is 431 m, and local 18 is 2.04 m/s, so local 17 is a one-hour met hour between those misses. 13 January local 16 is 403 m and 2.1 m/s. 17 December's reported AQI on the 7 µg/m³ hour is 21, and the highest reported AQI that day is 24 an hour later. 14 January's highest reported AQI is also 94, on the hour after the 37 µg/m³ peak.
+
+(a) Today's rule. HRRR corrected AQI at 101, plus both met lines. Fires on none of the five days.
+
+(b) Observed AirNow PM2.5 at AQI 101. Reported `PM25_AQI` replaces the HRRR number. The met lines stay. Fires on none of the five days. No hour reaches reported AQI 101. The highest is 98, on 15 January at local 03 (38 µg/m³), outside the HRRR hours. The highest on a sampled hour is 94.
+
+(c) Observed AirNow PM2.5 at AQI 51 (Moderate). The same reported AQI, with the line at 51, and the met lines unchanged. Fires on 13, 14, and 15 January. Stays quiet on 17 and 24 December. 13 January starts at local 05 (reported AQI 53, 52, 52, 52) and again at local 17. Local 09 is 49, one quiet hour, which does not clear the morning. 14 January's morning does not hold 51 for 3 hours (55, 52, 49, 52, 48, 35). It starts at local 19 (80, 86, 94, 94). 15 January starts at local 05 and local 16. Every sampled hour that day is reported AQI 63 or higher.
+
+(d) Meteorology only. No PM term. Fires on 13, 14, and 15 January. Stays quiet on 17 and 24 December. 13 January starts at local 05 and local 17. 14 January starts at local 05 and local 19. 15 January starts at local 05 and local 16. 17 December's two met hours are short of three.
+
+None of the four options fires on a control day.
+
+`tests/inversion-pm-options.test.ts` computes the four outcomes from the fixture. The helper is in that file. `src/lib/v1` is untouched.
+
 ## HTTP
 
 Owner-scoped, same errors as the other place reads. Another user's id is `place_not_found`. GET only. POST is 405. A missing or unknown `timeZone` is 400 `invalid_time_zone`. `asOf` uses `parseAsOf`, so an impossible day such as `2026-02-30` is 400 `invalid_time`.
