@@ -77,6 +77,32 @@ The body is optional. `{}` and an empty body use the latest cycle. `cycleUtc` mu
 
 The 200 body is `cycleUtc` and `places`. Each place has `placeId`, `hrrr`, `aqm`, `stored`, `skipped`, `conflicts`, `officialAqi`, `official` (`stored`, `skipped`, `conflicts`), `aqfError`, `airnowError`, and `unavailableHours`. `aqfError` is null when the AQM file was read. `unavailableHours` is every lead after 72 through `FORECAST_HORIZON_HOURS`, including 168. `officialAqi` is the stored integer, including a repeat that did not overwrite it, and null when this run did not take an official number. `conflicts` counts a repeat whose incoming corrected value differs from the stored one. `official.conflicts` is that same case for the AirNow integer. A skipped AirNow call does not delete an official row already stored. An AQM failure does not delete smoke rows stored on that same run.
 
+## Dry run
+
+`npm run ingest:dry-run` runs `loadPlaceCycle` in `src/lib/v1/place-ingest.ts` for one coordinate and writes nothing. There is no database, no ledger row, and no file. Responses stay in memory. The default place is Boise, 43.615, -116.202. `--lat` and `--lon` override that. `--name` is only the label in the printout. `--cycle` is an optional `00`, `06`, `12`, or `18` UTC timestamp. Omitted, the cycle is the latest of those hours at or before the clock, the same rule as `latestNoaaCycle`.
+
+```bash
+npm run ingest:dry-run
+npm run ingest:dry-run -- --lat 43.615 --lon -116.202
+npm run ingest:dry-run -- --cycle 2026-10-30T12:00:00.000Z
+```
+
+The script calls the public HRRR bucket `noaa-hrrr-bdp-pds.s3.amazonaws.com` and `nomads.ncep.noaa.gov` only. PurpleAir and Open-Meteo are refused. AirNow stays off: the script clears `AIRNOW_API_KEY` for the call, `fetchAirNowObservation` returns `airnow_api_key_missing`, and the client does not leave the process. `airnowRequests` is 0. The key is not printed.
+
+The header is the place, the cycle, the AQM cycle (`latestAqmCycle`), the GrADS `hrrr` and `aqm` indexes, the Lambert cell from the first smoke message, and the counts. Then one line per lead hour, 0 through 168: `lead`, `source`, `horizon`, `correctedAqi`, `outcome`.
+
+| Field         | Meaning                                                                                 |
+| ------------- | --------------------------------------------------------------------------------------- |
+| `stored`      | Forecast rows this cycle would insert on an empty place. Nothing is written.            |
+| `skipped`     | 0. A dry run does not read a previous row, so it cannot count an idempotent skip.       |
+| `conflicts`   | 0. A dry run does not read a stored integer it could disagree with.                     |
+| `unavailable` | Hours 73 through 168. No source. The line's outcome is `unavailable`.                   |
+| `missing`     | Lead 0 through 72 with no stored row. A 404, a masked cell, or a value the cut dropped. |
+| `outcome`     | `stored`, `unavailable`, or `missing` for that lead.                                    |
+| timings       | `smokeMs` and `aqmMs` sum the NOAA fetches. `airnowMs` is the missing-key check.        |
+
+Hour 48 is `noaa_smoke` / `day_1_2_valley` when that GRIB message is there. Hour 49 is `noaa_aqf` / `day_3_7_noaa_aqf`. A smoke value after 48 hours is not requested. An AQM value at or before 48 hours is not a row. `aqfError` is null when the AQM file was read, and the smoke hours already decoded still print when that file fails. `npm test` uses a fake `fetchImpl` and does not run this live fetch.
+
 ## Checks
 
 ```bash
@@ -85,6 +111,6 @@ npm run lint
 npm run typecheck
 ```
 
-`npm test` stays on PGLite. It does not need `DATABASE_URL`. It does not call NOAA or AirNow. `src/lib/v1/grid.test.ts` covers Boise, McCall, and Tamarack, the halfway split, and points outside the grids. `src/lib/v1/grib.test.ts` covers the template 4.8 interval end and the bitmap on `fixtures/v1/noaa-aqm-pm25-4.8.grib2`. A masked point is null, not 0. The recorded 2026-10-31 12Z hour-49 message is `fixtures/v1/noaa-aqm-pm25-bc-f49.grib2`: Boise, McCall, and Tamarack match the ecCodes nearest cell, and the masked southwest corner is null. `src/lib/v1/place-ingest.test.ts` covers the 48-hour cut, hours 49 and 72 from that AQM shape, hours 73 through 168 left unavailable, the bias-corrected file falling back to the raw file without downloading the message after hour 72, the AWS index fixture `fixtures/v1/noaa-hrrr-smoke-f00.grib2`, the recorded 2026-10-31 18Z MASSDEN message `fixtures/v1/noaa-hrrr-massden-8m.grib2`, a second run of the recorded fixture that leaves the rows and the row counts unchanged, a hotter smoke file that keeps the first corrected number and counts one conflict, a later AirNow integer that keeps the first official number and counts one official conflict, two overlapping runs that collide on `official_hour_unique`, the missing AirNow key, the hour at 500, and a non-GRIB AQM body (`fixtures/v1/noaa-aqf-retired.txt`) that still stores smoke and still calls AirNow.
+`npm test` stays on PGLite. It does not need `DATABASE_URL`. It does not call NOAA or AirNow. `tests/ingest-dry-run.test.ts` passes a fake `fetchImpl` and proves the dry run writes no rows, keeps the 48/49-hour cut, lists hours 73 through 168 as unavailable, and leaves AirNow uncalled when the key is missing. `src/lib/v1/grid.test.ts` covers Boise, McCall, and Tamarack, the halfway split, and points outside the grids. `src/lib/v1/grib.test.ts` covers the template 4.8 interval end and the bitmap on `fixtures/v1/noaa-aqm-pm25-4.8.grib2`. A masked point is null, not 0. The recorded 2026-10-31 12Z hour-49 message is `fixtures/v1/noaa-aqm-pm25-bc-f49.grib2`: Boise, McCall, and Tamarack match the ecCodes nearest cell, and the masked southwest corner is null. `src/lib/v1/place-ingest.test.ts` covers the 48-hour cut, hours 49 and 72 from that AQM shape, hours 73 through 168 left unavailable, the bias-corrected file falling back to the raw file without downloading the message after hour 72, the AWS index fixture `fixtures/v1/noaa-hrrr-smoke-f00.grib2`, the recorded 2026-10-31 18Z MASSDEN message `fixtures/v1/noaa-hrrr-massden-8m.grib2`, a second run of the recorded fixture that leaves the rows and the row counts unchanged, a hotter smoke file that keeps the first corrected number and counts one conflict, a later AirNow integer that keeps the first official number and counts one official conflict, two overlapping runs that collide on `official_hour_unique`, the missing AirNow key, the hour at 500, and a non-GRIB AQM body (`fixtures/v1/noaa-aqf-retired.txt`) that still stores smoke and still calls AirNow.
 
 Dex reviews this head. Only Clint merges.
