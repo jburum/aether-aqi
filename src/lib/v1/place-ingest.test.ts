@@ -907,6 +907,47 @@ describe("v1 place ingest", { concurrency: 1 }, () => {
     assert.equal(message[0], 0x47);
   });
 
+  it("rejects trailing bytes after the recorded HRRR message", async () => {
+    const grib = readFileSync(join(root, "fixtures/v1/noaa-hrrr-massden-8m.grib2"));
+    assert.equal(grib.byteLength, 721_961);
+    const extra = Uint8Array.from([0x00]);
+    let step = 0;
+    const idx = smokeIndex(grib.byteLength, CYCLE);
+    await assert.rejects(
+      () =>
+        fetchHrrrSmokeField(CYCLE, 0, async (url) => {
+          if (String(url).endsWith(".idx")) return new Response(idx, { status: 200 });
+          const stream = new ReadableStream<Uint8Array>({
+            pull(controller) {
+              if (step === 0) {
+                step += 1;
+                controller.enqueue(grib);
+                return;
+              }
+              if (step === 1) {
+                step += 1;
+                controller.enqueue(extra);
+                return;
+              }
+              controller.close();
+            },
+          });
+          return new Response(stream, {
+            status: 206,
+            headers: { "content-range": `bytes 0-${grib.byteLength - 1}/${grib.byteLength}` },
+          });
+        }),
+      (err: unknown) => {
+        assert.ok(err instanceof V1RuleError);
+        if (!(err instanceof V1RuleError)) return false;
+        assert.equal(err.code, "noaa_smoke_parse");
+        assert.match(err.message, /does not match the index/);
+        return true;
+      },
+    );
+    assert.equal(step, 2);
+  });
+
   it("rejects a 200 response for an HRRR byte range", async () => {
     const declared = 256 * 1024;
     let pulled = 0;

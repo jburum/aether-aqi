@@ -301,8 +301,9 @@ function parseContentRange(header: string | null): { start: number; endInclusive
 }
 
 /**
- * Read a 206 body up to `expected` bytes. A chunk past the cap or the
+ * Read a 206 body of exactly `expected` bytes. A chunk past the cap or the
  * Content-Range length cancels the rest and does not keep that chunk.
+ * Bytes after that length are the same mismatch, including a later chunk.
  */
 async function readStreamCapped(
   response: Response,
@@ -319,10 +320,15 @@ async function readStreamCapped(
     throw error;
   };
   try {
-    while (received < expected) {
+    while (true) {
       const { done, value } = await reader.read();
       if (done) break;
       if (!value || value.byteLength === 0) continue;
+      if (received === expected) {
+        return await stop(
+          new V1RuleError("noaa_smoke_parse", "HRRR byte range does not match the index."),
+        );
+      }
       const next = received + value.byteLength;
       if (next > cap) {
         return await stop(
