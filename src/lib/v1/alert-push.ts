@@ -17,6 +17,7 @@ import type {
 
 /**
  * One Pro push per new alert episode for one saved place.
+ * The episode row is claimed before the send, so overlapping calls cannot both deliver it.
  * Quiet hours are a follow-up: this does not hold a push for the local night.
  * There is no scheduler and no APNs client. The sender must be the test sender.
  */
@@ -36,7 +37,10 @@ export interface AlertPushResult {
   asOf: string;
   sent: AlertPushAttempt[];
   failed: AlertPushAttempt[];
-  /** Episodes already marked sent. A rerun does not send them again. */
+  /**
+   * Episodes this call did not send.
+   * The row was already sent, or another caller holds the claim.
+   */
   skipped: number;
 }
 
@@ -191,6 +195,7 @@ async function loadOfficial(
   };
 }
 
+/** Fast path for a finished send. The claim below is what stops a second send. */
 async function alreadySent(
   sql: Queryable,
   userId: string,
@@ -206,7 +211,13 @@ async function alreadySent(
   return rows[0]?.status === "sent";
 }
 
-async function recordAttempt(
+/**
+ * Claim the episode before anyone sends.
+ * The insert wins only when the row is new. A finished failure has `error_text`
+ * set; one update clears it and takes the retry. `error_text` stays null only
+ * while the claim is held, so a second caller cannot send the same episode.
+ */
+async function claimEpisode(
   sql: Queryable,
   input: {
     userId: string;
@@ -215,25 +226,14 @@ async function recordAttempt(
     episodeStart: string;
     forecastId: string;
     payload: PushPayload;
-    status: "sent" | "failed";
-    providerId: string | null;
-    errorText: string | null;
   },
-): Promise<string> {
-  const rows = await sql.query<AttemptRow>(
+): Promise<string | null> {
+  const inserted = await sql.query<AttemptRow>(
     `insert into alert_push
        (id, user_id, place_id, kind, episode_start, forecast_id, payload, status,
         sender, provider_id, error_text)
-     values ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, 'test', $9, $10)
-     on conflict (user_id, place_id, kind, episode_start)
-     do update set
-       forecast_id = excluded.forecast_id,
-       payload = excluded.payload,
-       status = excluded.status,
-       provider_id = excluded.provider_id,
-       error_text = excluded.error_text,
-       updated_at = now()
-     where alert_push.status = 'failed'
+     values ($1, $2, $3, $4, $5, $6, $7::jsonb, 'failed', 'test', null, null)
+     on conflict (user_id, place_id, kind, episode_start) do nothing
      returning id`,
     [
       randomUUID(),
@@ -243,22 +243,78 @@ async function recordAttempt(
       input.episodeStart,
       input.forecastId,
       JSON.stringify(input.payload),
-      input.status,
-      input.providerId,
-      input.errorText,
     ],
   );
-  const id = rows[0]?.id;
-  if (!id) {
+  if (inserted[0]?.id) return inserted[0].id;
+
+  const retried = await sql.query<AttemptRow>(
+    `update alert_push
+        set forecast_id = $5,
+            payload = $6::jsonb,
+            provider_id = null,
+            error_text = null,
+            updated_at = now()
+      where user_id = $1
+        and place_id = $2
+        and kind = $3
+        and episode_start = $4
+        and status = 'failed'
+        and error_text is not null
+      returning id`,
+    [
+      input.userId,
+      input.placeId,
+      input.kind,
+      input.episodeStart,
+      input.forecastId,
+      JSON.stringify(input.payload),
+    ],
+  );
+  return retried[0]?.id ?? null;
+}
+
+async function markSent(sql: Queryable, id: string, providerId: string): Promise<void> {
+  const rows = await sql.query<AttemptRow>(
+    `update alert_push
+        set status = 'sent',
+            provider_id = $2,
+            error_text = null,
+            updated_at = now()
+      where id = $1
+        and status = 'failed'
+        and error_text is null
+      returning id`,
+    [id, providerId],
+  );
+  if (!rows[0]?.id) {
     throw new V1RuleError("alert_push_already_sent", "This alert episode was already sent.", 409);
   }
-  return id;
+}
+
+/** Write the send error so a later run can claim the same row again. */
+async function releaseClaim(sql: Queryable, id: string, errorText: string): Promise<void> {
+  const rows = await sql.query<AttemptRow>(
+    `update alert_push
+        set status = 'failed',
+            provider_id = null,
+            error_text = $2,
+            updated_at = now()
+      where id = $1
+        and status = 'failed'
+        and error_text is null
+      returning id`,
+    [id, errorText],
+  );
+  if (!rows[0]?.id) {
+    throw new V1RuleError("alert_push_already_sent", "This alert episode was already sent.", 409);
+  }
 }
 
 /**
  * Read the place's alert episodes and send one test push for each new one.
  * `now` is the Pro clock. It defaults to the call time, not `asOf`.
  * Free and a locked place throw `NotEntitledError` and write nothing.
+ * A send runs only after this call inserts the episode or takes a failed row.
  */
 export async function pushAlertEpisodes(
   sql: Queryable,
@@ -311,27 +367,34 @@ export async function pushAlertEpisodes(
       official,
     });
     assertPayloadSeparated(payload);
-    const result = await sender.send(payload);
-    const status = result.ok ? "sent" : "failed";
-    const providerId = result.ok ? result.providerId : null;
-    const errorText = result.ok ? null : failText(result.error);
-    const attemptId = await recordAttempt(sql, {
+    const attemptId = await claimEpisode(sql, {
       userId: place.user_id,
       placeId: place.id,
       kind: alert.kind,
       episodeStart: alert.start,
       forecastId: peak.id,
       payload,
-      status,
-      providerId,
-      errorText,
     });
+    if (!attemptId) {
+      skipped += 1;
+      continue;
+    }
+    let result: Awaited<ReturnType<PushSender["send"]>>;
+    try {
+      result = await sender.send(payload);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "";
+      await releaseClaim(sql, attemptId, failText(message));
+      throw error;
+    }
+    if (result.ok) await markSent(sql, attemptId, result.providerId);
+    else await releaseClaim(sql, attemptId, failText(result.error));
     const attempt: AlertPushAttempt = {
       id: attemptId,
       kind: alert.kind,
       episodeStart: alert.start,
-      status,
-      providerId,
+      status: result.ok ? "sent" : "failed",
+      providerId: result.ok ? result.providerId : null,
       payload,
     };
     if (result.ok) sent.push(attempt);

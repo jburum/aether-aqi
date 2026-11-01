@@ -141,6 +141,56 @@ function numbersStayApart(payload: PushPayload, corrected: number, official: num
   }
 }
 
+function holdSend(): {
+  sender: PushSender;
+  entered: Promise<void>;
+  release: () => void;
+  sends: () => number;
+} {
+  let sends = 0;
+  let opened = false;
+  let releaseHold!: () => void;
+  let markEntered!: () => void;
+  const entered = new Promise<void>((resolve) => {
+    markEntered = resolve;
+  });
+  const hold = new Promise<void>((resolve) => {
+    releaseHold = () => {
+      if (opened) return;
+      opened = true;
+      resolve();
+    };
+  });
+  const sender: PushSender = {
+    name: "test",
+    async send(payload: PushPayload) {
+      sends += 1;
+      assertPayloadSeparated(payload);
+      markEntered();
+      await hold;
+      return { ok: true, providerId: `test-${sends}` };
+    },
+  };
+  return {
+    sender,
+    entered,
+    release: () => releaseHold(),
+    sends: () => sends,
+  };
+}
+
+async function waitForSend(entered: Promise<void>): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => reject(new Error("the push send did not start")), 10_000);
+  });
+  try {
+    await Promise.race([entered, timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 function refused(
   feature: "alerts" | "saved_places",
 ): (err: unknown) => boolean {
@@ -376,5 +426,108 @@ describe("v1 alert episode pushes", { concurrency: 1 }, () => {
     assert.equal(result.skipped, 0);
     assert.equal(sender.sent.length, 0);
     assert.equal(await countOf(sql, "alert_push"), 0);
+  });
+
+  it("sends once when two calls overlap on the same episode", async () => {
+    const sql = await openDb();
+    await grantPro(sql, "user-a");
+    const place = await boise(sql, "user-a");
+    await seedSmoke(sql, "user-a", place.id, 148, { hours: 4 });
+    await seedOfficial(sql, "user-a", place.id, 200);
+    const gate = holdSend();
+    const first = pushAlertEpisodes(sql, place.id, AS_OF, ZONE, gate.sender, NOW);
+    let second: AlertPushResult | undefined;
+    try {
+      await waitForSend(gate.entered);
+      assert.equal(gate.sends(), 1);
+      assert.equal(await countOf(sql, "alert_push"), 1);
+      second = await pushAlertEpisodes(sql, place.id, AS_OF, ZONE, gate.sender, NOW);
+      assert.equal(gate.sends(), 1);
+      assert.equal(second.sent.length, 0);
+      assert.equal(second.failed.length, 0);
+      assert.equal(second.skipped, 1);
+      assert.equal(await countOf(sql, "alert_push"), 1);
+    } finally {
+      gate.release();
+    }
+    const firstResult = await first;
+    assert.ok(second);
+    assert.equal(firstResult.sent.length, 1);
+    assert.equal(firstResult.failed.length, 0);
+    assert.equal(gate.sends(), 1);
+    const won = firstResult.sent[0];
+    assert.ok(won);
+    assert.equal(won.status, "sent");
+    numbersStayApart(won.payload, 148, 200);
+    const stored = await sql.query<{ status: string; payload: PushPayload }>(
+      "select status, payload from alert_push",
+    );
+    assert.equal(stored.length, 1);
+    assert.equal(stored[0]?.status, "sent");
+    assert.ok(stored[0]);
+    numbersStayApart(stored[0].payload, 148, 200);
+    assert.equal(await countOf(sql, "push_delivery"), 0);
+
+    const later = new TestPushSender();
+    const third = await pushAlertEpisodes(sql, place.id, AS_OF, ZONE, later, NOW);
+    assert.equal(third.sent.length, 0);
+    assert.equal(third.failed.length, 0);
+    assert.equal(third.skipped, 1);
+    assert.equal(later.sent.length, 0);
+    assert.equal(gate.sends(), 1);
+  });
+
+  it("retries a failed episode once when two calls overlap", async () => {
+    const sql = await openDb();
+    await grantPro(sql, "user-a");
+    const place = await boise(sql, "user-a");
+    await seedSmoke(sql, "user-a", place.id, 148, { hours: 4 });
+    await seedOfficial(sql, "user-a", place.id, 200);
+    const failing = new TestPushSender();
+    failing.failNext = true;
+    const failed = await pushAlertEpisodes(sql, place.id, AS_OF, ZONE, failing, NOW);
+    assert.equal(failed.sent.length, 0);
+    assert.equal(failed.failed.length, 1);
+    assert.equal(failing.sent.length, 0);
+    const failedId = failed.failed[0]?.id;
+    assert.ok(failedId);
+
+    const gate = holdSend();
+    const first = pushAlertEpisodes(sql, place.id, AS_OF, ZONE, gate.sender, NOW);
+    let second: AlertPushResult | undefined;
+    try {
+      await waitForSend(gate.entered);
+      assert.equal(gate.sends(), 1);
+      assert.equal(await countOf(sql, "alert_push"), 1);
+      second = await pushAlertEpisodes(sql, place.id, AS_OF, ZONE, gate.sender, NOW);
+      assert.equal(gate.sends(), 1);
+      assert.equal(second.sent.length, 0);
+      assert.equal(second.failed.length, 0);
+      assert.equal(second.skipped, 1);
+    } finally {
+      gate.release();
+    }
+    const firstResult = await first;
+    assert.ok(second);
+    assert.equal(firstResult.sent.length, 1);
+    assert.equal(firstResult.failed.length, 0);
+    assert.equal(gate.sends(), 1);
+    const retried = firstResult.sent[0];
+    assert.ok(retried);
+    assert.equal(retried.id, failedId);
+    numbersStayApart(retried.payload, 148, 200);
+    const stored = await sql.query<{ id: string; status: string }>(
+      "select id, status from alert_push",
+    );
+    assert.equal(stored.length, 1);
+    assert.equal(stored[0]?.id, failedId);
+    assert.equal(stored[0]?.status, "sent");
+
+    const later = new TestPushSender();
+    const third = await pushAlertEpisodes(sql, place.id, AS_OF, ZONE, later, NOW);
+    assert.equal(third.sent.length, 0);
+    assert.equal(third.skipped, 1);
+    assert.equal(later.sent.length, 0);
+    assert.equal(await countOf(sql, "alert_push"), 1);
   });
 });
