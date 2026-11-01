@@ -26,8 +26,18 @@ export const FREE_SAVED_PLACES = 1;
 const HOUR_MS = 3_600_000;
 /** Days 1-2 run through this lead, including the exact 48-hour instant. */
 export const DAY12_MS = 48 * HOUR_MS;
-/** The launch window ends at 168 hours, including that instant. */
-export const DAY7_MS = 168 * HOUR_MS;
+/**
+ * Product forecast horizon in hours, including that hour.
+ * 72 is three days. 168 is seven. This is the one constant for that call.
+ */
+export const FORECAST_HORIZON_HOURS = 168;
+/** The launch window ends at FORECAST_HORIZON_HOURS, including that instant. */
+export const DAY7_MS = FORECAST_HORIZON_HOURS * HOUR_MS;
+/**
+ * Horizon stored on an AQM row. The launch schema still has this one value.
+ * Hours after the AQM file and through `FORECAST_HORIZON_HOURS` have no source.
+ */
+export const AQM_HORIZON = "day_3_7_noaa_aqf" as const;
 const ISO_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/;
 
 export type ForecastLeadClass = "day_1_2" | "day_3_7" | "outside";
@@ -154,7 +164,7 @@ export function assertForecastWindow(input: ValidForecast): void {
     if (
       input.spatialScale !== "regional" ||
       input.confidence !== "model" ||
-      input.horizon !== "day_3_7_noaa_aqf"
+      input.horizon !== AQM_HORIZON
     ) {
       throw new V1RuleError(
         "day_3_7_noaa_aqf",

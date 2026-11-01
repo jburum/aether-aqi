@@ -221,6 +221,7 @@ async function route(request: Request, url: URL, rest: string[], deps: V1Deps): 
         officialStatus: place.officialStatus,
         aqfError: place.aqfError,
         airnowError: place.airnowError,
+        unavailableHours: place.unavailableHours,
       })),
     });
   }

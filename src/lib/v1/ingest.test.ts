@@ -10,14 +10,14 @@ import { fetchAirNowObservation, officialInputFromAirNow, parseAirNowCurrent } f
 import { V1RuleError } from "./errors.ts";
 import { fallbackSensorDropout, ingestRecordedAirNow, ingestRecordedNoaa } from "./ingest.ts";
 import {
-  aqfAsciiUrl,
+  aqmGribUrl,
   fetchNoaaAscii,
   forecastBodiesFromExtracts,
   hrrrSmokeAsciiUrl,
   parseHrrrSmoke,
 } from "./noaa.ts";
 import { concentrationTokenToTenths, pm25TenthsToAqi } from "./pm25-aqi.ts";
-import { classifyForecastLead } from "./rules.ts";
+import { FORECAST_HORIZON_HOURS, classifyForecastLead } from "./rules.ts";
 import { ingestOutdoorSensors, type SensorSample } from "./purpleair.ts";
 import { SAMPLE_PLACE } from "./samples.ts";
 import { addSavedPlace, issueForecast, listBeside } from "./store.ts";
@@ -84,13 +84,15 @@ describe("v1 phase 1 ingest", { concurrency: 1 }, () => {
   it("keeps lead hour 48 on the smoke side and the next millisecond on days 3-7", async () => {
     const at48 = hourStamp(CYCLE, 48);
     const justAfter = new Date(new Date(CYCLE).getTime() + 48 * 3_600_000 + 1).toISOString();
-    const at168 = hourStamp(CYCLE, 168);
-    const past168 = new Date(new Date(CYCLE).getTime() + 168 * 3_600_000 + 1).toISOString();
+    const atHorizon = hourStamp(CYCLE, FORECAST_HORIZON_HOURS);
+    const pastHorizon = new Date(
+      new Date(CYCLE).getTime() + FORECAST_HORIZON_HOURS * 3_600_000 + 1,
+    ).toISOString();
     assert.equal(classifyForecastLead(CYCLE, hourStamp(CYCLE, 0)), "day_1_2");
     assert.equal(classifyForecastLead(CYCLE, at48), "day_1_2");
     assert.equal(classifyForecastLead(CYCLE, justAfter), "day_3_7");
-    assert.equal(classifyForecastLead(CYCLE, at168), "day_3_7");
-    assert.equal(classifyForecastLead(CYCLE, past168), "outside");
+    assert.equal(classifyForecastLead(CYCLE, atHorizon), "day_3_7");
+    assert.equal(classifyForecastLead(CYCLE, pastHorizon), "outside");
 
     const sql = await openDb();
     const place = await addSavedPlace(sql, "user-a", SAMPLE_PLACE);
@@ -187,17 +189,26 @@ describe("v1 phase 1 ingest", { concurrency: 1 }, () => {
     );
     assert.equal(smokeUrl.includes("API_KEY"), false);
     assert.equal(smokeUrl.includes("open-meteo"), false);
-    const aqfUrl = aqfAsciiUrl({
-      cycleUtc: CYCLE,
-      latIndex: 40,
-      lonIndex: 70,
-      hourStart: 49,
-      hourEnd: 168,
-    });
-    assert.match(
-      aqfUrl,
-      /^https:\/\/nomads\.ncep\.noaa\.gov\/dods\/aqm\/aqm20261030\/aqm\.t12z\.ascii\?pm25sfc/,
+    const bcUrl = aqmGribUrl(CYCLE, true);
+    const rawUrl = aqmGribUrl(CYCLE, false);
+    assert.equal(
+      bcUrl,
+      "https://nomads.ncep.noaa.gov/pub/data/nccf/com/aqm/prod/aqm.20261030/aqm.t12z.ave_1hr_pm25_bc.227.grib2",
     );
+    assert.equal(
+      rawUrl,
+      "https://nomads.ncep.noaa.gov/pub/data/nccf/com/aqm/prod/aqm.20261030/aqm.t12z.ave_1hr_pm25.227.grib2",
+    );
+    assert.equal(aqmGribUrl("2026-10-30T18:00:00.000Z", true), bcUrl);
+    assert.equal(
+      aqmGribUrl("2026-10-31T00:00:00.000Z", false),
+      "https://nomads.ncep.noaa.gov/pub/data/nccf/com/aqm/prod/aqm.20261030/aqm.t12z.ave_1hr_pm25.227.grib2",
+    );
+    assert.equal(
+      aqmGribUrl("2026-10-30T06:00:00.000Z", true),
+      "https://nomads.ncep.noaa.gov/pub/data/nccf/com/aqm/prod/aqm.20261030/aqm.t06z.ave_1hr_pm25_bc.227.grib2",
+    );
+    assert.equal(bcUrl.includes("API_KEY"), false);
     assert.throws(
       () =>
         hrrrSmokeAsciiUrl({

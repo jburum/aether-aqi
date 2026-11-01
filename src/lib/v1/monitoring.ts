@@ -75,6 +75,7 @@ export function noaaEndpointKind(url: string): (typeof NOAA_ENDPOINT_KINDS)[numb
   if (path.includes("filter_hrrr_2d.pl")) return "hrrr_stability_grib";
   if (parsed.hostname === "noaa-hrrr-bdp-pds.s3.amazonaws.com") return "hrrr_smoke_ascii";
   if (path.includes("/dods/hrrr/") || parsed.search.includes("masden8m")) return "hrrr_smoke_ascii";
+  if (path.includes("/com/aqm/prod/")) return "noaa_other";
   if (path.includes("/dods/aqm/") || parsed.search.includes("pm25sfc")) return "aqf_ascii";
   return "noaa_other";
 }
