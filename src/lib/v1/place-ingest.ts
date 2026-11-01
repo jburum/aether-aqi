@@ -94,6 +94,19 @@ function isForecastDuplicate(err: unknown): boolean {
   return /duplicate key|forecast_issue_unique/i.test(message);
 }
 
+/**
+ * Two runs can both pass `recordOfficial`'s existence check. The loser then
+ * raises SQLSTATE 23505 on `official_hour_unique`. That is the stored hour,
+ * not a failed write. Any other unique violation still propagates.
+ */
+function isOfficialHourConflict(err: unknown): boolean {
+  if (typeof err !== "object" || err === null) return false;
+  if (!("code" in err) || String(err.code) !== "23505") return false;
+  if ("constraint" in err && String(err.constraint) === "official_hour_unique") return true;
+  const message = err instanceof Error ? err.message : "";
+  return message.includes("official_hour_unique");
+}
+
 async function storeForecasts(
   sql: Queryable,
   userId: string,
@@ -133,7 +146,10 @@ async function storeOfficial(
     const stored = await recordOfficial(sql, userId, officialInputFromAirNow(placeId, reading));
     return { officialAqi: stored.officialAqi, officialStatus: "stored" };
   } catch (err) {
-    if (!(err instanceof V1RuleError) || err.code !== "official_already_recorded") throw err;
+    const alreadyRecorded =
+      (err instanceof V1RuleError && err.code === "official_already_recorded") ||
+      isOfficialHourConflict(err);
+    if (!alreadyRecorded) throw err;
     const rows = await sql.query<{ official_aqi: number }>(
       `select official_aqi from official_reading
         where place_id = $1 and user_id = $2 and observed_at = $3`,

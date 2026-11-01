@@ -185,6 +185,84 @@ describe("v1 place ingest", { concurrency: 1 }, () => {
     }
   });
 
+  it("returns the stored official hour when a concurrent insert hits official_hour_unique", async () => {
+    const previous = process.env.AIRNOW_API_KEY;
+    process.env.AIRNOW_API_KEY = KEY;
+    const sql = await openDb();
+    const place = await addSavedPlace(sql, "user-a", SAMPLE_PLACE);
+    const first = fakeFetch({
+      smoke: readFixture("noaa-hrrr-smoke.ascii"),
+      aqf: readFixture("noaa-aqf.ascii"),
+      airnow: readFixture("airnow-current.json"),
+    });
+    const second = fakeFetch({
+      smoke: readFixture("noaa-hrrr-smoke.ascii"),
+      aqf: readFixture("noaa-aqf.ascii"),
+      airnow: airNowBody(90),
+    });
+    let officialSelects = 0;
+    let conflicts = 0;
+    let releaseBoth: () => void = () => {};
+    const bothSawEmpty = new Promise<void>((resolve) => {
+      releaseBoth = resolve;
+    });
+    const gate: Queryable = {
+      query: async (text, params) => {
+        if (text.includes("select official_aqi") && text.includes("from official_reading")) {
+          const rows = await sql.query(text, params);
+          officialSelects += 1;
+          if (officialSelects === 2) releaseBoth();
+          return rows;
+        }
+        if (text.includes("insert into official_reading")) {
+          await bothSawEmpty;
+          try {
+            return await sql.query(text, params);
+          } catch (err) {
+            const code =
+              typeof err === "object" && err !== null && "code" in err ? String(err.code) : "";
+            const constraint =
+              typeof err === "object" && err !== null && "constraint" in err
+                ? String(err.constraint)
+                : "";
+            if (code === "23505" && constraint === "official_hour_unique") conflicts += 1;
+            throw err;
+          }
+        }
+        return sql.query(text, params);
+      },
+    };
+    try {
+      const [left, right] = await Promise.all([
+        ingestPlaceCycle(gate, "user-a", {
+          placeId: place.id,
+          cycleUtc: CYCLE,
+          fetchImpl: first.fetchImpl,
+        }),
+        ingestPlaceCycle(gate, "user-a", {
+          placeId: place.id,
+          cycleUtc: CYCLE,
+          fetchImpl: second.fetchImpl,
+        }),
+      ]);
+      assert.equal(conflicts, 1);
+      const statuses = [left.officialStatus, right.officialStatus].sort();
+      assert.deepEqual(statuses, ["stored", "unchanged"]);
+      const official = await sql.query<{ n: number; official_aqi: number }>(
+        "select count(*)::int as n, official_aqi from official_reading group by official_aqi",
+      );
+      assert.equal(official.length, 1);
+      assert.equal(official[0]?.n, 1);
+      const kept = official[0]?.official_aqi;
+      assert.equal(kept === 48 || kept === 90, true);
+      assert.equal(left.officialAqi, kept);
+      assert.equal(right.officialAqi, kept);
+    } finally {
+      if (previous === undefined) delete process.env.AIRNOW_API_KEY;
+      else process.env.AIRNOW_API_KEY = previous;
+    }
+  });
+
   it("leaves a repeat cycle and the official number unchanged", async () => {
     const previous = process.env.AIRNOW_API_KEY;
     process.env.AIRNOW_API_KEY = KEY;

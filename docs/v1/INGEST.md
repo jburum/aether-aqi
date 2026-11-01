@@ -49,7 +49,7 @@ Another user's places are not read and not written.
 
 The forecast unique key is `(place_id, source, issued_at, valid_for)`. A second run that produces the same key stores nothing and does not change `corrected_aqi`. A hotter smoke file on the repeat is ignored. The first number stays.
 
-`official_reading` is unique on `(place_id, observed_at)`. `recordOfficial` already refuses a second write. This run catches `official_already_recorded` and leaves the stored integer in place. A later AirNow payload with a different AQI for that same hour does not overwrite it.
+`official_reading` is unique on `(place_id, observed_at)` (`official_hour_unique`). `recordOfficial` already refuses a second write when it can see the row (`official_already_recorded`). Two overlapping runs can both pass that check. The loser then raises SQLSTATE 23505 on `official_hour_unique`. This run catches that constraint, reads the stored integer back, and returns it as `unchanged`. A later AirNow payload with a different AQI for that same hour does not overwrite it. A 23505 on any other constraint still fails the run.
 
 A repeat still calls NOAA, and it calls AirNow when the key is set and the hour is under the ceiling. Those attempts are new ledger rows. The forecast and official tables are the no-op.
 
@@ -83,6 +83,6 @@ npm run lint
 npm run typecheck
 ```
 
-`npm test` stays on PGLite. It does not need `DATABASE_URL`. It does not call NOAA or AirNow. `src/lib/v1/grid.test.ts` covers Boise, McCall, and Tamarack, the halfway split, and points outside the grids. `src/lib/v1/place-ingest.test.ts` covers the 48-hour cut, a re-ingest that does not change the forecast or the official number, the missing AirNow key, and the hour at 500.
+`npm test` stays on PGLite. It does not need `DATABASE_URL`. It does not call NOAA or AirNow. `src/lib/v1/grid.test.ts` covers Boise, McCall, and Tamarack, the halfway split, and points outside the grids. `src/lib/v1/place-ingest.test.ts` covers the 48-hour cut, a re-ingest that does not change the forecast or the official number, two overlapping runs that collide on `official_hour_unique`, the missing AirNow key, and the hour at 500.
 
 Dex reviews this head. Only Clint merges.
