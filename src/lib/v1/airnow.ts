@@ -4,7 +4,7 @@ import {
   reserveAirNowCall,
 } from "./monitoring.ts";
 import { AIRNOW_ATTRIBUTION } from "./rules.ts";
-import type { Queryable } from "./types.ts";
+import type { AirNowParameter, Queryable } from "./types.ts";
 
 /** Current observation by latitude and longitude. The key is a query parameter, never logged. */
 export const AIRNOW_CURRENT_URL = "https://www.airnowapi.org/aq/observation/latLong/current/";
@@ -36,7 +36,8 @@ export interface AirNowReading {
   observedAt: string;
   aqi: number;
   raw: string;
-  parameter: string;
+  /** PM2.5 or O3. PM10 and every other ParameterName are null. */
+  parameter: AirNowParameter | null;
 }
 
 export type AirNowClientResult =
@@ -61,6 +62,7 @@ export function officialInputFromAirNow(
   preliminary: true;
   attribution: string;
   source: "airnow";
+  parameter: AirNowParameter | null;
 } {
   return {
     placeId,
@@ -70,7 +72,16 @@ export function officialInputFromAirNow(
     preliminary: true,
     attribution: AIRNOW_ATTRIBUTION,
     source: "airnow",
+    parameter: reading.parameter,
   };
+}
+
+/** AirNow ParameterName values this store keeps. Anything else, including PM10, is null. */
+function storedParameter(name: unknown): AirNowParameter | null {
+  if (typeof name !== "string") return null;
+  const trimmed = name.trim();
+  if (trimmed === "PM2.5" || trimmed === "O3") return trimmed;
+  return null;
 }
 
 type AirNowFailure = { ok: false; code: string; message: string };
@@ -164,7 +175,7 @@ export function parseAirNowCurrent(text: string): AirNowClientResult {
     }
     const observed = observedAtFromLocal(item);
     if (!observed.ok) return observed;
-    const parameter = typeof item.ParameterName === "string" ? item.ParameterName : "";
+    const parameter = storedParameter(item.ParameterName);
     rows.push({
       observedAt: observed.observedAt,
       aqi: token.aqi,
