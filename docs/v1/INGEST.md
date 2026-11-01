@@ -83,6 +83,6 @@ npm run lint
 npm run typecheck
 ```
 
-`npm test` stays on PGLite. It does not need `DATABASE_URL`. It does not call NOAA or AirNow. `src/lib/v1/grid.test.ts` covers Boise, McCall, and Tamarack, the halfway split, and points outside the grids. `src/lib/v1/place-ingest.test.ts` covers the 48-hour cut, the AWS index fixture `fixtures/v1/noaa-hrrr-smoke-f00.grib2`, a re-ingest that does not change the forecast or the official number, two overlapping runs that collide on `official_hour_unique`, the missing AirNow key, and the hour at 500.
+`npm test` stays on PGLite. It does not need `DATABASE_URL`. It does not call NOAA or AirNow. `src/lib/v1/grid.test.ts` covers Boise, McCall, and Tamarack, the halfway split, and points outside the grids. `src/lib/v1/place-ingest.test.ts` covers the 48-hour cut, the AWS index fixture `fixtures/v1/noaa-hrrr-smoke-f00.grib2`, the recorded 2026-10-31 18Z MASSDEN message `fixtures/v1/noaa-hrrr-massden-8m.grib2`, a re-ingest that does not change the forecast or the official number, two overlapping runs that collide on `official_hour_unique`, the missing AirNow key, and the hour at 500.
 
 Dex reviews this head. Only Clint merges.

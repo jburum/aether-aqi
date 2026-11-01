@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
@@ -781,6 +782,61 @@ describe("v1 place ingest", { concurrency: 1 }, () => {
     } finally {
       if (previous === undefined) delete process.env.AIRNOW_API_KEY;
       else process.env.AIRNOW_API_KEY = previous;
+    }
+  });
+
+  // Public HRRR-Smoke, 2026-10-31 18Z f00, MASSDEN at 8 m.
+  // noaa-hrrr-bdp-pds hrrr.20261031/conus/hrrr.t18z.wrfsfcf00.grib2
+  // idx offsets 42413962:43135923. Ni is 1799, so the packed index is j * 1799 + i.
+  it("reads named Lambert points from the recorded HRRR MASSDEN message", () => {
+    const grib = readFileSync(join(root, "fixtures/v1/noaa-hrrr-massden-8m.grib2"));
+    assert.equal(grib.byteLength, 721_961);
+    assert.ok(grib.byteLength < 2 * 1024 * 1024);
+    assert.equal(
+      createHash("sha256").update(grib).digest("hex"),
+      "e1cdef9d663d79345bd240acea6390216cbcef59b45adc5599343ae9a554ef6f",
+    );
+    const points = [
+      {
+        name: "Boise",
+        latitude: BOISE.latitude,
+        longitude: BOISE.longitude,
+        i: 399,
+        j: 770,
+        index: 1_385_629,
+        value: 8.000000088467129e-11,
+      },
+      {
+        name: "McCall",
+        latitude: MCCALL.latitude,
+        longitude: MCCALL.longitude,
+        i: 411,
+        j: 817,
+        index: 1_470_194,
+        value: 6.240000008846712e-10,
+      },
+      {
+        name: "Tamarack",
+        latitude: TAMARACK.latitude,
+        longitude: TAMARACK.longitude,
+        i: 409,
+        j: 808,
+        index: 1_454_001,
+        value: 4.160000008846713e-10,
+      },
+    ];
+    for (const expected of points) {
+      const point = readLambertPoint(grib, expected.latitude, expected.longitude);
+      assert.equal(point.referenceTime, "2026-10-31T18:00:00.000Z", expected.name);
+      assert.equal(point.forecastHour, 0, expected.name);
+      assert.equal(point.category, 20, expected.name);
+      assert.equal(point.parameter, 0, expected.name);
+      assert.equal(point.surfaceType, 103, expected.name);
+      assert.equal(point.level, 8, expected.name);
+      assert.equal(point.i, expected.i, expected.name);
+      assert.equal(point.j, expected.j, expected.name);
+      assert.equal(point.j * 1799 + point.i, expected.index, expected.name);
+      assert.ok(Math.abs(point.value - expected.value) < 1e-18, expected.name);
     }
   });
 

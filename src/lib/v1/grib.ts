@@ -181,6 +181,10 @@ export interface LambertPoint {
   parameter: number;
   surfaceType: number;
   level: number;
+  /** Column of the nearest Lambert cell. Increases east. */
+  i: number;
+  /** Row of the nearest Lambert cell. Increases north. */
+  j: number;
   /** Physical value after the GRIB reference, binary scale, and decimal scale. */
   value: number;
 }
@@ -265,13 +269,13 @@ function toEast(longitude: number): number {
   return longitude < 0 ? longitude + 360 : longitude;
 }
 
-/** Nearest cell center. i increases east, j north, index is `j * nx + i`. */
-function nearestLambertIndex(
+/** Nearest cell. i increases east, j north, and the packed index is `j * nx + i`. */
+function nearestLambertCell(
   grid: LambertAxes,
   latitude: number,
   longitude: number,
   code: string,
-): number {
+): { i: number; j: number } {
   const lat1 = (grid.latin * Math.PI) / 180;
   const lon0 = (grid.lov * Math.PI) / 180;
   const n = Math.sin(lat1);
@@ -291,7 +295,7 @@ function nearestLambertIndex(
   if (i < 0 || j < 0 || i >= grid.nx || j >= grid.ny) {
     fail("Place is outside the HRRR Lambert grid.", code);
   }
-  return j * grid.nx + i;
+  return { i, j };
 }
 
 /**
@@ -392,7 +396,7 @@ function spatialValueAt(sec5: Uint8Array, sec7: Uint8Array, index: number, code:
 
 /**
  * One Lambert cell from a template 5.3 message.
- * `latitude` and `longitude` are the place's HRRR cell center, not a Lambert i,j.
+ * `latitude` and `longitude` are the place. The sample is the nearest Lambert cell.
  * Simple-packed stability extracts stay on `readSimpleGribFields`.
  */
 export function readLambertPoint(
@@ -439,7 +443,7 @@ export function readLambertPoint(
   if ((sec4[17] ?? 0) !== 1) fail("GRIB2 forecast time is not in hours.", code);
   if ((sec6[5] ?? 0) !== 255) fail("GRIB2 bitmap is not used for this smoke field.", code);
   const grid = lambertAxes(sec3, code);
-  const index = nearestLambertIndex(grid, latitude, longitude, code);
+  const cell = nearestLambertCell(grid, latitude, longitude, code);
   const scale = signMag(sec4[23] ?? 0, 8);
   const level = signMag(readUint(sec4, 24, 4, code), 32) / 10 ** scale;
   return {
@@ -449,6 +453,8 @@ export function readLambertPoint(
     parameter: sec4[10] ?? 0,
     surfaceType: sec4[22] ?? 0,
     level,
-    value: spatialValueAt(sec5, sec7, index, code),
+    i: cell.i,
+    j: cell.j,
+    value: spatialValueAt(sec5, sec7, cell.j * grid.nx + cell.i, code),
   };
 }
