@@ -2,7 +2,7 @@
 
 Project Air phase 2 alert rules, on top of the forecast store in [WEEK1.md](./WEEK1.md) and the NOAA ingest in [WEEK2.md](./WEEK2.md). The best window and outlook stay in [PHASE2.md](./PHASE2.md).
 
-`ios/`, `design/`, `src/routes/`, and `src/components/` are untouched. There is no push send, no subscription check, and no scheduler. Grid indexes are still not resolved here.
+`ios/`, `design/`, `src/routes/`, and `src/components/` are untouched. Episode pushes are in the Push section below. There is still no scheduler. Grid indexes are still not resolved here.
 
 ## Rules
 
@@ -107,6 +107,30 @@ Owner-scoped, same errors as the other place reads. Another user's id is `place_
 | GET    | `/api/v1/places/:id/alerts` | Active and upcoming alerts |
 
 Omitted `asOf` is the request clock. The body is `placeId`, `asOf`, `timeZone`, `through` (`asOf` plus seven days), and `alerts`. Quiet rules are omitted. An empty list means nothing is active or upcoming. Each alert includes `peakAqi`: a number for a forecast rule, null when `source` is `airnow`. The handler is `handleV1` in `src/lib/v1/http.ts`. The existing `/api/v1/$` route already forwards GET there.
+
+## Push
+
+`pushAlertEpisodes` in `src/lib/v1/alert-push.ts` sends the episodes `readAlerts` returns. The caller passes one saved place, an `asOf`, and an IANA `timeZone`. A saved place has one owner. There is still no scheduler, no launchd job, and no HTTP route. Quiet hours are not applied. That is a follow-up.
+
+Free is `not_entitled` with `feature: "alerts"`, including on the first saved place. A later place that is locked after a downgrade is `not_entitled` with `feature: "saved_places"`. That is the same shape as the alerts read. Neither case sends, and neither writes a row.
+
+A Pro owner gets one push per episode, not per hour. The episode key is the kind plus `start`. A second run, including an `asOf` still inside that episode, sends nothing when that row is `sent`. `readAlerts` still returns at most one episode per kind. A later episode with a new `start` is a new push once that read surfaces it.
+
+The dedup record is `alert_push` (`migrations/0009_v1_alert_push.sql`). `push_delivery` stays the forecast-hour log. It needs a test device and a `forecast_id`, and it has no episode key. Using that id would collapse the episode into one hour and would collide with `POST /api/v1/push/deliver`. The episode is claimed before the send. The claim row is `status = 'claimed'`, with `claimed_at`, `claim_token`, and `idempotency_key` set. `error_text` and `provider_id` stay null while the claim is held. `idempotency_key` is the sha256 of the user, the place, the kind, and the episode start. It is written once and is not replaced on a retry or a reclaim. `send` is called with that key as its second argument. A sender that already delivered the key returns the first provider id and does not deliver again. A `sent` row blocks a repeat. A `failed` row has `error_text` set and the claim cleared, and the next run tries that episode again. A fresh `claimed` row is in flight, and another run skips it. `claimed_at` is the database clock. After two minutes (`CLAIM_STALE_MS`, 120000) the next run takes the claim, sends with the same idempotency key, and writes `sent` or `failed`. A crash after the claim and before that write leaves the row `claimed`, so a later run can recover it. Taking the claim replaces `claim_token`, so the caller that lost the race cannot mark the row sent. The migration is additive. This branch does not apply it to production.
+
+The sender has to be the test sender. Anything else is `push_sender_is_test_only`. There is no APNs key, no `push_device` read, and no environment variable.
+
+### Sender idempotency contract
+
+`PushSender.send(payload, idempotencyKey)` takes the key as a required argument (`src/lib/v1/push.ts`). A sender delivers at most once per key. A repeat of a key that already delivered returns `ok: true` with the first delivery's `providerId` and does not reach the device again. A failed send does not use up its key, so a retry can still deliver. The claim alone cannot give this: a run can crash after the device got the push and before `markSent`, and the reclaim after `CLAIM_STALE_MS` then sends the same episode again. Only the sender can recognise that second send. `TestPushSender` keeps the keys it delivered in memory. `alert-push.test.ts` checks a crash after send followed by a reclaim with the shipped sender, and expects exactly one delivery. `POST /api/v1/push/deliver` passes each `push_delivery` row id as its key, so every manual delivery stays its own push.
+
+A future APNs sender has to keep the same contract, and APNs alone does not provide it:
+- APNs has no provider-side dedupe. The sender needs its own durable record per key and device, written before the HTTP/2 request goes out. It returns the stored `apns-id` instead of sending again. An in-memory map is not enough across processes or restarts.
+- Set `apns-collapse-id` to the idempotency key. The sha256 hex is 64 bytes, which is the APNs limit. Then a duplicate that still gets through replaces the first notification on the device instead of stacking beside it. That is a backstop for display, not a delivery guarantee. Without the durable record, the device still wakes twice and the duplicate is still counted.
+- `apns-id` can be a UUID derived from the key, so the provider id stays the same across a resend.
+- The key is per episode. A sender that delivers to several devices dedupes by key plus device.
+
+The payload is `buildPushPayload` for the corrected hour that owns the episode peak. The title and body stay that forecast envelope. The episode kind is stored on `alert_push.kind`. `forecast.correctedAqi` is that stored forecast. `official` is the latest AirNow reading at or before `asOf`, or null. The two numbers stay on those two objects. `assertPayloadSeparated` runs inside `buildPushPayload`. An AirNow-owned episode has `peakAqi` null. The push still quotes the stored corrected hour, not the official number. An inversion push quotes the PM2.5 forecast hour, because the push envelope has no HRRR source.
 
 ## Checks
 

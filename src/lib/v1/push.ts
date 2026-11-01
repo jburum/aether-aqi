@@ -32,10 +32,18 @@ export interface PushFailResult {
   error: string;
 }
 
-/** Delivery sink. Week 1 ships only the in-process test sender (`name: "test"`). */
+/**
+ * Delivery sink. Week 1 ships only the in-process test sender (`name: "test"`).
+ *
+ * Idempotency contract: a sender delivers at most once per `idempotencyKey`. A second send with
+ * a key that already delivered must not deliver again; it returns `ok: true` with the first
+ * delivery's `providerId`. A failed send does not use up its key. Alert episodes pass the
+ * episode's stored key, so a claim reclaimed after a crash between send and `markSent` cannot
+ * reach the device twice. See docs/v1/ALERTS.md for what an APNs sender has to do.
+ */
 export interface PushSender {
   readonly name: string;
-  send(payload: PushPayload): Promise<PushSendResult | PushFailResult>;
+  send(payload: PushPayload, idempotencyKey: string): Promise<PushSendResult | PushFailResult>;
 }
 
 const FORECAST_FORBIDDEN = [
@@ -138,20 +146,29 @@ export function assertPayloadSeparated(payload: PushPayload): void {
 
 /**
  * Records payloads in memory. It does not open a network connection, read a
- * key, or talk to APNs.
+ * key, or talk to APNs. `sent` holds one entry per delivery: a repeat of a key
+ * that already delivered returns that delivery's provider id and adds nothing.
  */
 export class TestPushSender implements PushSender {
   readonly name = "test" as const;
   readonly sent: PushPayload[] = [];
   failNext = false;
+  private readonly delivered = new Map<string, string>();
 
-  async send(payload: PushPayload): Promise<PushSendResult | PushFailResult> {
+  async send(payload: PushPayload, idempotencyKey: string): Promise<PushSendResult | PushFailResult> {
     assertPayloadSeparated(payload);
+    if (typeof idempotencyKey !== "string" || idempotencyKey.trim() === "") {
+      throw new V1RuleError("push_key_missing", "A push send needs an idempotency key.");
+    }
+    const earlier = this.delivered.get(idempotencyKey);
+    if (earlier) return { ok: true, providerId: earlier };
     if (this.failNext) {
       this.failNext = false;
       return { ok: false, error: "test sender refused" };
     }
     this.sent.push(structuredClone(payload));
-    return { ok: true, providerId: `test-${this.sent.length}` };
+    const providerId = `test-${this.sent.length}`;
+    this.delivered.set(idempotencyKey, providerId);
+    return { ok: true, providerId };
   }
 }

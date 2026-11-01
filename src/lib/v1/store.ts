@@ -628,8 +628,9 @@ export async function deliverForecastPush(
   }
   const deliveries: PushDeliveryRecord[] = [];
   for (const device of devices) {
-    const result = await sender.send(payload);
+    // Each manual delivery is its own push, so its row id is its idempotency key.
     const id = randomUUID();
+    const result = await sender.send(payload, id);
     const status = result.ok ? "sent" : "failed";
     const providerId = result.ok ? result.providerId : null;
     await sql.query(

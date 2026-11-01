@@ -10,8 +10,8 @@ import { samplePushPayloads } from "../src/lib/v1/samples.ts";
 const sender = new TestPushSender();
 const payloads = samplePushPayloads();
 const sent = [];
-for (const payload of payloads) {
-  const result = await sender.send(payload);
+for (const [index, payload] of payloads.entries()) {
+  const result = await sender.send(payload, `sample-${index + 1}`);
   sent.push({ result, payload });
 }
 
