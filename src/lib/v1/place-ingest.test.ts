@@ -11,7 +11,14 @@ import { readLambertPoint } from "./grib.ts";
 import { hrrrSmokeCellCenter, resolveModelCells } from "./grid.ts";
 import { handleV1 } from "./http.ts";
 import { AIRNOW_HOURLY_LIMIT } from "./monitoring.ts";
-import { aqfAsciiUrl, hrrrSmokeByteRange, hrrrSmokeGribUrl, parseHrrrSmoke } from "./noaa.ts";
+import {
+  MAX_HRRR_FIELD_BYTES,
+  aqfAsciiUrl,
+  fetchHrrrSmokeField,
+  hrrrSmokeByteRange,
+  hrrrSmokeGribUrl,
+  parseHrrrSmoke,
+} from "./noaa.ts";
 import { ingestPlaceCycle, ingestSavedPlaces, latestNoaaCycle } from "./place-ingest.ts";
 import { TestPushSender } from "./push.ts";
 import { SAMPLE_PLACE } from "./samples.ts";
@@ -220,7 +227,10 @@ function fakeFetch(bodies: { smoke: string; aqf: string; airnow?: string }): Fak
         return new Response(smokeIndex(message.length, cycle), { status: 200 });
       const range = new Headers(init?.headers).get("range") ?? "";
       ranges.push(range);
-      return new Response(Buffer.from(message), { status: 206 });
+      return new Response(Buffer.from(message), {
+        status: 206,
+        headers: { "content-range": `bytes 0-${message.length - 1}/${message.length}` },
+      });
     }
     if (url.includes("pm25sfc")) return new Response(bodies.aqf, { status: 200 });
     if (url.includes("airnowapi.org")) {
@@ -725,7 +735,10 @@ describe("v1 place ingest", { concurrency: 1 }, () => {
         if (lead !== 0) return new Response("missing", { status: 404 });
         if (url.endsWith(".idx")) return new Response(idx, { status: 200 });
         assert.equal(new Headers(init?.headers).get("range"), `bytes=0-${grib.byteLength - 1}`);
-        return new Response(grib, { status: 206 });
+        return new Response(grib, {
+          status: 206,
+          headers: { "content-range": `bytes 0-${grib.byteLength - 1}/${grib.byteLength}` },
+        });
       }
       if (url.includes("pm25sfc"))
         return new Response(readFixture("noaa-aqf.ascii"), { status: 200 });
@@ -769,5 +782,134 @@ describe("v1 place ingest", { concurrency: 1 }, () => {
       if (previous === undefined) delete process.env.AIRNOW_API_KEY;
       else process.env.AIRNOW_API_KEY = previous;
     }
+  });
+
+  it("accepts a 206 whose Content-Range matches the index", async () => {
+    const body = Uint8Array.from([0x47, 0x52, 0x49, 0x42, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 16]);
+    const idx = `1:0:d=2026103012:MASSDEN:8 m above ground:anl:\n2:${body.length}:d=2026103012:UGRD:10 m above ground:anl:\n`;
+    const message = await fetchHrrrSmokeField(CYCLE, 0, async (url, init) => {
+      if (String(url).endsWith(".idx")) return new Response(idx, { status: 200 });
+      assert.equal(new Headers(init?.headers).get("range"), `bytes=0-${body.length - 1}`);
+      return new Response(body, {
+        status: 206,
+        headers: { "content-range": `bytes 0-${body.length - 1}/${body.length}` },
+      });
+    });
+    assert.ok(message);
+    assert.equal(message.length, body.length);
+    assert.equal(message[0], 0x47);
+  });
+
+  it("rejects a 200 response for an HRRR byte range", async () => {
+    const declared = 256 * 1024;
+    let pulled = 0;
+    const chunk = 16 * 1024;
+    const idx =
+      "1:0:d=2026103012:MASSDEN:8 m above ground:anl:\n2:16:d=2026103012:UGRD:10 m above ground:anl:\n";
+    await assert.rejects(
+      () =>
+        fetchHrrrSmokeField(CYCLE, 0, async (url) => {
+          if (String(url).endsWith(".idx")) return new Response(idx, { status: 200 });
+          const stream = new ReadableStream<Uint8Array>({
+            pull(controller) {
+              if (pulled >= declared) {
+                controller.close();
+                return;
+              }
+              const n = Math.min(chunk, declared - pulled);
+              pulled += n;
+              controller.enqueue(new Uint8Array(n));
+            },
+          });
+          return new Response(stream, {
+            status: 200,
+            headers: { "content-range": "bytes 0-15/16" },
+          });
+        }),
+      (err: unknown) => {
+        assert.ok(err instanceof V1RuleError);
+        if (!(err instanceof V1RuleError)) return false;
+        assert.equal(err.code, "noaa_fetch_failed");
+        assert.match(err.message, /responded 200/);
+        return true;
+      },
+    );
+    assert.ok(pulled < declared);
+  });
+
+  it("rejects a 206 whose Content-Range misses the index", async () => {
+    const declared = 256 * 1024;
+    const chunk = 8 * 1024;
+    let pulled = 0;
+    const idx =
+      "1:0:d=2026103012:MASSDEN:8 m above ground:anl:\n2:16:d=2026103012:UGRD:10 m above ground:anl:\n";
+    await assert.rejects(
+      () =>
+        fetchHrrrSmokeField(CYCLE, 0, async (url) => {
+          if (String(url).endsWith(".idx")) return new Response(idx, { status: 200 });
+          const stream = new ReadableStream<Uint8Array>({
+            pull(controller) {
+              if (pulled >= declared) {
+                controller.close();
+                return;
+              }
+              const n = Math.min(chunk, declared - pulled);
+              pulled += n;
+              controller.enqueue(new Uint8Array(n));
+            },
+          });
+          return new Response(stream, {
+            status: 206,
+            headers: { "content-range": `bytes 0-${declared - 1}/*` },
+          });
+        }),
+      (err: unknown) => {
+        assert.ok(err instanceof V1RuleError);
+        if (!(err instanceof V1RuleError)) return false;
+        assert.equal(err.code, "noaa_smoke_parse");
+        assert.match(err.message, /does not match the index/);
+        return true;
+      },
+    );
+    // The response constructor may enqueue one chunk. The rest of the body stays unread.
+    assert.ok(pulled <= chunk);
+    assert.ok(pulled < declared);
+  });
+
+  it("rejects an over-cap HRRR body before buffering it", async () => {
+    const declared = MAX_HRRR_FIELD_BYTES + 64 * 1024;
+    let pulled = 0;
+    const chunk = 32 * 1024;
+    const idx = "1:0:d=2026103012:MASSDEN:8 m above ground:anl:\n";
+    await assert.rejects(
+      () =>
+        fetchHrrrSmokeField(CYCLE, 0, async (url) => {
+          if (String(url).endsWith(".idx")) return new Response(idx, { status: 200 });
+          const stream = new ReadableStream<Uint8Array>({
+            pull(controller) {
+              if (pulled >= declared) {
+                controller.close();
+                return;
+              }
+              const n = Math.min(chunk, declared - pulled);
+              pulled += n;
+              controller.enqueue(new Uint8Array(n));
+            },
+          });
+          return new Response(stream, {
+            status: 206,
+            headers: { "content-range": `bytes 0-${declared - 1}/*` },
+          });
+        }),
+      (err: unknown) => {
+        assert.ok(err instanceof V1RuleError);
+        if (!(err instanceof V1RuleError)) return false;
+        assert.equal(err.code, "noaa_smoke_parse");
+        assert.match(err.message, /larger than one message/);
+        return true;
+      },
+    );
+    assert.ok(pulled < declared);
+    assert.ok(pulled <= MAX_HRRR_FIELD_BYTES);
   });
 });

@@ -164,7 +164,8 @@ export function aqfAsciiUrl(input: NoaaSeriesQuery): string {
   return url;
 }
 
-const MAX_HRRR_FIELD_BYTES = 8 * 1024 * 1024;
+/** One MASSDEN message. A larger range is refused before the body is kept. */
+export const MAX_HRRR_FIELD_BYTES = 8 * 1024 * 1024;
 
 /**
  * One HRRR CONUS surface file on the public bucket. Lead 0 through 48.
@@ -265,23 +266,134 @@ export async function fetchNoaaAscii(
   return body;
 }
 
+interface NoaaByteRequest {
+  headers: Record<string, string>;
+  timeoutMs: number;
+  allowMissing: boolean;
+  /** Index span. `end` is exclusive. The object must answer 206 for this span. */
+  byteRange?: { start: number; end: number | null };
+}
+
+const CONTENT_RANGE = /^bytes (\d+)-(\d+)\/(?:\d+|\*)$/;
+
+function rangeHeader(range: { start: number; end: number | null }): string {
+  if (range.end == null) return `bytes=${range.start}-`;
+  return `bytes=${range.start}-${range.end - 1}`;
+}
+
+async function releaseBody(response: Response): Promise<void> {
+  try {
+    await response.body?.cancel();
+  } catch {
+    // The body may already be closed.
+  }
+}
+
+function parseContentRange(header: string | null): { start: number; endInclusive: number } | null {
+  const match = CONTENT_RANGE.exec(header?.trim() ?? "");
+  if (!match) return null;
+  const start = Number(match[1]);
+  const endInclusive = Number(match[2]);
+  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(endInclusive) || endInclusive < start) {
+    return null;
+  }
+  return { start, endInclusive };
+}
+
+/**
+ * Read a 206 body up to `expected` bytes. A chunk past the cap or the
+ * Content-Range length cancels the rest and does not keep that chunk.
+ */
+async function readStreamCapped(
+  response: Response,
+  expected: number,
+  cap: number,
+): Promise<Uint8Array> {
+  const body = response.body;
+  if (!body) throw new V1RuleError("noaa_fetch_failed", "NOAA response has no body.");
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let received = 0;
+  const stop = async (error: V1RuleError): Promise<never> => {
+    await reader.cancel().catch(() => undefined);
+    throw error;
+  };
+  try {
+    while (received < expected) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value || value.byteLength === 0) continue;
+      const next = received + value.byteLength;
+      if (next > cap) {
+        return await stop(
+          new V1RuleError("noaa_smoke_parse", "HRRR smoke field is larger than one message."),
+        );
+      }
+      if (next > expected) {
+        return await stop(
+          new V1RuleError("noaa_smoke_parse", "HRRR byte range does not match the index."),
+        );
+      }
+      chunks.push(value);
+      received = next;
+    }
+  } catch (err) {
+    await reader.cancel().catch(() => undefined);
+    throw err;
+  }
+  if (received !== expected) {
+    await reader.cancel().catch(() => undefined);
+    throw new V1RuleError("noaa_smoke_parse", "HRRR byte range does not match the index.");
+  }
+  await reader.cancel().catch(() => undefined);
+  const out = new Uint8Array(received);
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return out;
+}
+
+/** 206 only. Content-Range start/end must match the index span and the body length. */
+async function readHrrrRangeBody(
+  response: Response,
+  range: { start: number; end: number | null },
+): Promise<Uint8Array> {
+  const parsed = parseContentRange(response.headers.get("content-range"));
+  const expected = parsed ? parsed.endInclusive - parsed.start + 1 : 0;
+  const endMatches = range.end == null || parsed?.endInclusive === range.end - 1;
+  const lengthMatches = range.end == null || expected === range.end - range.start;
+  if (!parsed || parsed.start !== range.start || !endMatches || !lengthMatches || expected < 1) {
+    await releaseBody(response);
+    throw new V1RuleError("noaa_smoke_parse", "HRRR byte range does not match the index.");
+  }
+  if (expected > MAX_HRRR_FIELD_BYTES) {
+    await releaseBody(response);
+    throw new V1RuleError("noaa_smoke_parse", "HRRR smoke field is larger than one message.");
+  }
+  return readStreamCapped(response, expected, MAX_HRRR_FIELD_BYTES);
+}
+
 async function fetchNoaaBytes(
   url: string,
   fetchImpl: typeof fetch,
   ledger: Queryable | undefined,
-  init: { headers: Record<string, string>; timeoutMs: number; allowMissing: boolean },
+  init: NoaaByteRequest,
 ): Promise<Uint8Array | null> {
   const allowed = assertNoaaUrl(url);
   const calledAt = new Date();
   const target = allowed.toString();
+  const headers: Record<string, string> = {
+    accept: "application/octet-stream",
+    "user-agent": NOAA_USER_AGENT,
+    ...init.headers,
+  };
+  if (init.byteRange) headers.range = rangeHeader(init.byteRange);
   let response: Response;
   try {
     response = await fetchImpl(target, {
-      headers: {
-        accept: "application/octet-stream",
-        "user-agent": NOAA_USER_AGENT,
-        ...init.headers,
-      },
+      headers,
       redirect: "error",
       signal: AbortSignal.timeout(init.timeoutMs),
     });
@@ -290,18 +402,28 @@ async function fetchNoaaBytes(
     throw err;
   }
   if (response.status === 404 && init.allowMissing) {
+    await releaseBody(response);
     await noteNoaaCall(ledger, target, calledAt, "error", "noaa_hour_missing");
     return null;
   }
-  if (!response.ok) {
-    await noteNoaaCall(ledger, target, calledAt, "error", "noaa_fetch_failed");
-    throw new V1RuleError("noaa_fetch_failed", `NOAA responded ${response.status}.`);
-  }
   let bytes: Uint8Array;
   try {
-    bytes = new Uint8Array(await response.arrayBuffer());
+    if (init.byteRange) {
+      if (response.status !== 206) {
+        await releaseBody(response);
+        throw new V1RuleError("noaa_fetch_failed", `NOAA responded ${response.status}.`);
+      }
+      bytes = await readHrrrRangeBody(response, init.byteRange);
+    } else if (!response.ok) {
+      await releaseBody(response);
+      throw new V1RuleError("noaa_fetch_failed", `NOAA responded ${response.status}.`);
+    } else {
+      bytes = new Uint8Array(await response.arrayBuffer());
+    }
   } catch (err) {
-    await noteNoaaCall(ledger, target, calledAt, "error", "noaa_fetch_failed");
+    await releaseBody(response);
+    const code = err instanceof V1RuleError ? err.code : "noaa_fetch_failed";
+    await noteNoaaCall(ledger, target, calledAt, "error", code);
     throw err;
   }
   await noteNoaaCall(ledger, target, calledAt, "ok");
@@ -310,6 +432,7 @@ async function fetchNoaaBytes(
 
 /**
  * Index, then a byte-range GET of the 8 m MASSDEN message.
+ * The object must answer 206, and Content-Range must match the index span.
  * A 404 on the index or the object skips that lead hour.
  * The returned bytes are one GRIB2 message, not the whole surface file.
  */
@@ -328,12 +451,11 @@ export async function fetchHrrrSmokeField(
   if (!idx) return null;
   const text = new TextDecoder().decode(idx);
   const range = hrrrSmokeByteRange(text);
-  const header =
-    range.end == null ? `bytes=${range.start}-` : `bytes=${range.start}-${range.end - 1}`;
   const message = await fetchNoaaBytes(gribUrl, fetchImpl, ledger, {
-    headers: { range: header },
+    headers: {},
     timeoutMs: 30_000,
     allowMissing: true,
+    byteRange: range,
   });
   if (!message) return null;
   if (message.length < 16 || message[0] !== 0x47) {
