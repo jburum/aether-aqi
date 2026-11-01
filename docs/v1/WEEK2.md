@@ -35,7 +35,8 @@ Project Air phase 1 from the locked SharedBrain `v1-plan.md`. This branch adds i
 ## What's left
 
 - Running the live fetch on a schedule. A saved place already resolves to the nearest Lambert point. This branch does not add launchd or a Mini job.
-- NowCast. Hours in the air-quality file that have no model cell and no explicit regional integer stay unstored.
+- The PM2.5 NowCast helper is `nowcastPm25` in `src/lib/v1/nowcast.ts`. `nowcastPm25Aqi` maps that concentration through `pm25TenthsToAqi`. Nothing calls it yet.
+- Hours in the air-quality file that have no model cell and no explicit regional integer stay unstored.
 - The AirNow key itself. The name is documented. The value is not in the repo.
 - PurpleAir, until spend is approved.
 - iOS and the website UI. `GET /api/aqi` is still the Open-Meteo proxy. It is not a launch source for these rows.
