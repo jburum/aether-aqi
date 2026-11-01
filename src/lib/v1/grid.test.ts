@@ -72,6 +72,10 @@ describe("v1 model grid", () => {
     assert.equal(north.hrrr.latIndex, 756);
     const south = resolveModelCells(halfway - HRRR_SMOKE_LAT_SPACING * 1e-6, BOISE.longitude);
     assert.equal(south.hrrr.latIndex, 755);
+    const first = AQM_LAT_ORIGIN - AQM_LAT_SPACING / 2;
+    const onFirst = resolveModelCells(first, BOISE.longitude);
+    assert.equal(onFirst.aqm.latIndex, 0);
+    assert.equal(Object.is(onFirst.aqm.latIndex, -0), false);
   });
 
   it("rejects points outside either grid", () => {

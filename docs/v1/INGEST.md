@@ -2,13 +2,13 @@
 
 Saved places can be ingested for one NOAA cycle. This is the manual run behind the week-2 note in [WEEK2.md](./WEEK2.md): a latitude and longitude become HRRR-Smoke and AQM cell indexes, then smoke, the air quality forecast, and AirNow go through the week-1 store. There is no scheduler, no launchd job, no new migration, and no new environment variable.
 
-`ios/`, `design/`, `src/routes/`, and `src/components/` are untouched. The route file already forwards every `/api/v1` POST through the session check. PurpleAir stays off. OpenDAP on NOMADS has been off since Service Change Notice 25-81, so this branch does not read a live axis. Tests pass a `fetchImpl` and do not call NOAA or AirNow.
+`ios/`, `design/`, `src/routes/`, and `src/components/` are untouched. The route file already forwards every `/api/v1` POST through the session check. PurpleAir stays off. OpenDAP on NOMADS has been off since Service Change Notice 25-81. A DAS request for 20 February 2026 (`hrrr_sfc.t12z` and `aqm.t12z`) returns that retirement page, not an axis, so this branch does not read a live axis. Tests pass a `fetchImpl` and do not call NOAA or AirNow.
 
 ## Grid
 
 `resolveModelCells` in `src/lib/v1/grid.ts`.
 
-The indexes are the ones `hrrrSmokeAsciiUrl` and `aqfAsciiUrl` already put in the query. Those URL builders are unchanged. This is a uniform latitude/longitude axis, not the Lambert i,j of the GRIB file. Stability ingest still uses the GRIB filter box and is not part of this run.
+The indexes are the ones `hrrrSmokeAsciiUrl` and `aqfAsciiUrl` already put in the query. Those URL builders are unchanged. This is the GrADS linear axis those OpenDAP indexes used (`grads_mapping` linear, `grads_size` as the count, minimum as the origin, maximum as the end), not the Lambert i,j of the GRIB file. Stability ingest still uses the GRIB filter box and is not part of this run.
 
 Spacing is `(end - origin) / (count - 1)` degrees. Cell centers:
 

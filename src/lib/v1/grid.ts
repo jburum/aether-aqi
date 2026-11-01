@@ -7,9 +7,11 @@ import { V1RuleError } from "./errors.ts";
  * Cell centers run from 21.138123°N, 225.904526°E through 52.615654°N, 299.082809°E.
  * AQM is the NAQFC CONUS dimensions, 265 by 442. Cell centers run from
  * 21.821°N, 226.541°E through 53.501°N, 292.691°E.
- * Spacing is `(end - origin) / (count - 1)` degrees. This is not the Lambert
- * i,j of the GRIB file. OpenDAP on NOMADS has been off since Service Change
- * Notice 25-81, so this module does not read a live axis and does not call out.
+ * Spacing is `(end - origin) / (count - 1)` degrees. This is the GrADS linear
+ * axis those OpenDAP indexes used (`grads_mapping` linear), not the Lambert
+ * i,j of the GRIB file. A DAS fetch for the 2026-02-20 files returns the
+ * Service Change Notice 25-81 retirement page, so this module does not read a
+ * live axis and does not call out.
  */
 
 export const HRRR_SMOKE_LAT_ORIGIN = 21.138123;
@@ -92,6 +94,7 @@ export function toDegreesEast(longitude: number): number {
 function nearestIndex(value: number, axis: Axis): number | null {
   const index = Math.round((value - axis.origin) / axis.spacing);
   if (index < 0 || index >= axis.count) return null;
+  // Math.round(-0.5) is -0. The greater index on that split is 0.
   return index === 0 ? 0 : index;
 }
 
