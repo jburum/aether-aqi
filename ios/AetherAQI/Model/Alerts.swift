@@ -29,6 +29,9 @@ struct PlaceAlert: Decodable, Equatable, Sendable {
     let source: String?
     let confidence: String?
     let reason: String
+    /// The corrected peak for a forecast-rule alert (#21). Null when AirNow drove the alert: the official
+    /// number is never copied here.
+    var peakAqi: Int? = nil
 }
 
 /// The three rules the person can turn on.
@@ -70,6 +73,10 @@ struct AlertRowDisplay: Equatable, Sendable, Identifiable {
     let reason: String
     /// Days 3–7, or a confidence of `low`: shown as regional and low-confidence, in words.
     let lowConfidence: Bool
+    /// `high`, `elevated` or `heads_up`, as the API sent it.
+    var severityKey: String = ""
+    /// Our corrected peak (`peakAqi`), for the share card. Nil for AirNow-driven alerts.
+    var correctedPeak: Int? = nil
 
     var accessibilityLabel: String {
         var parts = ["\(title) alert, \(statusText.lowercased()), \(severityText.lowercased())", span]
@@ -113,7 +120,10 @@ struct AlertsDisplay: Equatable, Sendable {
                 statusText: active ? "Now" : "Upcoming",
                 span: LocalSpan.text(start: start, end: end, zone: zone, asOf: asOf),
                 reason: alert.reason,
-                lowConfidence: severity == "heads_up" || alert.confidence == "low"
+                lowConfidence: severity == "heads_up" || alert.confidence == "low",
+                severityKey: severity,
+                // The API already leaves this null for AirNow; the source check keeps it so if that changes.
+                correctedPeak: alert.source == "airnow" ? nil : alert.peakAqi.flatMap { (0...500).contains($0) ? $0 : nil }
             )
         }
     }
