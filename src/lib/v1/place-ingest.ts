@@ -1,20 +1,24 @@
 import { fetchAirNowObservation, officialInputFromAirNow, type AirNowReading } from "./airnow.ts";
 import { V1RuleError } from "./errors.ts";
-import { resolveModelCells, type ModelCell, type ModelCells } from "./grid.ts";
+import { readLambertPoint } from "./grib.ts";
+import { hrrrSmokeCellCenter, resolveModelCells, type ModelCell, type ModelCells } from "./grid.ts";
 import {
   aqfAsciiUrl,
+  fetchHrrrSmokeField,
   fetchNoaaAscii,
-  forecastBodiesFromExtracts,
-  hrrrSmokeAsciiUrl,
+  forecastBodiesFromHours,
   noaaCycleParts,
+  parseNoaaAqf,
+  type ModelHour,
 } from "./noaa.ts";
 import type { ValidForecast } from "./rules.ts";
 import { issueForecast, listSavedPlaces, recordOfficial } from "./store.ts";
 import type { Queryable } from "./types.ts";
 
 /**
- * Manual ingest for one NOAA cycle. Smoke is lead 0 through 48 hours.
- * The air quality forecast is lead 49 through 168. AirNow is the official
+ * Manual ingest for one NOAA cycle. Smoke is lead 0 through 48 hours
+ * from the public HRRR bucket. The air quality forecast is lead 49 through 168.
+ * AirNow is the official
  * number when `AIRNOW_API_KEY` is set and the hour is under 500.
  * There is no scheduler. A repeat of the same place, source, issue, and
  * valid hour does not change the stored forecast. An official row is never
@@ -71,6 +75,19 @@ export async function readIngestCycle(request: Request, now: Date): Promise<stri
     throw new V1RuleError("invalid_time", "cycleUtc must be a UTC timestamp.");
   }
   return canonicalCycle(cycleUtc);
+}
+
+/** kg/m³ to truncated tenths of a µg/m³. A fill sentinel (about 1e20) is a missing cell. */
+function smokeTenths(kgPerM3: number): number | null {
+  if (!Number.isFinite(kgPerM3) || kgPerM3 < 0) {
+    throw new V1RuleError("noaa_smoke_parse", "HRRR smoke concentration is not a finite number.");
+  }
+  const scaled = kgPerM3 * 1e10;
+  if (scaled > 1_000_000) return null;
+  const nearest = Math.round(scaled);
+  const tenths = Math.abs(scaled - nearest) < 1e-4 ? nearest : Math.trunc(scaled);
+  if (!Number.isSafeInteger(tenths)) return null;
+  return tenths;
 }
 
 function cellsForPlace(name: string, latitude: number, longitude: number): ModelCells {
@@ -185,17 +202,30 @@ export async function ingestPlaceCycle(
   const place = rows[0];
   if (!place) throw new V1RuleError("place_not_found", "Saved place not found.", 404);
   const cells = cellsForPlace(place.name, place.latitude, place.longitude);
-  const smokeAscii = await fetchNoaaAscii(
-    hrrrSmokeAsciiUrl({
-      cycleUtc,
-      latIndex: cells.hrrr.latIndex,
-      lonIndex: cells.hrrr.lonIndex,
-      hourStart: 0,
-      hourEnd: SMOKE_HOUR_END,
-    }),
-    input.fetchImpl,
-    sql,
-  );
+  const center = hrrrSmokeCellCenter(cells.hrrr);
+  const smoke: ModelHour[] = [];
+  for (let lead = 0; lead <= SMOKE_HOUR_END; lead += 1) {
+    const message = await fetchHrrrSmokeField(cycleUtc, lead, input.fetchImpl, sql);
+    if (!message) continue;
+    const point = readLambertPoint(message, center.latitude, center.longitude);
+    if (point.referenceTime !== cycleUtc || point.forecastHour !== lead) {
+      throw new V1RuleError(
+        "noaa_smoke_parse",
+        "HRRR smoke field does not match the requested lead.",
+      );
+    }
+    if (
+      point.category !== 20 ||
+      point.parameter !== 0 ||
+      point.surfaceType !== 103 ||
+      Math.abs(point.level - 8) > 1e-6
+    ) {
+      throw new V1RuleError("noaa_smoke_parse", "HRRR smoke field is not 8 m mass density.");
+    }
+    const tenths = smokeTenths(point.value);
+    if (tenths == null) continue;
+    smoke.push({ hour: lead, pm25Tenths: tenths, regionalLowAqi: null });
+  }
   const aqfAscii = await fetchNoaaAscii(
     aqfAsciiUrl({
       cycleUtc,
@@ -210,11 +240,11 @@ export async function ingestPlaceCycle(
   const forecasts = await storeForecasts(
     sql,
     userId,
-    forecastBodiesFromExtracts({
+    forecastBodiesFromHours({
       placeId: input.placeId,
       issuedAt: cycleUtc,
-      smokeAscii,
-      aqfAscii,
+      smoke,
+      aqf: parseNoaaAqf(aqfAscii),
     }),
   );
   const airnow = await fetchAirNowObservation(

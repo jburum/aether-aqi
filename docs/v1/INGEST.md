@@ -2,13 +2,13 @@
 
 Saved places can be ingested for one NOAA cycle. This is the manual run behind the week-2 note in [WEEK2.md](./WEEK2.md): a latitude and longitude become HRRR-Smoke and AQM cell indexes, then smoke, the air quality forecast, and AirNow go through the week-1 store. There is no scheduler, no launchd job, no new migration, and no new environment variable.
 
-`ios/`, `design/`, `src/routes/`, and `src/components/` are untouched. The route file already forwards every `/api/v1` POST through the session check. PurpleAir stays off. OpenDAP on NOMADS has been off since Service Change Notice 25-81. A DAS request for 20 February 2026 (`hrrr_sfc.t12z` and `aqm.t12z`) returns that retirement page, not an axis, so this branch does not read a live axis. Tests pass a `fetchImpl` and do not call NOAA or AirNow.
+`ios/`, `design/`, `src/routes/`, and `src/components/` are untouched. The route file already forwards every `/api/v1` POST through the session check. PurpleAir stays off. OpenDAP on NOMADS has been off since Service Change Notice 25-81. HRRR smoke for lead 0 through 48 reads the public AWS bucket `noaa-hrrr-bdp-pds`: the `.idx`, then a byte-range GET of `MASSDEN` at 8 m. The stored value is the Lambert point nearest the HRRR cell center from `resolveModelCells`, not that cell's GrADS index. AQM hours 49 through 168 still use `aqfAsciiUrl`. Tests pass a `fetchImpl` and replay `fixtures/v1`. They do not call NOAA or AirNow.
 
 ## Grid
 
 `resolveModelCells` in `src/lib/v1/grid.ts`.
 
-The indexes are the ones `hrrrSmokeAsciiUrl` and `aqfAsciiUrl` already put in the query. Those URL builders are unchanged. This is the GrADS linear axis those OpenDAP indexes used (`grads_mapping` linear, `grads_size` as the count, minimum as the origin, maximum as the end), not the Lambert i,j of the GRIB file. Stability ingest still uses the GRIB filter box and is not part of this run.
+AQF still sends these indexes to `aqfAsciiUrl`. HRRR smoke does not. This is the GrADS linear axis those OpenDAP indexes used (`grads_mapping` linear, `grads_size` as the count, minimum as the origin, maximum as the end), not the Lambert i,j of the GRIB file. `hrrrSmokeCellCenter` is the center of that cell. The live smoke read projects that center onto the file's template 3.30 grid and takes the nearest point. Stability ingest still uses the GRIB filter box and is not part of this run.
 
 Spacing is `(end - origin) / (count - 1)` degrees. Cell centers:
 
@@ -38,7 +38,7 @@ Cycles are 00, 06, 12, and 18 UTC, the same hours `noaaCycleParts` already accep
 For each saved place of the signed-in user:
 
 1. Resolve both cells. If any saved place is outside either grid, the run stops before any request. Earlier places are not fetched.
-2. HRRR-Smoke `masden8m` for lead hours 0 through 48, including 48.
+2. HRRR-Smoke `MASSDEN` at 8 m, one object per lead hour from 0 through 48: `hrrr.tCCz.wrfsfcfHH.grib2` on `noaa-hrrr-bdp-pds`. The run reads the `.idx`, then `Range` for that message. A 404 skips the hour. The field is template 5.3 (complex packing, order-2 spatial differencing) on the Lambert grid.
 3. AQM `pm25sfc` for lead hours 49 through 168, including 168.
 4. `forecastBodiesFromExtracts`, then `issueForecast`. A smoke value after 48 hours is not stored. An air-quality value at or before 48 hours is not stored. On the recorded fixtures, hour 48 smoke is corrected 155, hour 49 is the air quality forecast at 56, and hour 96 is regional low confidence at 80. The air-quality cell at hour 48 is not stored.
 5. AirNow current observation for the place, through `fetchAirNowObservation`.
@@ -55,7 +55,7 @@ A repeat still calls NOAA, and it calls AirNow when the key is set and the hour 
 
 ## Budget
 
-Every NOAA attempt goes through `fetchNoaaAscii` with the store, so the phase-4 ledger records `hrrr_smoke_ascii` and `aqf_ascii`. A URL refused before the request writes nothing.
+AQF still goes through `fetchNoaaAscii`. Each HRRR hour is an index GET and, when the object is there, a byte-range GET, both through `fetchHrrrSmokeField`. The phase-4 ledger records `hrrr_smoke_ascii` and `aqf_ascii`. A smoke cycle that finds hours 0, 24, and 48 is 46 missing index rows plus 6 successful smoke rows. A URL refused before the request writes nothing. OpenDAP `/dods/hrrr/` is not requested.
 
 AirNow goes through `fetchAirNowObservation` with the same store. `reserveAirNowCall` counts the open hour and inserts the attempt only when the count is under 500. At 500 the result is `airnow_hourly_limit`, the client does not call, and no new AirNow ledger row is written. NOAA rows from that same run stay. NOAA does not count toward the 500.
 
@@ -83,6 +83,6 @@ npm run lint
 npm run typecheck
 ```
 
-`npm test` stays on PGLite. It does not need `DATABASE_URL`. It does not call NOAA or AirNow. `src/lib/v1/grid.test.ts` covers Boise, McCall, and Tamarack, the halfway split, and points outside the grids. `src/lib/v1/place-ingest.test.ts` covers the 48-hour cut, a re-ingest that does not change the forecast or the official number, two overlapping runs that collide on `official_hour_unique`, the missing AirNow key, and the hour at 500.
+`npm test` stays on PGLite. It does not need `DATABASE_URL`. It does not call NOAA or AirNow. `src/lib/v1/grid.test.ts` covers Boise, McCall, and Tamarack, the halfway split, and points outside the grids. `src/lib/v1/place-ingest.test.ts` covers the 48-hour cut, the AWS index fixture `fixtures/v1/noaa-hrrr-smoke-f00.grib2`, a re-ingest that does not change the forecast or the official number, two overlapping runs that collide on `official_hour_unique`, the missing AirNow key, and the hour at 500.
 
 Dex reviews this head. Only Clint merges.

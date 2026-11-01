@@ -7,10 +7,11 @@ import { fileURLToPath } from "node:url";
 import { PGlite } from "@electric-sql/pglite";
 
 import { V1RuleError } from "./errors.ts";
-import { resolveModelCells } from "./grid.ts";
+import { readLambertPoint } from "./grib.ts";
+import { hrrrSmokeCellCenter, resolveModelCells } from "./grid.ts";
 import { handleV1 } from "./http.ts";
 import { AIRNOW_HOURLY_LIMIT } from "./monitoring.ts";
-import { aqfAsciiUrl, hrrrSmokeAsciiUrl } from "./noaa.ts";
+import { aqfAsciiUrl, hrrrSmokeByteRange, hrrrSmokeGribUrl, parseHrrrSmoke } from "./noaa.ts";
 import { ingestPlaceCycle, ingestSavedPlaces, latestNoaaCycle } from "./place-ingest.ts";
 import { TestPushSender } from "./push.ts";
 import { SAMPLE_PLACE } from "./samples.ts";
@@ -68,25 +69,167 @@ function airNowBody(aqi: number): string {
 interface FakeFetch {
   fetchImpl: typeof fetch;
   urls: string[];
+  ranges: string[];
+}
+
+const SMOKE_ORIGIN = hrrrSmokeCellCenter(resolveModelCells(BOISE.latitude, BOISE.longitude).hrrr);
+
+function putSignMag(view: DataView, offset: number, micro: number): void {
+  const rounded = Math.round(micro);
+  const abs = Math.abs(rounded);
+  view.setUint32(offset, (rounded < 0 ? 0x80000000 : 0) + abs);
+}
+
+/** Constant template 5.3 field. (0, 0) is `latitude`/`longitude`. Every cell is `tenths` × 10⁻¹⁰ kg/m³. */
+function encodeConstantSmoke(input: {
+  cycle: string;
+  lead: number;
+  tenths: number;
+  nx: number;
+  ny: number;
+  latitude: number;
+  longitude: number;
+}): Uint8Array {
+  const when = new Date(input.cycle);
+  const npts = input.nx * input.ny;
+  const sec1 = new Uint8Array(21);
+  const sec1View = new DataView(sec1.buffer);
+  sec1View.setUint32(0, 21);
+  sec1[4] = 1;
+  sec1View.setUint16(5, 7);
+  sec1[9] = 2;
+  sec1[10] = 1;
+  sec1[11] = 1;
+  sec1View.setUint16(12, when.getUTCFullYear());
+  sec1[14] = when.getUTCMonth() + 1;
+  sec1[15] = when.getUTCDate();
+  sec1[16] = when.getUTCHours();
+  sec1[20] = 1;
+  const sec3 = new Uint8Array(81);
+  const sec3View = new DataView(sec3.buffer);
+  sec3View.setUint32(0, 81);
+  sec3[4] = 3;
+  sec3View.setUint32(6, npts);
+  sec3View.setUint16(12, 30);
+  sec3[14] = 6;
+  sec3View.setUint32(30, input.nx);
+  sec3View.setUint32(34, input.ny);
+  const lonEast = input.longitude < 0 ? input.longitude + 360 : input.longitude;
+  putSignMag(sec3View, 38, input.latitude * 1e6);
+  putSignMag(sec3View, 42, lonEast * 1e6);
+  putSignMag(sec3View, 47, 38.5 * 1e6);
+  putSignMag(sec3View, 51, 262.5 * 1e6);
+  sec3View.setUint32(55, 3_000_000);
+  sec3View.setUint32(59, 3_000_000);
+  sec3[64] = 64;
+  putSignMag(sec3View, 65, 38.5 * 1e6);
+  putSignMag(sec3View, 69, 38.5 * 1e6);
+  const sec4 = new Uint8Array(34);
+  const sec4View = new DataView(sec4.buffer);
+  sec4View.setUint32(0, 34);
+  sec4[4] = 4;
+  sec4[9] = 20;
+  sec4[10] = 0;
+  sec4[11] = 2;
+  sec4[17] = 1;
+  sec4View.setUint32(18, input.lead);
+  sec4[22] = 103;
+  sec4View.setUint32(24, 8);
+  sec4[28] = 255;
+  const sec5 = new Uint8Array(49);
+  const sec5View = new DataView(sec5.buffer);
+  sec5View.setUint32(0, 49);
+  sec5[4] = 5;
+  sec5View.setUint32(5, npts);
+  sec5View.setUint16(9, 3);
+  sec5View.setFloat32(11, 0);
+  sec5View.setUint16(17, 10);
+  sec5[19] = 8;
+  sec5[21] = 1;
+  sec5View.setUint32(31, 1);
+  sec5View.setUint32(37, 1);
+  sec5[41] = 1;
+  sec5View.setUint32(42, npts);
+  sec5[47] = 2;
+  sec5[48] = 2;
+  const sec6 = Uint8Array.from([0x00, 0x00, 0x00, 0x06, 0x06, 0xff]);
+  const packed = new Uint8Array(7);
+  const packedView = new DataView(packed.buffer);
+  packedView.setUint16(0, input.tenths);
+  packedView.setUint16(2, input.tenths);
+  const sec7 = new Uint8Array(12);
+  const sec7View = new DataView(sec7.buffer);
+  sec7View.setUint32(0, 12);
+  sec7[4] = 7;
+  sec7.set(packed, 5);
+  const sections = [sec1, sec3, sec4, sec5, sec6, sec7];
+  const sectionBytes = sections.reduce((sum, part) => sum + part.length, 0);
+  const total = 16 + sectionBytes + 4;
+  const out = new Uint8Array(total);
+  out.set([0x47, 0x52, 0x49, 0x42, 0x00, 0x00, 0x00, 0x02], 0);
+  new DataView(out.buffer).setUint32(12, total);
+  let offset = 16;
+  for (const part of sections) {
+    out.set(part, offset);
+    offset += part.length;
+  }
+  out.set([0x37, 0x37, 0x37, 0x37], offset);
+  return out;
+}
+
+function smokeIndex(byteLength: number, cycle: string): string {
+  const when = new Date(cycle);
+  const stamp = `${when.getUTCFullYear()}${String(when.getUTCMonth() + 1).padStart(2, "0")}${String(when.getUTCDate()).padStart(2, "0")}${String(when.getUTCHours()).padStart(2, "0")}`;
+  return `1:0:d=${stamp}:MASSDEN:8 m above ground:anl:\n2:${byteLength}:d=${stamp}:UGRD:10 m above ground:anl:\n`;
+}
+
+function cycleFromAwsUrl(url: string): string {
+  const match = /\/hrrr\.(\d{4})(\d{2})(\d{2})\/conus\/hrrr\.t(\d{2})z/.exec(url);
+  if (!match) throw new Error("aws url has no cycle");
+  return `${match[1]}-${match[2]}-${match[3]}T${match[4]}:00:00.000Z`;
 }
 
 function fakeFetch(bodies: { smoke: string; aqf: string; airnow?: string }): FakeFetch {
   const urls: string[] = [];
-  const fetchImpl: typeof fetch = async (input) => {
+  const ranges: string[] = [];
+  const byLead = new Map<number, number>();
+  for (const hour of parseHrrrSmoke(bodies.smoke)) {
+    if (hour.pm25Tenths != null && hour.hour <= 48) byLead.set(hour.hour, hour.pm25Tenths);
+  }
+  const fetchImpl: typeof fetch = async (input, init) => {
     const url = String(input);
     urls.push(url);
     if (url.includes("purpleair") || url.includes("open-meteo") || url.includes("openmeteo")) {
       throw new Error("refused host");
     }
-    if (url.includes("masden8m")) return new Response(bodies.smoke, { status: 200 });
+    if (url.includes("noaa-hrrr-bdp-pds") && url.includes("wrfsfcf")) {
+      const lead = Number(/wrfsfcf(\d{2})/.exec(url)?.[1]);
+      const tenths = byLead.get(lead);
+      if (tenths == null) return new Response("missing", { status: 404 });
+      const cycle = cycleFromAwsUrl(url);
+      const message = encodeConstantSmoke({
+        cycle,
+        lead,
+        tenths,
+        nx: 24,
+        ny: 64,
+        latitude: SMOKE_ORIGIN.latitude,
+        longitude: SMOKE_ORIGIN.longitude,
+      });
+      if (url.endsWith(".idx"))
+        return new Response(smokeIndex(message.length, cycle), { status: 200 });
+      const range = new Headers(init?.headers).get("range") ?? "";
+      ranges.push(range);
+      return new Response(Buffer.from(message), { status: 206 });
+    }
     if (url.includes("pm25sfc")) return new Response(bodies.aqf, { status: 200 });
     if (url.includes("airnowapi.org")) {
       if (bodies.airnow == null) throw new Error("airnow was called");
       return new Response(bodies.airnow, { status: 200 });
     }
-    throw new Error("unexpected host");
+    throw new Error(`unexpected host ${url}`);
   };
-  return { fetchImpl, urls };
+  return { fetchImpl, urls, ranges };
 }
 
 function leadHours(issuedAt: string, validFor: string | Date): number {
@@ -126,14 +269,17 @@ describe("v1 place ingest", { concurrency: 1 }, () => {
       assert.equal(stored.officialStatus, "stored");
       assert.equal(stored.officialAqi, 48);
       assert.equal(stored.airnowError, null);
-      assert.deepEqual(fake.urls, [
-        hrrrSmokeAsciiUrl({
-          cycleUtc: CYCLE,
-          latIndex: cells.hrrr.latIndex,
-          lonIndex: cells.hrrr.lonIndex,
-          hourStart: 0,
-          hourEnd: 48,
-        }),
+      const smokeUrls = fake.urls.filter((url) => url.includes("noaa-hrrr-bdp-pds"));
+      assert.equal(
+        smokeUrls.some((url) => url.includes("/dods/")),
+        false,
+      );
+      assert.equal(smokeUrls.filter((url) => url.endsWith("wrfsfcf00.grib2")).length, 1);
+      assert.equal(smokeUrls.filter((url) => url.endsWith("wrfsfcf24.grib2")).length, 1);
+      assert.equal(smokeUrls.filter((url) => url.endsWith("wrfsfcf48.grib2")).length, 1);
+      assert.equal(smokeUrls.filter((url) => url.endsWith(".idx")).length, 49);
+      assert.equal(
+        fake.urls.find((url) => url.includes("pm25sfc")),
         aqfAsciiUrl({
           cycleUtc: CYCLE,
           latIndex: cells.aqm.latIndex,
@@ -141,9 +287,8 @@ describe("v1 place ingest", { concurrency: 1 }, () => {
           hourStart: 49,
           hourEnd: 168,
         }),
-        fake.urls[2],
-      ]);
-      const airnowUrl = new URL(fake.urls[2] ?? "");
+      );
+      const airnowUrl = new URL(fake.urls.at(-1) ?? "");
       assert.equal(airnowUrl.hostname, "www.airnowapi.org");
       assert.equal(airnowUrl.searchParams.get("API_KEY"), KEY);
       const rows = await sql.query<{
@@ -167,13 +312,17 @@ describe("v1 place ingest", { concurrency: 1 }, () => {
           { source: "noaa_aqf", lead: 168, corrected_aqi: 50 },
         ],
       );
-      const ledger = await sql.query<{ source: string; endpoint_kind: string; outcome: string }>(
-        "select source, endpoint_kind, outcome from upstream_call order by source, endpoint_kind",
+      const ledger = await sql.query<{ endpoint_kind: string; outcome: string; n: number }>(
+        `select endpoint_kind, outcome, count(*)::int as n
+           from upstream_call
+          group by endpoint_kind, outcome
+          order by endpoint_kind, outcome`,
       );
       assert.deepEqual(ledger, [
-        { source: "airnow", endpoint_kind: "airnow_current", outcome: "ok" },
-        { source: "noaa", endpoint_kind: "aqf_ascii", outcome: "ok" },
-        { source: "noaa", endpoint_kind: "hrrr_smoke_ascii", outcome: "ok" },
+        { endpoint_kind: "airnow_current", outcome: "ok", n: 1 },
+        { endpoint_kind: "aqf_ascii", outcome: "ok", n: 1 },
+        { endpoint_kind: "hrrr_smoke_ascii", outcome: "error", n: 46 },
+        { endpoint_kind: "hrrr_smoke_ascii", outcome: "ok", n: 6 },
       ]);
       const dumped = JSON.stringify(ledger);
       assert.equal(dumped.includes(KEY), false);
@@ -207,9 +356,9 @@ describe("v1 place ingest", { concurrency: 1 }, () => {
       releaseBoth = resolve;
     });
     const gate: Queryable = {
-      query: async (text, params) => {
+      query: async <T>(text: string, params: unknown[] = []) => {
         if (text.includes("select official_aqi") && text.includes("from official_reading")) {
-          const rows = await sql.query(text, params);
+          const rows = await sql.query<T>(text, params);
           officialSelects += 1;
           if (officialSelects === 2) releaseBoth();
           return rows;
@@ -217,7 +366,7 @@ describe("v1 place ingest", { concurrency: 1 }, () => {
         if (text.includes("insert into official_reading")) {
           await bothSawEmpty;
           try {
-            return await sql.query(text, params);
+            return await sql.query<T>(text, params);
           } catch (err) {
             const code =
               typeof err === "object" && err !== null && "code" in err ? String(err.code) : "";
@@ -229,7 +378,7 @@ describe("v1 place ingest", { concurrency: 1 }, () => {
             throw err;
           }
         }
-        return sql.query(text, params);
+        return sql.query<T>(text, params);
       },
     };
     try {
@@ -382,7 +531,8 @@ describe("v1 place ingest", { concurrency: 1 }, () => {
       );
       assert.deepEqual(counts, [
         { source: "airnow", n: AIRNOW_HOURLY_LIMIT },
-        { source: "noaa", n: 2 },
+        // 46 missing hours, 3 indexes, 3 smoke ranges, and the AQF call.
+        { source: "noaa", n: 53 },
       ]);
       const official = await sql.query<{ n: number }>(
         "select count(*)::int as n from official_reading",
@@ -495,10 +645,17 @@ describe("v1 place ingest", { concurrency: 1 }, () => {
         [tamarack.id],
       );
       assert.equal(others[0]?.n, 0);
-      const smokeUrls = fake.urls.filter((url) => url.includes("masden8m"));
-      assert.equal(smokeUrls.length, 2);
-      assert.match(smokeUrls[0] ?? "", /\[0:48\]\[755:755\]\[440:440\]/);
-      assert.match(smokeUrls[1] ?? "", /\[0:48\]\[799:799\]\[442:442\]/);
+      const smokeIdx = fake.urls.filter((url) => url.endsWith("wrfsfcf00.grib2.idx"));
+      assert.equal(smokeIdx.length, 2);
+      assert.match(smokeIdx[0] ?? "", /^https:\/\/noaa-hrrr-bdp-pds\.s3\.amazonaws\.com\/hrrr\./);
+      assert.equal(
+        fake.urls.some((url) => url.includes("/dods/hrrr/")),
+        false,
+      );
+      const aqfUrls = fake.urls.filter((url) => url.includes("pm25sfc"));
+      assert.equal(aqfUrls.length, 2);
+      assert.match(aqfUrls[0] ?? "", /\[49:168\]\[182:182\]\[115:115\]/);
+      assert.match(aqfUrls[1] ?? "", /\[49:168\]\[192:192\]\[116:116\]/);
     } finally {
       if (previous === undefined) delete process.env.AIRNOW_API_KEY;
       else process.env.AIRNOW_API_KEY = previous;
@@ -533,6 +690,81 @@ describe("v1 place ingest", { concurrency: 1 }, () => {
       );
       assert.equal(issued.length, 1);
       assert.equal(new Date(issued[0].issued_at).toISOString(), body.cycleUtc);
+    } finally {
+      if (previous === undefined) delete process.env.AIRNOW_API_KEY;
+      else process.env.AIRNOW_API_KEY = previous;
+    }
+  });
+
+  it("reads the Boise smoke cell from the AWS index fixture", async () => {
+    const grib = readFileSync(join(root, "fixtures/v1/noaa-hrrr-smoke-f00.grib2"));
+    const idx = readFileSync(join(root, "fixtures/v1/noaa-hrrr-smoke-f00.idx"), "utf8");
+    const center = hrrrSmokeCellCenter(resolveModelCells(BOISE.latitude, BOISE.longitude).hrrr);
+    const point = readLambertPoint(grib, center.latitude, center.longitude);
+    assert.equal(point.referenceTime, CYCLE);
+    assert.equal(point.forecastHour, 0);
+    assert.equal(point.category, 20);
+    assert.equal(point.parameter, 0);
+    assert.equal(point.surfaceType, 103);
+    assert.equal(point.level, 8);
+    assert.ok(Math.abs(point.value - 4.8e-9) < 1e-15);
+    const span = hrrrSmokeByteRange(idx);
+    assert.equal(span.start, 0);
+    assert.equal(span.end, grib.byteLength);
+
+    const previous = process.env.AIRNOW_API_KEY;
+    delete process.env.AIRNOW_API_KEY;
+    const sql = await openDb();
+    const place = await addSavedPlace(sql, "user-a", SAMPLE_PLACE);
+    const urls: string[] = [];
+    const fetchImpl: typeof fetch = async (input, init) => {
+      const url = String(input);
+      urls.push(url);
+      if (url.includes("noaa-hrrr-bdp-pds")) {
+        const lead = Number(/wrfsfcf(\d{2})/.exec(url)?.[1]);
+        if (lead !== 0) return new Response("missing", { status: 404 });
+        if (url.endsWith(".idx")) return new Response(idx, { status: 200 });
+        assert.equal(new Headers(init?.headers).get("range"), `bytes=0-${grib.byteLength - 1}`);
+        return new Response(grib, { status: 206 });
+      }
+      if (url.includes("pm25sfc"))
+        return new Response(readFixture("noaa-aqf.ascii"), { status: 200 });
+      throw new Error(`unexpected host ${url}`);
+    };
+    try {
+      const stored = await ingestPlaceCycle(sql, "user-a", {
+        placeId: place.id,
+        cycleUtc: CYCLE,
+        fetchImpl,
+      });
+      assert.deepEqual(stored.hrrr, { latIndex: 755, lonIndex: 440 });
+      assert.equal(stored.forecastsStored, 5);
+      assert.equal(stored.officialStatus, "skipped");
+      const rows = await sql.query<{
+        source: string;
+        valid_for: string | Date;
+        corrected_aqi: number;
+      }>(
+        "select source, valid_for, corrected_aqi from forecast_issued where source = 'noaa_smoke'",
+      );
+      assert.equal(rows.length, 1);
+      assert.equal(leadHours(CYCLE, rows[0]?.valid_for ?? ""), 0);
+      assert.equal(rows[0]?.corrected_aqi, 27);
+      assert.equal(
+        urls.some((url) => url.includes("/dods/hrrr/")),
+        false,
+      );
+      assert.equal(urls[0], `${hrrrSmokeGribUrl(CYCLE, 0)}.idx`);
+      assert.equal(
+        urls.find((url) => url.includes("pm25sfc")),
+        aqfAsciiUrl({
+          cycleUtc: CYCLE,
+          latIndex: 182,
+          lonIndex: 115,
+          hourStart: 49,
+          hourEnd: 168,
+        }),
+      );
     } finally {
       if (previous === undefined) delete process.env.AIRNOW_API_KEY;
       else process.env.AIRNOW_API_KEY = previous;

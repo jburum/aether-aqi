@@ -6,7 +6,7 @@ Project Air phase 1 from the locked SharedBrain `v1-plan.md`. This branch adds i
 
 ## What landed
 
-- NOAA HRRR-Smoke for lead 0 through 48 hours (`src/lib/v1/noaa.ts`, `hrrrSmokeAsciiUrl`). The row is `source = noaa_smoke`, valley scale, valley confidence, horizon `day_1_2_valley`. The field is near-surface smoke mass density (`masden8m`, kg/m³). It becomes the corrected PM2.5 AQI through the 2024 EPA breakpoints in `src/lib/v1/pm25-aqi.ts`.
+- NOAA HRRR-Smoke for lead 0 through 48 hours (`src/lib/v1/place-ingest.ts`, `fetchHrrrSmokeField`). The row is `source = noaa_smoke`, valley scale, valley confidence, horizon `day_1_2_valley`. The field is near-surface smoke mass density (`MASSDEN` at 8 m, kg/m³) from the public AWS GRIB. It becomes the corrected PM2.5 AQI through the 2024 EPA breakpoints in `src/lib/v1/pm25-aqi.ts`. `hrrrSmokeAsciiUrl` remains for the recorded ASCII parser.
 - NOAA's air quality forecast after that, through 168 hours (`aqfAsciiUrl`). A model cell is `noaa_aqf`, regional, confidence `model`, horizon `day_3_7_noaa_aqf`. An empty cell with an explicit `regional_low` integer on the extract is `regional` / `low` / `day_3_7_regional_low_confidence`. An hour with neither is skipped. A number is not invented.
 - The cut is `classifyForecastLead` in `src/lib/v1/rules.ts`. Lead time `<= 48` hours, including that instant, is days 1-2. One millisecond later is days 3-7. A smoke value after 48 hours is not stored. An air-quality value at or before 48 hours is not stored.
 - EPA AirNow current observations (`src/lib/v1/airnow.ts`). The reported integer is stored on `official_reading` with `preliminary = true` and `AIRNOW_ATTRIBUTION`. It does not go through the breakpoint function. A non-integer AQI is not rounded. A `correctedAqi` field on the payload is ignored. Category numbers are not the AQI.
@@ -19,10 +19,10 @@ Project Air phase 1 from the locked SharedBrain `v1-plan.md`. This branch adds i
 - The corrected forecast and the official number stay in different tables. `forecast_issued` has `corrected_aqi` and no official column. `official_reading` has `official_aqi` and no corrected column. `forecast_beside_observed` only reads them side by side.
 - Open-Meteo is still rejected (`open_meteo_not_for_launch`) before a request and before a row is written.
 - PurpleAir spend is not approved. There is no PurpleAir host, key, or client.
-- NOAA URLs are keyless `https://nomads.ncep.noaa.gov` only. A credential query parameter is rejected.
-- HRRR-Smoke: `/dods/hrrr/hrrrYYYYMMDD/hrrr_sfc.tCCz.ascii?masden8m[hour:hour][lat:lat][lon:lon]`.
+- NOAA URLs are keyless. AQF stays on `https://nomads.ncep.noaa.gov`. HRRR smoke stays on `https://noaa-hrrr-bdp-pds.s3.amazonaws.com` with no query string. A credential query parameter is rejected.
+- HRRR-Smoke: `hrrr.YYYYMMDD/conus/hrrr.tCCz.wrfsfcfHH.grib2` and its `.idx`. The range is the `MASSDEN:8 m above ground` message. Hours 0 through 48.
 - Air quality model: `/dods/aqm/aqmYYYYMMDD/aqm.tCCz.ascii?pm25sfc[hour:hour][lat:lat][lon:lon]`.
-- OpenDAP on this host was turned off on 23 February 2026 (Service Change Notice 25-81). Those two URL builders are unchanged. Inversion ingest uses the GRIB filter; see [ALERTS.md](./ALERTS.md).
+- OpenDAP on NOMADS was turned off on 23 February 2026 (Service Change Notice 25-81). Place ingest does not call `/dods/hrrr/`. The recorded ASCII fixture is still what `parseHrrrSmoke` reads. Inversion ingest uses the GRIB filter; see [ALERTS.md](./ALERTS.md).
 - Cycles used here are 00, 06, 12, and 18 UTC. The recorded ASCII is one grid cell, so both indexes on the data line are 0. Turning a latitude and longitude into those indexes is not in this branch.
 - `NaN`, `-9999`, and values on the order of `1e20` are missing cells. They are not stored as AQI 500.
 - The hourly model concentration uses the daily PM2.5 breakpoint table. NowCast weighting is not applied.

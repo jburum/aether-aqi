@@ -9,9 +9,8 @@ import { V1RuleError } from "./errors.ts";
  * 21.821°N, 226.541°E through 53.501°N, 292.691°E.
  * Spacing is `(end - origin) / (count - 1)` degrees. This is the GrADS linear
  * axis those OpenDAP indexes used (`grads_mapping` linear), not the Lambert
- * i,j of the GRIB file. A DAS fetch for the 2026-02-20 files returns the
- * Service Change Notice 25-81 retirement page, so this module does not read a
- * live axis and does not call out.
+ * i,j of the GRIB file. `hrrrSmokeCellCenter` is the center the smoke read
+ * projects onto template 3.30. This module does not call out.
  */
 
 export const HRRR_SMOKE_LAT_ORIGIN = 21.138123;
@@ -131,4 +130,24 @@ export function resolveModelCells(latitude: number, longitude: number): ModelCel
     hrrr: cell(latitude, lonEast, HRRR_LAT, HRRR_LON),
     aqm: cell(latitude, lonEast, AQM_LAT, AQM_LON),
   };
+}
+
+/**
+ * Center of one HRRR-Smoke cell on the GrADS axis.
+ * Longitude is signed. The Lambert i,j of the GRIB file is a different index.
+ */
+export function hrrrSmokeCellCenter(cell: ModelCell): { latitude: number; longitude: number } {
+  if (
+    !Number.isInteger(cell.latIndex) ||
+    !Number.isInteger(cell.lonIndex) ||
+    cell.latIndex < 0 ||
+    cell.latIndex >= HRRR_SMOKE_LAT_COUNT ||
+    cell.lonIndex < 0 ||
+    cell.lonIndex >= HRRR_SMOKE_LON_COUNT
+  ) {
+    throw new V1RuleError("outside_model_coverage", "Outside the HRRR-Smoke grid.");
+  }
+  const latitude = HRRR_SMOKE_LAT_ORIGIN + cell.latIndex * HRRR_SMOKE_LAT_SPACING;
+  const lonEast = HRRR_SMOKE_LON_ORIGIN + cell.lonIndex * HRRR_SMOKE_LON_SPACING;
+  return { latitude, longitude: lonEast > 180 ? lonEast - 360 : lonEast };
 }
