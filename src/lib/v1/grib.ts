@@ -197,6 +197,7 @@ interface BitWindow {
 }
 
 function readWindowBits(window: BitWindow, nbits: number): number {
+  if (nbits === 0) return 0;
   if (nbits < 0 || nbits > 32) fail("GRIB2 packed field is wider than 32 bits.", window.code);
   while (window.bufBits < nbits) {
     const next = window.data[window.bytePos];
@@ -297,6 +298,7 @@ function nearestLambertIndex(
  * Template 5.3 / 7.3, order 2. The first two coded values are unused.
  * h1, h2, and hmin rebuild the scaled integers from the start of the grid,
  * so a point near the middle still walks every group up to that index.
+ * A zero group-reference width is omitted; ecCodes reads each reference as 0.
  */
 function spatialValueAt(sec5: Uint8Array, sec7: Uint8Array, index: number, code: string): number {
   if (sec5.length < 49) fail("GRIB2 spatial-differencing section is short.", code);
@@ -326,7 +328,6 @@ function spatialValueAt(sec5: Uint8Array, sec7: Uint8Array, index: number, code:
     groups > nvals ||
     octets < 1 ||
     octets > 4 ||
-    bits < 1 ||
     bits > 32 ||
     widthBits > 32 ||
     lengthBits > 32
@@ -346,7 +347,9 @@ function spatialValueAt(sec5: Uint8Array, sec7: Uint8Array, index: number, code:
   const hmin = signMag(read(octets * 8), octets * 8);
   alignWindow(window);
   const refs = new Uint32Array(groups);
-  for (let i = 0; i < groups; i += 1) refs[i] = read(bits);
+  if (bits !== 0) {
+    for (let i = 0; i < groups; i += 1) refs[i] = read(bits);
+  }
   alignWindow(window);
   const widths = new Uint16Array(groups);
   for (let i = 0; i < groups; i += 1) widths[i] = widthRef + read(widthBits);

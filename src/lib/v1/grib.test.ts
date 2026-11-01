@@ -198,6 +198,58 @@ function liveShapeFixture(): Uint8Array {
   return finish([section1(CYCLE), section3(4, 2), section4(0), sec5, sec6, sec7]);
 }
 
+/**
+ * Same scaled series as the live-shape fixture, but group references are
+ * zero bits wide and are not stored. The two groups still differ.
+ * Y = [99, 77, 16, 24, 14, 26, 11, 0], h1 = 10, h2 = 12, hmin = -19.
+ */
+function zeroBitGroupReferences(): Uint8Array {
+  const sec5 = new Uint8Array(49);
+  const view = new DataView(sec5.buffer);
+  view.setUint32(0, 49);
+  sec5[4] = 5;
+  view.setUint32(5, 8);
+  view.setUint16(9, 3);
+  view.setFloat32(11, 1);
+  view.setUint16(15, signMag(1, 16));
+  view.setUint16(17, signMag(2, 16));
+  sec5[19] = 0;
+  sec5[21] = 1;
+  view.setUint32(31, 2);
+  sec5[36] = 3;
+  view.setUint32(37, 4);
+  sec5[41] = 1;
+  view.setUint32(42, 4);
+  sec5[46] = 1;
+  sec5[47] = 2;
+  sec5[48] = 3;
+  const bits = new BitWriter();
+  bits.write(signMag(10, 24), 24);
+  bits.write(signMag(12, 24), 24);
+  bits.write(signMag(-19, 24), 24);
+  bits.align();
+  for (const width of [7, 5]) bits.write(width, 3);
+  bits.align();
+  for (const scaled of [0, 0]) bits.write(scaled, 1);
+  bits.align();
+  const packed = [
+    [99, 77, 16, 24],
+    [14, 26, 11, 0],
+  ];
+  const widths = [7, 5];
+  for (let group = 0; group < packed.length; group += 1) {
+    for (const delta of packed[group] ?? []) bits.write(delta, widths[group] ?? 0);
+  }
+  const data = bits.toUint8Array();
+  const sec7 = new Uint8Array(5 + data.length);
+  const sec7View = new DataView(sec7.buffer);
+  sec7View.setUint32(0, sec7.length);
+  sec7[4] = 7;
+  sec7.set(data, 5);
+  const sec6 = Uint8Array.from([0x00, 0x00, 0x00, 0x06, 0x06, 0xff]);
+  return finish([section1(CYCLE), section3(4, 2), section4(0), sec5, sec6, sec7]);
+}
+
 /** Constant 17-cell template 5.3. Binary scale -1, so each scaled 4 is physical 2. */
 function constantSeventeen(): Uint8Array {
   const sec5 = new Uint8Array(49);
@@ -327,6 +379,30 @@ describe("v1 grib", () => {
         assert.ok(Math.abs(point.value - (1 + scaled * 2) * 10 ** -2) < 1e-12);
       }
     }
+  });
+
+  it("decodes a nonconstant template 5.3 field with zero-bit group references", () => {
+    const message = zeroBitGroupReferences();
+    const sec5 = section(message, 5);
+    assert.equal(sec5[19], 0);
+    const sec7 = section(message, 7);
+    assert.deepEqual(
+      [...sec7.subarray(5, 16)],
+      [0x00, 0x00, 0x0a, 0x00, 0x00, 0x0c, 0x80, 0x00, 0x13, 0xf4, 0x00],
+    );
+    const values: number[] = [];
+    for (let j = 0; j < 2; j += 1) {
+      for (let i = 0; i < 4; i += 1) {
+        const scaled = SCALED[j * 4 + i] ?? 0;
+        const place = i === 0 && j === 0 ? ANCHOR : cellCenter(i, j);
+        const point = readLambertPoint(message, place.latitude, place.longitude);
+        const expected = (1 + scaled * 2) * 10 ** -2;
+        assert.ok(Math.abs(point.value - expected) < 1e-12);
+        values.push(point.value);
+      }
+    }
+    assert.notEqual(values[0], values[values.length - 1]);
+    assert.ok(new Set(values).size > 1);
   });
 
   it("keeps the simple-packing caps and lets template 5.3 exceed them", () => {
