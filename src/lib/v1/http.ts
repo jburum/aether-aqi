@@ -9,6 +9,7 @@ import {
   requireProAlerts,
 } from "./entitlements.ts";
 import { NotEntitledError, V1RuleError } from "./errors.ts";
+import { readMonitoringStatus } from "./monitoring.ts";
 import { parseAsOf, parseTimeZone, readBestWindow, readOutlook } from "./phase2.ts";
 import type { PushSender } from "./push.ts";
 import { parseDeviceToken, requireId } from "./rules.ts";
@@ -48,7 +49,7 @@ async function readJson(request: Request): Promise<unknown> {
 
 /**
  * v1 HTTP surface. The route resolves the user, then calls this.
- * Paths: entitlement, places, places/:id/current, places/:id/timeline,
+ * Paths: status, entitlement, places, places/:id/current, places/:id/timeline,
  * places/:id/best-window, places/:id/outlook, places/:id/alerts,
  * forecasts, observations, push/devices, push/deliver, push/samples.
  * Pro gates live here: alerts, any saved place after the first, and
@@ -95,6 +96,13 @@ function requiredZone(timeZone: string | null): string {
 async function route(request: Request, url: URL, rest: string[], deps: V1Deps): Promise<Response> {
   const method = request.method.toUpperCase();
   const now = new Date();
+
+  if (rest[0] === "status" && rest.length === 1) {
+    if (method !== "GET") {
+      return json({ error: "method_not_allowed", message: "Method not allowed" }, 405);
+    }
+    return json(await readMonitoringStatus(deps.sql, parseAsOf(url.searchParams.get("asOf"))));
+  }
 
   if (rest[0] === "entitlement" && rest.length === 1) {
     if (method !== "GET") {
