@@ -299,6 +299,20 @@ function nearestLambertCell(
 }
 
 /**
+ * Integer power of 10. A negative exponent divides by 10 once per step.
+ * That is ecCodes `grib_power`, and it is not the same double as `10 ** n`.
+ */
+function pow10(exponent: number): number {
+  let value = 1;
+  if (exponent >= 0) {
+    for (let i = 0; i < exponent; i += 1) value *= 10;
+    return value;
+  }
+  for (let i = 0; i < -exponent; i += 1) value /= 10;
+  return value;
+}
+
+/**
  * Template 5.3 / 7.3, order 2. The first two coded values are unused.
  * h1, h2, and hmin rebuild the scaled integers from the start of the grid,
  * so a point near the middle still walks every group up to that index.
@@ -380,7 +394,7 @@ function spatialValueAt(sec5: Uint8Array, sec7: Uint8Array, index: number, code:
   }
   if (cursor < need) fail("GRIB2 spatial field ended before the sample.", code);
   const power = 2 ** binaryScale;
-  const decimal = 10 ** -decimalScale;
+  const decimal = pow10(-decimalScale);
   let prev2 = 0;
   let prev1 = 0;
   let value = 0;
