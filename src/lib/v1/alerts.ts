@@ -785,6 +785,7 @@ interface StabilityRow {
 interface OfficialAlertRow {
   observed_at: string | Date;
   official_aqi: number;
+  parameter: string | null;
 }
 
 function iso(value: string | Date): string {
@@ -870,7 +871,7 @@ async function loadLatestOfficial(
   placeId: string,
 ): Promise<AlertOfficial | null> {
   const rows = await sql.query<OfficialAlertRow>(
-    `select observed_at, official_aqi
+    `select observed_at, official_aqi, parameter
        from official_reading
       where place_id = $1 and user_id = $2
       order by observed_at desc, created_at desc, id desc
@@ -882,7 +883,7 @@ async function loadLatestOfficial(
   return {
     observedAt: iso(row.observed_at),
     officialAqi: Number(row.official_aqi),
-    parameter: "unknown",
+    parameter: row.parameter === "PM2.5" || row.parameter === "O3" ? row.parameter : "unknown",
   };
 }
 

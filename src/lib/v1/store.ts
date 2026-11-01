@@ -17,6 +17,7 @@ import type {
   ForecastSource,
   Horizon,
   IssuedForecast,
+  AirNowParameter,
   OfficialBeside,
   OfficialReading,
   Queryable,
@@ -57,6 +58,7 @@ interface OfficialRow {
   preliminary: boolean;
   attribution: string;
   source: "airnow";
+  parameter: string | null;
 }
 
 interface BesideRow {
@@ -151,7 +153,13 @@ function asOfficial(row: OfficialRow): OfficialReading {
     preliminary: true,
     attribution: row.attribution,
     source: "airnow",
+    parameter: storedParameter(row.parameter),
   };
+}
+
+function storedParameter(value: string | null): AirNowParameter | null {
+  if (value === "PM2.5" || value === "O3") return value;
+  return null;
 }
 
 function asBeside(row: BesideRow): ForecastBesideObserved {
@@ -327,9 +335,11 @@ export async function recordOfficial(
   const id = randomUUID();
   const inserted = await sql.query<OfficialRow>(
     `insert into official_reading
-       (id, place_id, user_id, source, observed_at, official_aqi, official_raw, preliminary, attribution)
-     values ($1, $2, $3, 'airnow', $4, $5, $6, true, $7)
-     returning id, place_id, observed_at, official_aqi, official_raw, preliminary, attribution, source`,
+       (id, place_id, user_id, source, observed_at, official_aqi, official_raw,
+        preliminary, attribution, parameter)
+     values ($1, $2, $3, 'airnow', $4, $5, $6, true, $7, $8)
+     returning id, place_id, observed_at, official_aqi, official_raw, preliminary,
+               attribution, source, parameter`,
     [
       id,
       input.placeId,
@@ -338,6 +348,7 @@ export async function recordOfficial(
       input.officialAqi,
       input.officialRaw,
       AIRNOW_ATTRIBUTION,
+      input.parameter,
     ],
   );
   const row = inserted[0];

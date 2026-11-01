@@ -7,6 +7,7 @@ import {
   type Confidence,
   type ForecastSource,
   type Horizon,
+  type AirNowParameter,
   type SpatialScale,
 } from "./types.ts";
 
@@ -70,6 +71,7 @@ export interface ValidOfficial {
   preliminary: true;
   attribution: string;
   source: "airnow";
+  parameter: AirNowParameter | null;
 }
 
 export interface ValidPlace {
@@ -258,6 +260,16 @@ function parsePollutant(value: unknown): string | null {
   return value;
 }
 
+/** Omitted and null stay null. PM10 is not a stored alert parameter. */
+function parseStoredParameter(value: unknown): AirNowParameter | null {
+  if (value == null) return null;
+  if (value === "PM2.5" || value === "O3") return value;
+  throw new V1RuleError(
+    "invalid_field",
+    "Official AirNow parameter must be PM2.5, O3, or null.",
+  );
+}
+
 export function requireId(value: unknown, field: string): string {
   if (typeof value !== "string" || !/^[A-Za-z0-9_-]{1,80}$/.test(value)) {
     throw new V1RuleError("invalid_id", `${field} is invalid.`);
@@ -273,6 +285,7 @@ const OFFICIAL_KEYS = new Set([
   "preliminary",
   "attribution",
   "source",
+  "parameter",
 ]);
 
 export function parseOfficialInput(body: unknown): ValidOfficial {
@@ -334,6 +347,7 @@ export function parseOfficialInput(body: unknown): ValidOfficial {
     preliminary: true,
     attribution: AIRNOW_ATTRIBUTION,
     source: "airnow",
+    parameter: parseStoredParameter(body.parameter),
   };
 }
 

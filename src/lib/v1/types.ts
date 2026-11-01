@@ -43,6 +43,12 @@ export interface IssuedForecast {
   pollutant: string | null;
 }
 
+/**
+ * Pollutant kept on an official AirNow row.
+ * PM10 and every other ParameterName are stored as null.
+ */
+export type AirNowParameter = "PM2.5" | "O3";
+
 /** Official AirNow reading as stored. There is no corrected field on this type. */
 export interface OfficialReading {
   id: string;
@@ -53,6 +59,8 @@ export interface OfficialReading {
   preliminary: true;
   attribution: string;
   source: "airnow";
+  /** Null when AirNow did not name PM2.5 or ozone. */
+  parameter: AirNowParameter | null;
 }
 
 export interface OfficialBeside {

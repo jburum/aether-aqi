@@ -28,7 +28,7 @@ Active means `start <= asOf < end`. Upcoming means `start` is still inside seven
 
 An hour is on at corrected AQI 101 or higher. Days 1-2 use the NOAA smoke model, source `noaa_smoke`, confidence `valley`. Days 3-7 use NOAA's air quality forecast or a regional row that is explicitly labeled PM2.5, and the decision is a heads up at low confidence. A regional row with no pollutant is not smoke.
 
-The latest AirNow reading is an input. The store does not keep the pollutant, so `readAlerts` passes `parameter: "unknown"`. Unknown does not choose smoke or ozone and does not change the threshold. A caller that passes `PM2.5` can promote a days 1-2 hour that is already at or above 51 when AirNow is at or above 101, for the hour of the observation through six hours after, and the hour before it. Days 3-7 are not promoted. When the forecast was already on, the reason cites the AirNow number and the source stays the forecast. `peakAqi` is that corrected peak. When AirNow alone promoted the episode, the source is `airnow` and `peakAqi` is null.
+The latest AirNow reading is an input. `official_reading.parameter` (`migrations/0008_v1_airnow_parameter.sql`) stores `PM2.5` or `O3` when AirNow's ParameterName is that name. PM10 and any other name are stored as null. Rows already stored stay null; there is no backfill. `readAlerts` passes the stored parameter, and null is `unknown`. Unknown does not choose smoke or ozone and does not change the threshold. A stored `PM2.5` promotes a days 1-2 hour that is already at or above 51 when AirNow is at or above 101, for the hour of the observation through six hours after, and the hour before it. Days 3-7 are not promoted. When the forecast was already on, the reason cites the AirNow number and the source stays the forecast. `peakAqi` is that corrected peak. When AirNow alone promoted the episode, the source is `airnow` and `peakAqi` is null.
 
 ### Ozone
 
@@ -36,7 +36,7 @@ The latest AirNow reading is an input. The store does not keep the pollutant, so
 
 Days 1-2 fire as an alert. Source `noaa_aqf`, confidence `model`, unless AirNow ozone promoted the hour, in which case the source is `airnow` and confidence is `valley`. Days 3-7 are a heads up at low confidence. The same AirNow promotion rule applies, and only when the parameter is `O3`. A forecast ozone alert carries the corrected peak in `peakAqi`. An AirNow-promoted ozone alert leaves `peakAqi` null.
 
-`forecast_issued` still refuses a days 1-2 `noaa_aqf` row (`day_1_2_valley_only` in `src/lib/v1/rules.ts`). This slice does not change that check. `ozoneRule` evaluates a days 1-2 ozone hour when the caller passes one. The read route can return a days 3-7 ozone heads up from a stored `noaa_aqf` row with pollutant `O3`. It cannot return a days 1-2 ozone alert until a later slice can store that row.
+`forecast_issued` still refuses a days 1-2 `noaa_aqf` row (`day_1_2_valley_only` in `src/lib/v1/rules.ts`). This slice does not change that check. `ozoneRule` evaluates a days 1-2 ozone hour when the caller passes one. The read route can return a days 3-7 ozone heads up from a stored `noaa_aqf` row with pollutant `O3`. It still cannot store a days 1-2 `noaa_aqf` row. A days 1-2 hour the forecast already kept, labeled ozone, fires when that hour is at or above 101, and also when the stored AirNow parameter is `O3` and the promotion rule matches.
 
 ### Inversion
 

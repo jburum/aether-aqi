@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 
 import { PGlite } from "@electric-sql/pglite";
 
+import { parseAirNowCurrent } from "./airnow.ts";
 import {
   INVERSION_HPBL_M,
   INVERSION_WIND_MS,
@@ -22,7 +23,7 @@ import {
 } from "./alerts.ts";
 import { V1RuleError } from "./errors.ts";
 import { handleV1 } from "./http.ts";
-import { ingestRecordedStability } from "./ingest.ts";
+import { ingestRecordedAirNow, ingestRecordedStability } from "./ingest.ts";
 import { fetchNoaaGrib, hrrrStabilityFilterUrls, stabilitySampleFromGrib } from "./noaa.ts";
 import { TestPushSender } from "./push.ts";
 import { AIRNOW_ATTRIBUTION } from "./rules.ts";
@@ -1353,5 +1354,409 @@ describe("v1 alert route", () => {
       july.alerts.some((alert) => alert.kind === "ozone"),
       false,
     );
+  });
+});
+
+/** Local 16:00Z in Boise. April-October 2026 is MDT. January is MST. */
+function boiseHour(date: string): {
+  utc: string;
+  issuedAt: string;
+  hour: number;
+  zone: "MST" | "MDT";
+} {
+  const month = Number(date.slice(5, 7));
+  const mdt = month >= 4 && month <= 10;
+  return {
+    utc: `${date}T16:00:00.000Z`,
+    issuedAt: `${date}T12:00:00.000Z`,
+    hour: mdt ? 10 : 9,
+    zone: mdt ? "MDT" : "MST",
+  };
+}
+
+function airNowFixture(overrides: {
+  DateObserved?: string;
+  HourObserved?: number;
+  LocalTimeZone?: string;
+  ParameterName?: string;
+  AQI?: number;
+}): string {
+  const rows = JSON.parse(readFileSync(join(root, "fixtures/v1/airnow-current.json"), "utf8")) as Record<
+    string,
+    unknown
+  >[];
+  const row = rows[0];
+  if (!row) throw new Error("airnow fixture is empty");
+  return JSON.stringify([{ ...row, ...overrides }]);
+}
+
+async function boisePlace(sql: Queryable, userId: string) {
+  return addSavedPlace(sql, userId, {
+    name: "Boise",
+    latitude: 43.615,
+    longitude: -116.2023,
+    valley: "Treasure Valley",
+    alertAt: null,
+  });
+}
+
+async function issueValley(
+  sql: Queryable,
+  userId: string,
+  placeId: string,
+  issuedAt: string,
+  first: string,
+  correctedAqi: number,
+  pollutant: string,
+): Promise<AlertForecastHour[]> {
+  const hours: AlertForecastHour[] = [];
+  for (let i = 0; i < 4; i += 1) {
+    const validFor = at(first, i);
+    hours.push({
+      source: "noaa_smoke",
+      issuedAt,
+      validFor,
+      confidence: "valley",
+      correctedAqi,
+      pollutant,
+    });
+    await issueForecast(sql, userId, {
+      placeId,
+      source: "noaa_smoke",
+      issuedAt,
+      validFor,
+      horizon: "day_1_2_valley",
+      spatialScale: "valley",
+      confidence: "valley",
+      correctedAqi,
+      pollutant,
+    });
+  }
+  return hours;
+}
+
+async function storedParameter(sql: Queryable, placeId: string): Promise<string | null> {
+  const rows = await sql.query<{ parameter: string | null }>(
+    "select parameter from official_reading where place_id = $1",
+    [placeId],
+  );
+  assert.equal(rows.length, 1);
+  return rows[0]?.parameter ?? null;
+}
+
+describe("v1 AirNow parameter", () => {
+  it("promotes a days 1-2 smoke hour from a stored PM2.5 row at 51 when AirNow is 101", async () => {
+    const sql = await openDb();
+    const date = "2026-01-15";
+    const stamp = boiseHour(date);
+    const cases = [
+      { name: "promote", forecast: 51, airnow: 101, fires: true },
+      { name: "forecast-50", forecast: 50, airnow: 101, fires: false },
+      { name: "airnow-100", forecast: 51, airnow: 100, fires: false },
+    ] as const;
+    for (const item of cases) {
+      const userId = `user-${item.name}`;
+      const place = await boisePlace(sql, userId);
+      await issueValley(sql, userId, place.id, stamp.issuedAt, stamp.utc, item.forecast, "PM2.5");
+      const stored = await ingestRecordedAirNow(
+        sql,
+        userId,
+        place.id,
+        airNowFixture({
+          DateObserved: date,
+          HourObserved: stamp.hour,
+          LocalTimeZone: stamp.zone,
+          ParameterName: "PM2.5",
+          AQI: item.airnow,
+        }),
+      );
+      assert.equal(stored.observedAt, stamp.utc, item.name);
+      assert.equal(stored.parameter, "PM2.5", item.name);
+      assert.equal(await storedParameter(sql, place.id), "PM2.5", item.name);
+      const body = await readAlerts(sql, userId, place.id, stamp.utc, ZONE);
+      const smoke = body.alerts.find((alert) => alert.kind === "smoke");
+      if (!item.fires) {
+        assert.equal(smoke, undefined, item.name);
+        assert.equal(
+          body.alerts.some((alert) => alert.kind === "ozone"),
+          false,
+          item.name,
+        );
+        continue;
+      }
+      assert.equal(smoke?.fired, true, item.name);
+      assert.equal(smoke?.status, "active", item.name);
+      assert.equal(smoke?.source, "airnow", item.name);
+      assert.equal(smoke?.confidence, "valley", item.name);
+      assert.equal(smoke?.severity, "elevated", item.name);
+      assert.equal(smoke?.peakAqi, null, item.name);
+      assert.equal(smoke?.start, stamp.utc, item.name);
+      assert.equal(smoke?.end, at(stamp.utc, 4), item.name);
+      assert.equal(
+        smoke?.reason,
+        "Smoke alert from the latest AirNow PM2.5 reading: AQI 101, valley confidence, across 4 hours.",
+        item.name,
+      );
+      assert.equal(
+        body.alerts.some((alert) => alert.kind === "ozone"),
+        false,
+        item.name,
+      );
+    }
+  });
+
+  it("promotes ozone from a stored O3 row only in May through September", async () => {
+    const sql = await openDb();
+    const months = [
+      { date: "2026-01-15", promotes: false },
+      { date: "2026-04-15", promotes: false },
+      { date: "2026-05-15", promotes: true },
+      { date: "2026-07-15", promotes: true },
+      { date: "2026-09-15", promotes: true },
+      { date: "2026-10-15", promotes: false },
+    ] as const;
+    for (const month of months) {
+      const userId = `user-${month.date}`;
+      const stamp = boiseHour(month.date);
+      const place = await boisePlace(sql, userId);
+      await issueValley(sql, userId, place.id, stamp.issuedAt, stamp.utc, 51, "O3");
+      const stored = await ingestRecordedAirNow(
+        sql,
+        userId,
+        place.id,
+        airNowFixture({
+          DateObserved: month.date,
+          HourObserved: stamp.hour,
+          LocalTimeZone: stamp.zone,
+          ParameterName: "O3",
+          AQI: 101,
+        }),
+      );
+      assert.equal(stored.parameter, "O3", month.date);
+      assert.equal(await storedParameter(sql, place.id), "O3", month.date);
+      const body = await readAlerts(sql, userId, place.id, stamp.utc, ZONE);
+      const ozone = body.alerts.find((alert) => alert.kind === "ozone");
+      assert.equal(
+        body.alerts.some((alert) => alert.kind === "smoke"),
+        false,
+        month.date,
+      );
+      if (!month.promotes) {
+        assert.equal(ozone, undefined, month.date);
+        continue;
+      }
+      assert.equal(ozone?.source, "airnow", month.date);
+      assert.equal(ozone?.confidence, "valley", month.date);
+      assert.equal(ozone?.severity, "elevated", month.date);
+      assert.equal(ozone?.peakAqi, null, month.date);
+      assert.equal(ozone?.start, stamp.utc, month.date);
+      assert.equal(
+        ozone?.reason,
+        "Ozone alert from the latest AirNow ozone reading: AQI 101, valley confidence, across 4 hours.",
+        month.date,
+      );
+    }
+  });
+
+  it("leaves a null parameter as unknown and does not promote", async () => {
+    const sql = await openDb();
+    const january = boiseHour("2026-01-15");
+    const july = boiseHour("2026-07-15");
+
+    const moderate = await boisePlace(sql, "user-moderate");
+    const moderateHours = await issueValley(
+      sql,
+      "user-moderate",
+      moderate.id,
+      january.issuedAt,
+      january.utc,
+      51,
+      "PM2.5",
+    );
+    await recordOfficial(sql, "user-moderate", {
+      placeId: moderate.id,
+      observedAt: january.utc,
+      officialAqi: 101,
+      officialRaw: "101",
+      preliminary: true,
+      attribution: AIRNOW_ATTRIBUTION,
+      source: "airnow",
+    });
+    assert.equal(await storedParameter(sql, moderate.id), null);
+    const moderateOfficial: AlertOfficial = {
+      observedAt: january.utc,
+      officialAqi: 101,
+      parameter: "unknown",
+    };
+    const moderateRule = smokeRule({
+      hours: moderateHours,
+      official: moderateOfficial,
+      asOf: january.utc,
+    });
+    const moderateBody = await readAlerts(sql, "user-moderate", moderate.id, january.utc, ZONE);
+    assert.equal(moderateRule.fired, false);
+    assert.deepEqual(
+      moderateBody.alerts.filter((alert) => alert.kind === "smoke"),
+      [],
+    );
+
+    const alreadyOn = await boisePlace(sql, "user-on");
+    const onHours = await issueValley(
+      sql,
+      "user-on",
+      alreadyOn.id,
+      january.issuedAt,
+      january.utc,
+      110,
+      "PM2.5",
+    );
+    await recordOfficial(sql, "user-on", {
+      placeId: alreadyOn.id,
+      observedAt: january.utc,
+      officialAqi: 180,
+      officialRaw: "180",
+      preliminary: true,
+      attribution: AIRNOW_ATTRIBUTION,
+      source: "airnow",
+    });
+    assert.equal(await storedParameter(sql, alreadyOn.id), null);
+    const onOfficial: AlertOfficial = {
+      observedAt: january.utc,
+      officialAqi: 180,
+      parameter: "unknown",
+    };
+    const onRule = smokeRule({ hours: onHours, official: onOfficial, asOf: january.utc });
+    const onBody = await readAlerts(sql, "user-on", alreadyOn.id, january.utc, ZONE);
+    assert.equal(onRule.fired, true);
+    assert.equal(onRule.source, "noaa_smoke");
+    assert.equal(onRule.peakAqi, 110);
+    assert.equal(onRule.reason.includes("AirNow"), false);
+    assert.deepEqual(
+      onBody.alerts.filter((alert) => alert.kind === "smoke"),
+      [onRule],
+    );
+
+    const summer = await boisePlace(sql, "user-summer");
+    const ozoneHours = await issueValley(
+      sql,
+      "user-summer",
+      summer.id,
+      july.issuedAt,
+      july.utc,
+      51,
+      "O3",
+    );
+    await recordOfficial(sql, "user-summer", {
+      placeId: summer.id,
+      observedAt: july.utc,
+      officialAqi: 101,
+      officialRaw: "101",
+      preliminary: true,
+      attribution: AIRNOW_ATTRIBUTION,
+      source: "airnow",
+    });
+    assert.equal(await storedParameter(sql, summer.id), null);
+    const ozoneOfficial: AlertOfficial = {
+      observedAt: july.utc,
+      officialAqi: 101,
+      parameter: "unknown",
+    };
+    const ozoneUnknown = ozoneRule({
+      hours: ozoneHours,
+      official: ozoneOfficial,
+      asOf: july.utc,
+      timeZone: ZONE,
+    });
+    const ozoneNamed = ozoneRule({
+      hours: ozoneHours,
+      official: { ...ozoneOfficial, parameter: "O3" },
+      asOf: july.utc,
+      timeZone: ZONE,
+    });
+    const summerBody = await readAlerts(sql, "user-summer", summer.id, july.utc, ZONE);
+    assert.equal(ozoneUnknown.fired, false);
+    assert.equal(ozoneNamed.fired, true);
+    assert.equal(ozoneNamed.source, "airnow");
+    assert.deepEqual(
+      summerBody.alerts.filter((alert) => alert.kind === "ozone"),
+      [],
+    );
+  });
+
+  it("stores PM10 and any other ParameterName as null", async () => {
+    const current = parseAirNowCurrent(
+      readFileSync(join(root, "fixtures/v1/airnow-current.json"), "utf8"),
+    );
+    assert.equal(current.ok, true);
+    if (current.ok) assert.equal(current.reading.parameter, "PM2.5");
+
+    const spaced = parseAirNowCurrent(
+      airNowFixture({ ParameterName: " PM2.5 ", AQI: 48 }),
+    );
+    assert.equal(spaced.ok, true);
+    if (spaced.ok) assert.equal(spaced.reading.parameter, "PM2.5");
+
+    for (const name of ["PM10", "Ozone", "SO2", ""]) {
+      const parsed = parseAirNowCurrent(airNowFixture({ ParameterName: name, AQI: 40 }));
+      assert.equal(parsed.ok, true, name);
+      if (parsed.ok) assert.equal(parsed.reading.parameter, null, name);
+    }
+
+    const pm10 = readFileSync(join(root, "fixtures/v1/airnow-current.json"), "utf8")
+      .replaceAll('"ParameterName": "PM2.5"', '"ParameterName": "PM10"')
+      .replaceAll('"ParameterName": "O3"', '"ParameterName": "PM10"');
+    const parsed = parseAirNowCurrent(pm10);
+    assert.equal(parsed.ok, true);
+    if (parsed.ok) {
+      assert.equal(parsed.reading.aqi, 48);
+      assert.equal(parsed.reading.parameter, null);
+    }
+
+    const sql = await openDb();
+    const column = await sql.query<{ is_nullable: string; column_default: string | null }>(
+      `select is_nullable, column_default
+         from information_schema.columns
+        where table_name = 'official_reading' and column_name = 'parameter'`,
+    );
+    assert.equal(column[0]?.is_nullable, "YES");
+    assert.equal(column[0]?.column_default, null);
+
+    const place = await boisePlace(sql, "user-a");
+    const stored = await ingestRecordedAirNow(sql, "user-a", place.id, pm10);
+    assert.equal(stored.officialAqi, 48);
+    assert.equal(stored.parameter, null);
+    assert.equal(await storedParameter(sql, place.id), null);
+
+    await assert.rejects(
+      () =>
+        recordOfficial(sql, "user-a", {
+          placeId: place.id,
+          observedAt: "2026-11-01T18:00:00.000Z",
+          officialAqi: 40,
+          officialRaw: "40",
+          preliminary: true,
+          attribution: AIRNOW_ATTRIBUTION,
+          source: "airnow",
+          parameter: "PM10",
+        }),
+      (err: unknown) => err instanceof V1RuleError && err.code === "invalid_field",
+    );
+    await assert.rejects(
+      () =>
+        sql.query(
+          `insert into official_reading
+             (id, place_id, user_id, observed_at, official_aqi, official_raw, preliminary, attribution, parameter)
+           values ('pm10-row', $1, 'user-a', '2026-11-01T19:00:00.000Z', 40, '40', true, $2, 'PM10')`,
+          [place.id, AIRNOW_ATTRIBUTION],
+        ),
+      (err: unknown) => {
+        const code = typeof err === "object" && err !== null && "code" in err ? String(err.code) : "";
+        return code === "23514";
+      },
+    );
+    const rows = await sql.query<{ n: number }>(
+      "select count(*)::int as n from official_reading",
+    );
+    assert.equal(rows[0]?.n, 1);
   });
 });
