@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
@@ -27,6 +28,7 @@ import { readLambertPoint, readSimpleGribFields } from "./grib.ts";
 const root = join(dirname(fileURLToPath(import.meta.url)), "../../..");
 const FIXTURE = join(root, "fixtures/v1/noaa-hrrr-massden-5.3.grib2");
 const AQM_FIXTURE = join(root, "fixtures/v1/noaa-aqm-pm25-4.8.grib2");
+const AQM_LIVE = join(root, "fixtures/v1/noaa-aqm-pm25-bc-f49.grib2");
 const STABILITY = join(root, "fixtures/v1/noaa-hrrr-stability-f00.grib2");
 const CYCLE = "2026-10-30T12:00:00.000Z";
 const ANCHOR = { latitude: 38.5, longitude: -97.5 };
@@ -590,5 +592,53 @@ describe("v1 grib", () => {
     assert.notEqual(first.value, 0);
     assert.equal(second.value, 2);
     assert.equal(second.i, 2);
+  });
+
+  // Public AQM, 2026-10-31 12Z, ave_1hr_pm25_bc grid 227, valid hour 49.
+  // nomads .../aqm.20261031/12/aqm.t12z.ave_1hr_pm25_bc.227.grib2 offset 45821508.
+  // Values are the ecCodes nearest-cell doubles. The southwest corner is bitmap-masked.
+  it("decodes the recorded template 4.8 bitmap message", () => {
+    const message = readFileSync(AQM_LIVE);
+    assert.equal(message.byteLength, 958_618);
+    assert.equal(
+      createHash("sha256").update(message).digest("hex"),
+      "6fbc564f09a11ac1dd7bfd701236bfd413d6a8517a080074dc82ca1a93285f98",
+    );
+    const places = [
+      {
+        latitude: 43.615,
+        longitude: -116.202,
+        i: 478,
+        j: 607,
+        value: 9.142554797530174,
+      },
+      {
+        latitude: 44.911,
+        longitude: -116.099,
+        i: 484,
+        j: 636,
+        value: 5.0625547975301748,
+      },
+      {
+        latitude: 44.671,
+        longitude: -116.117,
+        i: 483,
+        j: 631,
+        value: 5.3625547975301746,
+      },
+    ];
+    for (const place of places) {
+      const point = lambert(message, place.latitude, place.longitude, "noaa_aqf_parse");
+      assert.equal(point.referenceTime, "2026-10-31T12:00:00.000Z");
+      assert.equal(point.forecastHour, 49);
+      assert.equal(point.category, 13);
+      assert.equal(point.parameter, 193);
+      assert.equal(point.surfaceType, 104);
+      assert.equal(point.level, 1);
+      assert.equal(point.i, place.i);
+      assert.equal(point.j, place.j);
+      assert.ok(Math.abs(point.value - place.value) < 1e-12);
+    }
+    assert.equal(readLambertPoint(message, 12.19, -133.459, "noaa_aqf_parse"), null);
   });
 });

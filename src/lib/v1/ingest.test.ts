@@ -193,20 +193,20 @@ describe("v1 phase 1 ingest", { concurrency: 1 }, () => {
     const rawUrl = aqmGribUrl(CYCLE, false);
     assert.equal(
       bcUrl,
-      "https://nomads.ncep.noaa.gov/pub/data/nccf/com/aqm/prod/aqm.20261030/aqm.t12z.ave_1hr_pm25_bc.227.grib2",
+      "https://nomads.ncep.noaa.gov/pub/data/nccf/com/aqm/prod/aqm.20261030/12/aqm.t12z.ave_1hr_pm25_bc.227.grib2",
     );
     assert.equal(
       rawUrl,
-      "https://nomads.ncep.noaa.gov/pub/data/nccf/com/aqm/prod/aqm.20261030/aqm.t12z.ave_1hr_pm25.227.grib2",
+      "https://nomads.ncep.noaa.gov/pub/data/nccf/com/aqm/prod/aqm.20261030/12/aqm.t12z.ave_1hr_pm25.227.grib2",
     );
     assert.equal(aqmGribUrl("2026-10-30T18:00:00.000Z", true), bcUrl);
     assert.equal(
       aqmGribUrl("2026-10-31T00:00:00.000Z", false),
-      "https://nomads.ncep.noaa.gov/pub/data/nccf/com/aqm/prod/aqm.20261030/aqm.t12z.ave_1hr_pm25.227.grib2",
+      "https://nomads.ncep.noaa.gov/pub/data/nccf/com/aqm/prod/aqm.20261030/12/aqm.t12z.ave_1hr_pm25.227.grib2",
     );
     assert.equal(
       aqmGribUrl("2026-10-30T06:00:00.000Z", true),
-      "https://nomads.ncep.noaa.gov/pub/data/nccf/com/aqm/prod/aqm.20261030/aqm.t06z.ave_1hr_pm25_bc.227.grib2",
+      "https://nomads.ncep.noaa.gov/pub/data/nccf/com/aqm/prod/aqm.20261030/06/aqm.t06z.ave_1hr_pm25_bc.227.grib2",
     );
     assert.equal(bcUrl.includes("API_KEY"), false);
     assert.throws(
