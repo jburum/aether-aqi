@@ -14,7 +14,12 @@ import {
   type ModelHour,
 } from "./noaa.ts";
 import type { ValidForecast } from "./rules.ts";
-import { issueForecast, listSavedPlaces, recordOfficial } from "./store.ts";
+import {
+  keepForecastIssue,
+  keepOfficialReading,
+  listSavedPlaces,
+  type KeptWrite,
+} from "./store.ts";
 import type { Queryable } from "./types.ts";
 
 /**
@@ -23,9 +28,15 @@ import type { Queryable } from "./types.ts";
  * Hours after that, through the forecast horizon, have no source.
  * AirNow is the official number when `AIRNOW_API_KEY` is set and the hour is under 500.
  * There is no scheduler. A repeat of the same place, source, issue, and
- * valid hour does not change the stored forecast. An official row is never
- * updated.
+ * valid hour does not throw and does not overwrite the first corrected value.
+ * Official AirNow keeps the first integer the same way.
  */
+
+export interface IngestCounts {
+  stored: number;
+  skipped: number;
+  conflicts: number;
+}
 
 const SMOKE_HOUR_END = 48;
 
@@ -35,8 +46,10 @@ export interface PlaceIngestResult {
   aqm: ModelCell;
   /** Nearest Lambert cell on the first smoke message. Null when every lead was missing. */
   lambert: { i: number; j: number; value: number } | null;
-  forecastsStored: number;
-  forecastsUnchanged: number;
+  /** `stored` is a new row. `skipped` is the same corrected value. `conflicts` keeps the first. */
+  stored: number;
+  skipped: number;
+  conflicts: number;
   /** AQF fetch or parse code. Null when that reply was read. */
   aqfError: string | null;
   /**
@@ -44,8 +57,10 @@ export interface PlaceIngestResult {
    * No row is written for these. They are not filled from hour 72.
    */
   unavailableHours: number[];
+  /** Stored official integer. A repeat leaves it in place. Null when AirNow was not taken. */
   officialAqi: number | null;
-  officialStatus: "stored" | "unchanged" | "skipped";
+  /** One AirNow row, counted the same way as the forecast. Zeros when the call did not run. */
+  official: IngestCounts;
   airnowError: string | null;
 }
 
@@ -127,52 +142,33 @@ function cellsForPlace(name: string, latitude: number, longitude: number): Model
   }
 }
 
-function isForecastDuplicate(err: unknown): boolean {
-  if (err instanceof V1RuleError) return false;
-  const message = err instanceof Error ? err.message : String(err);
-  return /duplicate key|forecast_issue_unique/i.test(message);
+function emptyCounts(): IngestCounts {
+  return { stored: 0, skipped: 0, conflicts: 0 };
 }
 
-/**
- * Two runs can both pass `recordOfficial`'s existence check. The loser then
- * raises SQLSTATE 23505 on `official_hour_unique`. That is the stored hour,
- * not a failed write. Any other unique violation still propagates.
- */
-function isOfficialHourConflict(err: unknown): boolean {
-  if (typeof err !== "object" || err === null) return false;
-  if (!("code" in err) || String(err.code) !== "23505") return false;
-  if ("constraint" in err && String(err.constraint) === "official_hour_unique") return true;
-  const message = err instanceof Error ? err.message : "";
-  return message.includes("official_hour_unique");
+function countWrite(counts: IngestCounts, outcome: KeptWrite): void {
+  if (outcome === "stored") counts.stored += 1;
+  else if (outcome === "skipped") counts.skipped += 1;
+  else counts.conflicts += 1;
+}
+
+function oneWrite(outcome: KeptWrite): IngestCounts {
+  const counts = emptyCounts();
+  countWrite(counts, outcome);
+  return counts;
 }
 
 async function storeForecasts(
   sql: Queryable,
   userId: string,
   bodies: readonly ValidForecast[],
-): Promise<{ forecastsStored: number; forecastsUnchanged: number }> {
-  let forecastsStored = 0;
-  let forecastsUnchanged = 0;
+): Promise<IngestCounts> {
+  const counts = emptyCounts();
   for (const body of bodies) {
-    const existing = await sql.query<{ id: string }>(
-      `select id from forecast_issued
-        where place_id = $1 and user_id = $2 and source = $3
-          and issued_at = $4 and valid_for = $5`,
-      [body.placeId, userId, body.source, body.issuedAt, body.validFor],
-    );
-    if (existing[0]) {
-      forecastsUnchanged += 1;
-      continue;
-    }
-    try {
-      await issueForecast(sql, userId, body);
-      forecastsStored += 1;
-    } catch (err) {
-      if (!isForecastDuplicate(err)) throw err;
-      forecastsUnchanged += 1;
-    }
+    const kept = await keepForecastIssue(sql, userId, body);
+    countWrite(counts, kept.outcome);
   }
-  return { forecastsStored, forecastsUnchanged };
+  return counts;
 }
 
 async function storeOfficial(
@@ -180,30 +176,9 @@ async function storeOfficial(
   userId: string,
   placeId: string,
   reading: AirNowReading,
-): Promise<{ officialAqi: number; officialStatus: "stored" | "unchanged" }> {
-  try {
-    const stored = await recordOfficial(sql, userId, officialInputFromAirNow(placeId, reading));
-    return { officialAqi: stored.officialAqi, officialStatus: "stored" };
-  } catch (err) {
-    const alreadyRecorded =
-      (err instanceof V1RuleError && err.code === "official_already_recorded") ||
-      isOfficialHourConflict(err);
-    if (!alreadyRecorded) throw err;
-    const rows = await sql.query<{ official_aqi: number }>(
-      `select official_aqi from official_reading
-        where place_id = $1 and user_id = $2 and observed_at = $3`,
-      [placeId, userId, reading.observedAt],
-    );
-    const kept = rows[0];
-    if (!kept) {
-      throw new V1RuleError(
-        "official_already_recorded",
-        "An official AirNow reading is already stored for this place and time. It is left unchanged.",
-        409,
-      );
-    }
-    return { officialAqi: Number(kept.official_aqi), officialStatus: "unchanged" };
-  }
+): Promise<{ officialAqi: number; official: IngestCounts }> {
+  const kept = await keepOfficialReading(sql, userId, officialInputFromAirNow(placeId, reading));
+  return { officialAqi: kept.officialAqi, official: oneWrite(kept.outcome) };
 }
 
 /**
@@ -306,7 +281,7 @@ export async function ingestPlaceCycle(
       lambert,
       ...forecasts,
       officialAqi: null,
-      officialStatus: "skipped",
+      official: emptyCounts(),
       aqfError,
       airnowError: airnow.code,
       unavailableHours,
@@ -320,7 +295,7 @@ export async function ingestPlaceCycle(
     lambert,
     ...forecasts,
     officialAqi: official.officialAqi,
-    officialStatus: official.officialStatus,
+    official: official.official,
     aqfError,
     airnowError: null,
     unavailableHours,

@@ -437,6 +437,46 @@ function leadHours(issuedAt: string, validFor: string | Date): number {
   return (new Date(validFor).getTime() - new Date(issuedAt).getTime()) / 3_600_000;
 }
 
+function isoStamp(value: string | Date): string {
+  return new Date(value).toISOString();
+}
+
+async function forecastRows(sql: Queryable) {
+  const rows = await sql.query<{
+    source: string;
+    issued_at: string | Date;
+    valid_for: string | Date;
+    corrected_aqi: number;
+  }>(
+    `select source, issued_at, valid_for, corrected_aqi
+       from forecast_issued
+      order by source, valid_for`,
+  );
+  return rows.map((row) => ({
+    source: row.source,
+    issued_at: isoStamp(row.issued_at),
+    valid_for: isoStamp(row.valid_for),
+    corrected_aqi: Number(row.corrected_aqi),
+  }));
+}
+
+async function officialRows(sql: Queryable) {
+  const rows = await sql.query<{
+    observed_at: string | Date;
+    official_aqi: number;
+    official_raw: string;
+  }>(
+    `select observed_at, official_aqi, official_raw
+       from official_reading
+      order by observed_at`,
+  );
+  return rows.map((row) => ({
+    observed_at: isoStamp(row.observed_at),
+    official_aqi: Number(row.official_aqi),
+    official_raw: row.official_raw,
+  }));
+}
+
 describe("v1 place ingest", { concurrency: 1 }, () => {
   it("picks the latest 00, 06, 12, or 18 UTC cycle", () => {
     assert.equal(latestNoaaCycle(new Date("2026-10-30T00:00:00.000Z")), "2026-10-30T00:00:00.000Z");
@@ -465,9 +505,10 @@ describe("v1 place ingest", { concurrency: 1 }, () => {
       });
       assert.deepEqual(stored.hrrr, cells.hrrr);
       assert.deepEqual(stored.aqm, cells.aqm);
-      assert.equal(stored.forecastsStored, 5);
-      assert.equal(stored.forecastsUnchanged, 0);
-      assert.equal(stored.officialStatus, "stored");
+      assert.equal(stored.stored, 5);
+      assert.equal(stored.skipped, 0);
+      assert.equal(stored.conflicts, 0);
+      assert.deepEqual(stored.official, { stored: 1, skipped: 0, conflicts: 0 });
       assert.equal(stored.officialAqi, 48);
       assert.equal(stored.aqfError, null);
       assert.equal(stored.airnowError, null);
@@ -562,9 +603,10 @@ describe("v1 place ingest", { concurrency: 1 }, () => {
         places: {
           placeId: string;
           aqfError: string | null;
-          forecastsStored: number;
-          forecastsUnchanged: number;
-          officialStatus: string;
+          stored: number;
+          skipped: number;
+          conflicts: number;
+          official: { stored: number; skipped: number; conflicts: number };
           officialAqi: number | null;
           airnowError: string | null;
           unavailableHours: number[];
@@ -573,9 +615,10 @@ describe("v1 place ingest", { concurrency: 1 }, () => {
       const stored = body.places[0];
       assert.equal(stored?.placeId, place.id);
       assert.equal(stored?.aqfError, "noaa_aqf_parse");
-      assert.equal(stored?.forecastsStored, 3);
-      assert.equal(stored?.forecastsUnchanged, 0);
-      assert.equal(stored?.officialStatus, "stored");
+      assert.equal(stored?.stored, 3);
+      assert.equal(stored?.skipped, 0);
+      assert.equal(stored?.conflicts, 0);
+      assert.deepEqual(stored?.official, { stored: 1, skipped: 0, conflicts: 0 });
       assert.equal(stored?.officialAqi, 48);
       assert.equal(stored?.airnowError, null);
       assert.deepEqual(stored?.unavailableHours, unavailableForecastHours());
@@ -637,7 +680,8 @@ describe("v1 place ingest", { concurrency: 1 }, () => {
         if (text.includes("select official_aqi") && text.includes("from official_reading")) {
           const rows = await sql.query<T>(text, params);
           officialSelects += 1;
-          if (officialSelects === 2) releaseBoth();
+          // keepOfficialReading reads once, then recordOfficial reads again, per run.
+          if (officialSelects === 4) releaseBoth();
           return rows;
         }
         if (text.includes("insert into official_reading")) {
@@ -672,8 +716,14 @@ describe("v1 place ingest", { concurrency: 1 }, () => {
         }),
       ]);
       assert.equal(conflicts, 1);
-      const statuses = [left.officialStatus, right.officialStatus].sort();
-      assert.deepEqual(statuses, ["stored", "unchanged"]);
+      const outcomes = [left.official, right.official];
+      assert.equal(outcomes.filter((row) => row.stored === 1 && row.conflicts === 0).length, 1);
+      assert.equal(outcomes.filter((row) => row.conflicts === 1 && row.stored === 0).length, 1);
+      assert.equal(left.official.skipped, 0);
+      assert.equal(right.official.skipped, 0);
+      assert.equal(left.conflicts, 0);
+      assert.equal(right.conflicts, 0);
+      assert.equal(left.stored + right.stored, 5);
       const official = await sql.query<{ n: number; official_aqi: number }>(
         "select count(*)::int as n, official_aqi from official_reading group by official_aqi",
       );
@@ -689,18 +739,148 @@ describe("v1 place ingest", { concurrency: 1 }, () => {
     }
   });
 
-  it("leaves a repeat cycle and the official number unchanged", async () => {
+  it("returns the same rows and counts when the recorded fixture is ingested twice", async () => {
     const previous = process.env.AIRNOW_API_KEY;
     process.env.AIRNOW_API_KEY = KEY;
     const sql = await openDb();
     const place = await addSavedPlace(sql, "user-a", SAMPLE_PLACE);
-    const first = fakeFetch({
+    const firstFetch = fakeFetch({
       smoke: readFixture("noaa-hrrr-smoke.ascii"),
       aqf: readFixture("noaa-aqf.ascii"),
       airnow: readFixture("airnow-current.json"),
     });
-    const second = fakeFetch({
+    const secondFetch = fakeFetch({
+      smoke: readFixture("noaa-hrrr-smoke.ascii"),
+      aqf: readFixture("noaa-aqf.ascii"),
+      airnow: readFixture("airnow-current.json"),
+    });
+    try {
+      const first = await ingestPlaceCycle(sql, "user-a", {
+        placeId: place.id,
+        cycleUtc: CYCLE,
+        fetchImpl: firstFetch.fetchImpl,
+      });
+      const forecasts = await forecastRows(sql);
+      const official = await officialRows(sql);
+      assert.equal(first.stored, 5);
+      assert.equal(first.skipped, 0);
+      assert.equal(first.conflicts, 0);
+      assert.equal(forecasts.length, first.stored);
+      assert.equal(official.length, first.official.stored);
+      assert.deepEqual(first.official, { stored: 1, skipped: 0, conflicts: 0 });
+      const response = await handleV1(
+        new Request("http://localhost/api/v1/ingest/run", {
+          method: "POST",
+          body: JSON.stringify({ cycleUtc: CYCLE }),
+        }),
+        {
+          sql,
+          userId: "user-a",
+          sender: new TestPushSender(),
+          fetchImpl: secondFetch.fetchImpl,
+        },
+      );
+      assert.equal(response.status, 200);
+      const body = (await response.json()) as {
+        places: {
+          stored: number;
+          skipped: number;
+          conflicts: number;
+          officialAqi: number | null;
+          official: { stored: number; skipped: number; conflicts: number };
+        }[];
+      };
+      const again = body.places[0];
+      assert.equal(again?.stored, 0);
+      assert.equal(again?.skipped, first.stored);
+      assert.equal(again?.conflicts, 0);
+      assert.equal(again?.officialAqi, first.officialAqi);
+      assert.deepEqual(again?.official, { stored: 0, skipped: 1, conflicts: 0 });
+      assert.deepEqual(await forecastRows(sql), forecasts);
+      assert.deepEqual(await officialRows(sql), official);
+      assert.equal((await forecastRows(sql)).length, forecasts.length);
+      assert.equal((await officialRows(sql)).length, official.length);
+    } finally {
+      if (previous === undefined) delete process.env.AIRNOW_API_KEY;
+      else process.env.AIRNOW_API_KEY = previous;
+    }
+  });
+
+  it("keeps the first corrected number and counts one conflict when the repeat differs", async () => {
+    const previous = process.env.AIRNOW_API_KEY;
+    process.env.AIRNOW_API_KEY = KEY;
+    const sql = await openDb();
+    const place = await addSavedPlace(sql, "user-a", SAMPLE_PLACE);
+    const firstFetch = fakeFetch({
+      smoke: readFixture("noaa-hrrr-smoke.ascii"),
+      aqf: readFixture("noaa-aqf.ascii"),
+      airnow: readFixture("airnow-current.json"),
+    });
+    const hotter = fakeFetch({
       smoke: readFixture("noaa-hrrr-smoke.ascii").replace("4.8e-9", "6.12e-8"),
+      aqf: readFixture("noaa-aqf.ascii"),
+      airnow: readFixture("airnow-current.json"),
+    });
+    try {
+      const first = await ingestPlaceCycle(sql, "user-a", {
+        placeId: place.id,
+        cycleUtc: CYCLE,
+        fetchImpl: firstFetch.fetchImpl,
+      });
+      assert.equal(first.stored, 5);
+      assert.equal(first.conflicts, 0);
+      const response = await handleV1(
+        new Request("http://localhost/api/v1/ingest/run", {
+          method: "POST",
+          body: JSON.stringify({ cycleUtc: CYCLE }),
+        }),
+        { sql, userId: "user-a", sender: new TestPushSender(), fetchImpl: hotter.fetchImpl },
+      );
+      assert.equal(response.status, 200);
+      const body = (await response.json()) as {
+        places: {
+          stored: number;
+          skipped: number;
+          conflicts: number;
+          officialAqi: number | null;
+          official: { stored: number; skipped: number; conflicts: number };
+        }[];
+      };
+      const again = body.places[0];
+      assert.equal(again?.stored, 0);
+      assert.equal(again?.skipped, 4);
+      assert.equal(again?.conflicts, 1);
+      assert.equal(again?.officialAqi, 48);
+      assert.deepEqual(again?.official, { stored: 0, skipped: 1, conflicts: 0 });
+      const forecasts = await forecastRows(sql);
+      assert.equal(forecasts.length, first.stored);
+      assert.equal(
+        forecasts.find((row) => row.source === "noaa_smoke" && row.valid_for === CYCLE)
+          ?.corrected_aqi,
+        27,
+      );
+      const official = await officialRows(sql);
+      assert.equal(official.length, 1);
+      assert.equal(official[0]?.official_aqi, 48);
+      assert.equal(official[0]?.official_raw, "48");
+    } finally {
+      if (previous === undefined) delete process.env.AIRNOW_API_KEY;
+      else process.env.AIRNOW_API_KEY = previous;
+    }
+  });
+
+  it("keeps the first official number and counts one conflict when AirNow differs", async () => {
+    const previous = process.env.AIRNOW_API_KEY;
+    process.env.AIRNOW_API_KEY = KEY;
+    const sql = await openDb();
+    const place = await addSavedPlace(sql, "user-a", SAMPLE_PLACE);
+    const firstFetch = fakeFetch({
+      smoke: readFixture("noaa-hrrr-smoke.ascii"),
+      aqf: readFixture("noaa-aqf.ascii"),
+      airnow: readFixture("airnow-current.json"),
+    });
+    const later = fakeFetch({
+      smoke: readFixture("noaa-hrrr-smoke.ascii"),
       aqf: readFixture("noaa-aqf.ascii"),
       airnow: airNowBody(90),
     });
@@ -708,29 +888,20 @@ describe("v1 place ingest", { concurrency: 1 }, () => {
       await ingestPlaceCycle(sql, "user-a", {
         placeId: place.id,
         cycleUtc: CYCLE,
-        fetchImpl: first.fetchImpl,
+        fetchImpl: firstFetch.fetchImpl,
       });
       const again = await ingestPlaceCycle(sql, "user-a", {
         placeId: place.id,
         cycleUtc: CYCLE,
-        fetchImpl: second.fetchImpl,
+        fetchImpl: later.fetchImpl,
       });
-      assert.equal(again.forecastsStored, 0);
-      assert.equal(again.forecastsUnchanged, 5);
-      assert.equal(again.officialStatus, "unchanged");
+      assert.equal(again.stored, 0);
+      assert.equal(again.skipped, 5);
+      assert.equal(again.conflicts, 0);
       assert.equal(again.officialAqi, 48);
-      const forecasts = await sql.query<{ n: number; aqi: number }>(
-        `select count(*)::int as n,
-                min(corrected_aqi) filter (where valid_for = issued_at) as aqi
-           from forecast_issued`,
-      );
-      assert.equal(forecasts[0]?.n, 5);
-      assert.equal(forecasts[0]?.aqi, 27);
-      const official = await sql.query<{ n: number; official_aqi: number; official_raw: string }>(
-        "select count(*)::int as n, official_aqi, official_raw from official_reading group by official_aqi, official_raw",
-      );
+      assert.deepEqual(again.official, { stored: 0, skipped: 0, conflicts: 1 });
+      const official = await officialRows(sql);
       assert.equal(official.length, 1);
-      assert.equal(official[0]?.n, 1);
       assert.equal(official[0]?.official_aqi, 48);
       assert.equal(official[0]?.official_raw, "48");
     } finally {
@@ -755,9 +926,9 @@ describe("v1 place ingest", { concurrency: 1 }, () => {
         fetchImpl: fake.fetchImpl,
       });
       assert.equal(stored.airnowError, "airnow_api_key_missing");
-      assert.equal(stored.officialStatus, "skipped");
+      assert.deepEqual(stored.official, { stored: 0, skipped: 0, conflicts: 0 });
       assert.equal(stored.officialAqi, null);
-      assert.equal(stored.forecastsStored, 5);
+      assert.equal(stored.stored, 5);
       assert.equal(
         fake.urls.some((url) => url.includes("airnowapi.org")),
         false,
@@ -797,8 +968,9 @@ describe("v1 place ingest", { concurrency: 1 }, () => {
         fetchImpl: fake.fetchImpl,
       });
       assert.equal(stored.airnowError, "airnow_hourly_limit");
-      assert.equal(stored.officialStatus, "skipped");
-      assert.equal(stored.forecastsStored, 5);
+      assert.deepEqual(stored.official, { stored: 0, skipped: 0, conflicts: 0 });
+      assert.equal(stored.officialAqi, null);
+      assert.equal(stored.stored, 5);
       assert.equal(
         fake.urls.some((url) => url.includes("airnowapi.org")),
         false,
@@ -965,13 +1137,10 @@ describe("v1 place ingest", { concurrency: 1 }, () => {
       assert.equal(response.status, 200);
       const body = (await response.json()) as {
         cycleUtc: string;
-        places: { forecastsStored: number }[];
+        places: { stored: number }[];
       };
       assert.equal(body.cycleUtc === before || body.cycleUtc === after, true);
-      assert.equal(
-        (body.places[0]?.forecastsStored ?? 0) >= 4 && (body.places[0]?.forecastsStored ?? 0) <= 5,
-        true,
-      );
+      assert.equal((body.places[0]?.stored ?? 0) >= 4 && (body.places[0]?.stored ?? 0) <= 5, true);
       const issued = await sql.query<{ issued_at: string | Date }>(
         "select distinct issued_at from forecast_issued",
       );
@@ -1027,8 +1196,10 @@ describe("v1 place ingest", { concurrency: 1 }, () => {
         fetchImpl,
       });
       assert.deepEqual(stored.hrrr, { latIndex: 755, lonIndex: 440 });
-      assert.equal(stored.forecastsStored, 3);
-      assert.equal(stored.officialStatus, "skipped");
+      assert.equal(stored.stored, 3);
+      assert.equal(stored.conflicts, 0);
+      assert.deepEqual(stored.official, { stored: 0, skipped: 0, conflicts: 0 });
+      assert.equal(stored.officialAqi, null);
       const rows = await sql.query<{
         source: string;
         valid_for: string | Date;

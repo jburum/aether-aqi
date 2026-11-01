@@ -345,6 +345,120 @@ export async function recordOfficial(
   return asOfficial(row);
 }
 
+export type KeptWrite = "stored" | "skipped" | "conflict";
+
+function errorCode(err: unknown): string {
+  if (typeof err !== "object" || err === null || !("code" in err)) return "";
+  return String(err.code);
+}
+
+function constraintName(err: unknown): string {
+  if (typeof err !== "object" || err === null || !("constraint" in err)) return "";
+  return String(err.constraint);
+}
+
+/** SQLSTATE 23505 for this constraint only. Any other unique violation still fails the caller. */
+function violatesUnique(err: unknown, constraint: string): boolean {
+  if (err instanceof V1RuleError) return false;
+  const named = constraintName(err);
+  if (named !== "" && named !== constraint) return false;
+  const message = err instanceof Error ? err.message : String(err);
+  if (named === constraint) return errorCode(err) === "23505" || /duplicate key/i.test(message);
+  return message.includes(constraint) && /duplicate key/i.test(message);
+}
+
+function keptOutcome(stored: number, incoming: number): Exclude<KeptWrite, "stored"> {
+  return stored === incoming ? "skipped" : "conflict";
+}
+
+async function readStoredForecastAqi(
+  sql: Queryable,
+  userId: string,
+  key: { placeId: string; source: string; issuedAt: string; validFor: string },
+): Promise<number | null> {
+  const rows = await sql.query<{ corrected_aqi: number }>(
+    `select corrected_aqi from forecast_issued
+      where place_id = $1 and user_id = $2 and source = $3
+        and issued_at = $4 and valid_for = $5`,
+    [key.placeId, userId, key.source, key.issuedAt, key.validFor],
+  );
+  const row = rows[0];
+  return row ? Number(row.corrected_aqi) : null;
+}
+
+async function readStoredOfficialAqi(
+  sql: Queryable,
+  userId: string,
+  placeId: string,
+  observedAt: string,
+): Promise<number | null> {
+  const rows = await sql.query<{ official_aqi: number }>(
+    `select official_aqi from official_reading
+      where place_id = $1 and user_id = $2 and observed_at = $3`,
+    [placeId, userId, observedAt],
+  );
+  const row = rows[0];
+  return row ? Number(row.official_aqi) : null;
+}
+
+/**
+ * Insert unless `(place_id, source, issued_at, valid_for)` is already stored.
+ * There is no upsert. A different incoming corrected value is a conflict and
+ * the first number stays. `issueForecast` itself still inserts only.
+ */
+export async function keepForecastIssue(
+  sql: Queryable,
+  userId: string,
+  body: unknown,
+): Promise<{ outcome: KeptWrite; correctedAqi: number }> {
+  const input = parseForecastInput(body);
+  await assertPlace(sql, userId, input.placeId);
+  const already = await readStoredForecastAqi(sql, userId, input);
+  if (already != null) {
+    return { outcome: keptOutcome(already, input.correctedAqi), correctedAqi: already };
+  }
+  try {
+    const stored = await issueForecast(sql, userId, input);
+    return { outcome: "stored", correctedAqi: stored.correctedAqi };
+  } catch (err) {
+    if (!violatesUnique(err, "forecast_issue_unique")) throw err;
+    const kept = await readStoredForecastAqi(sql, userId, input);
+    if (kept == null) throw err;
+    return { outcome: keptOutcome(kept, input.correctedAqi), correctedAqi: kept };
+  }
+}
+
+/**
+ * Insert unless `(place_id, observed_at)` is already stored.
+ * `recordOfficial` still refuses a second direct write. This helper catches
+ * that refusal and SQLSTATE 23505 on `official_hour_unique`. The first integer
+ * stays. A different incoming integer is a conflict.
+ */
+export async function keepOfficialReading(
+  sql: Queryable,
+  userId: string,
+  body: unknown,
+): Promise<{ outcome: KeptWrite; officialAqi: number }> {
+  const input = parseOfficialInput(body);
+  await assertPlace(sql, userId, input.placeId);
+  const already = await readStoredOfficialAqi(sql, userId, input.placeId, input.observedAt);
+  if (already != null) {
+    return { outcome: keptOutcome(already, input.officialAqi), officialAqi: already };
+  }
+  try {
+    const stored = await recordOfficial(sql, userId, input);
+    return { outcome: "stored", officialAqi: stored.officialAqi };
+  } catch (err) {
+    const repeat =
+      (err instanceof V1RuleError && err.code === "official_already_recorded") ||
+      violatesUnique(err, "official_hour_unique");
+    if (!repeat) throw err;
+    const kept = await readStoredOfficialAqi(sql, userId, input.placeId, input.observedAt);
+    if (kept == null) throw err;
+    return { outcome: keptOutcome(kept, input.officialAqi), officialAqi: kept };
+  }
+}
+
 export async function listBeside(
   sql: Queryable,
   userId: string,

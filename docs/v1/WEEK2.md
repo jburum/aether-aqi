@@ -12,7 +12,8 @@ Project Air phase 1 from the locked SharedBrain `v1-plan.md`. This branch adds i
 - EPA AirNow current observations (`src/lib/v1/airnow.ts`). The reported integer is stored on `official_reading` with `preliminary = true` and `AIRNOW_ATTRIBUTION`. It does not go through the breakpoint function. A non-integer AQI is not rounded. A `correctedAqi` field on the payload is ignored. Category numbers are not the AQI.
 - The key is the environment variable `AIRNOW_API_KEY`, documented in `.env.example`. No key is committed. When it is unset, `fetchAirNowObservation` returns `airnow_api_key_missing` and does not call out.
 - Sensor dropout stays AirNow plus NOAA (`fallbackSensorDropout`). Outdoor PurpleAir is still `purpleair_spend_not_approved` and writes nothing. A dropout writes the lead-0 smoke forecast and, when AirNow has a reading, the official number on the other table. A missing key leaves `officialAqi` null and still writes the NOAA row.
-- Parsers are tested against recorded samples: `fixtures/v1/noaa-hrrr-smoke.ascii`, `fixtures/v1/noaa-aqf.ascii`, and `fixtures/v1/airnow-current.json`. On that sample, smoke at hour 48 is corrected 155 and the AirNow row is official 48. The air-quality cell at hour 48 (which would be 181) is not stored. Hour 49 is the air-quality forecast (56). Hour 96 is regional low confidence (80).
+- Parsers are tested against recorded samples: `fixtures/v1/noaa-hrrr-smoke.ascii`, `fixtures/v1/noaa-aqf.ascii`, and `fixtures/v1/airnow-current.json`. On that sample, smoke at hour 48 is corrected 155 and the AirNow row is official 48. The air-quality cell at hour 48 (which would be 181) is not stored. Hour 49 is the air-quality forecast (56). Hour 96 is inside hours 73 through 168, which are unavailable and are not stored.
+- A repeat for the same place, source, issue time, and valid hour does not throw and does not upsert. The first corrected number stays. The place result and `POST /api/v1/ingest/run` count `stored`, `skipped`, and `conflicts` when the incoming corrected value differs. Official AirNow keeps the first integer the same way. `recordOfficial` still refuses a second direct write. See [INGEST.md](./INGEST.md).
 
 ## Data rules
 
@@ -28,14 +29,13 @@ Project Air phase 1 from the locked SharedBrain `v1-plan.md`. This branch adds i
 - The hourly model concentration uses the daily PM2.5 breakpoint table. NowCast weighting is not applied.
 - AirNow's URL is `https://www.airnowapi.org/aq/observation/latLong/current/` with `format=application/json` and `distance=25`. The key is the `API_KEY` query parameter. Failures do not include the response body, so a key echoed by the server is not kept.
 - When several pollutants share the latest hour, the stored official number is the highest integer AQI among them. That integer is stored as reported. It is not averaged with the forecast.
-- Official rows stay preliminary and keep the AirNow credit. A second write for the same place and time is refused, and the first number stays.
+- Official rows stay preliminary and keep the AirNow credit. A second direct write for the same place and time is refused, and the first number stays. Place ingest reports that repeat as `skipped` or `conflicts` and does not change the row.
 - No new paid service and no launchd job.
 
 ## What's left
 
 - Resolving a saved place to HRRR and AQM grid indexes, then running the live fetch on a schedule. This branch does not add launchd or a Mini job.
 - NowCast. Hours in the air-quality file that have no model cell and no explicit regional integer stay unstored.
-- Repeating an ingest for the same place, source, issue time, and valid hour hits the existing unique key. There is no upsert.
 - The AirNow key itself. The name is documented. The value is not in the repo.
 - PurpleAir, until spend is approved.
 - iOS and the website UI. `GET /api/aqi` is still the Open-Meteo proxy. It is not a launch source for these rows.
