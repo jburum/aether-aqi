@@ -13,7 +13,7 @@
     "build:dev": "vite build --mode development",
     "preview": "vite preview --host 0.0.0.0 --port 8080",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test src/lib/v1/week1.test.ts src/lib/v1/ingest.test.ts src/lib/v1/grid.test.ts src/lib/v1/place-ingest.test.ts src/lib/v1/phase2.test.ts src/lib/v1/alerts.test.ts src/lib/v1/entitlements.test.ts src/lib/v1/monitoring.test.ts",
+    "test": "node --experimental-strip-types --test src/lib/v1/week1.test.ts src/lib/v1/ingest.test.ts src/lib/v1/grid.test.ts src/lib/v1/grib.test.ts src/lib/v1/place-ingest.test.ts src/lib/v1/phase2.test.ts src/lib/v1/alerts.test.ts src/lib/v1/entitlements.test.ts src/lib/v1/monitoring.test.ts",
     "test:integration": "node --experimental-strip-types --test src/lib/v1/week1.integration.test.ts",
     "lint": "eslint .",
     "format": "prettier --write ."

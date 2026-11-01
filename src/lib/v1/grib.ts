@@ -185,6 +185,7 @@ export interface LambertPoint {
   value: number;
 }
 
+/** Template 5.3 is outside the 16-point and 256 KiB simple-extract caps. */
 const MAX_LAMBERT_BYTES = 8 * 1024 * 1024;
 
 interface BitWindow {
