@@ -13,14 +13,19 @@ import { hrrrSmokeCellCenter, resolveModelCells } from "./grid.ts";
 import { handleV1 } from "./http.ts";
 import { AIRNOW_HOURLY_LIMIT } from "./monitoring.ts";
 import {
+  AQM_HOUR_END,
   MAX_HRRR_FIELD_BYTES,
-  aqfAsciiUrl,
+  aqmGribUrl,
+  fetchAqmPm25Messages,
   fetchHrrrSmokeField,
   hrrrSmokeByteRange,
   hrrrSmokeGribUrl,
   parseHrrrSmoke,
+  parseNoaaAqf,
+  unavailableForecastHours,
 } from "./noaa.ts";
 import { ingestPlaceCycle, ingestSavedPlaces, latestNoaaCycle } from "./place-ingest.ts";
+import { FORECAST_HORIZON_HOURS } from "./rules.ts";
 import { TestPushSender } from "./push.ts";
 import { SAMPLE_PLACE } from "./samples.ts";
 import { addSavedPlace } from "./store.ts";
@@ -185,6 +190,189 @@ function encodeConstantSmoke(input: {
   return out;
 }
 
+/**
+ * Constant template 4.8 surface PM2.5. Physical value is `tenths` / 10 µg/m³.
+ * The grid is wide enough for Boise, McCall, and Tamarack. Every cell matches.
+ */
+function encodeAqmHour(input: {
+  cycle: string;
+  lead: number;
+  tenths: number;
+  latitude?: number;
+  longitude?: number;
+  nx?: number;
+  ny?: number;
+}): Uint8Array {
+  const latitude = input.latitude ?? 41.5;
+  const longitude = input.longitude ?? -118;
+  const nx = input.nx ?? 200;
+  const ny = input.ny ?? 200;
+  const when = new Date(input.cycle);
+  const npts = nx * ny;
+  const sec1 = new Uint8Array(21);
+  const sec1View = new DataView(sec1.buffer);
+  sec1View.setUint32(0, 21);
+  sec1[4] = 1;
+  sec1View.setUint16(5, 7);
+  sec1[9] = 2;
+  sec1[10] = 1;
+  sec1[11] = 1;
+  sec1View.setUint16(12, when.getUTCFullYear());
+  sec1[14] = when.getUTCMonth() + 1;
+  sec1[15] = when.getUTCDate();
+  sec1[16] = when.getUTCHours();
+  sec1[20] = 1;
+  const sec3 = new Uint8Array(81);
+  const sec3View = new DataView(sec3.buffer);
+  sec3View.setUint32(0, 81);
+  sec3[4] = 3;
+  sec3View.setUint32(6, npts);
+  sec3View.setUint16(12, 30);
+  sec3[14] = 6;
+  sec3View.setUint32(30, nx);
+  sec3View.setUint32(34, ny);
+  const lonEast = longitude < 0 ? longitude + 360 : longitude;
+  putSignMag(sec3View, 38, latitude * 1e6);
+  putSignMag(sec3View, 42, lonEast * 1e6);
+  putSignMag(sec3View, 47, 38.5 * 1e6);
+  putSignMag(sec3View, 51, 262.5 * 1e6);
+  sec3View.setUint32(55, 3_000_000);
+  sec3View.setUint32(59, 3_000_000);
+  sec3[64] = 64;
+  putSignMag(sec3View, 65, 38.5 * 1e6);
+  putSignMag(sec3View, 69, 38.5 * 1e6);
+  const sec4 = new Uint8Array(58);
+  const sec4View = new DataView(sec4.buffer);
+  sec4View.setUint32(0, 58);
+  sec4[4] = 4;
+  sec4View.setUint16(7, 8);
+  sec4[9] = 13;
+  sec4[10] = 193;
+  sec4[11] = 2;
+  sec4[17] = 1;
+  sec4View.setUint32(18, input.lead - 1);
+  sec4[22] = 1;
+  sec4[28] = 255;
+  const end = new Date(when.getTime() + input.lead * 3_600_000);
+  sec4View.setUint16(34, end.getUTCFullYear());
+  sec4[36] = end.getUTCMonth() + 1;
+  sec4[37] = end.getUTCDate();
+  sec4[38] = end.getUTCHours();
+  sec4[41] = 1;
+  const sec5 = new Uint8Array(49);
+  const sec5View = new DataView(sec5.buffer);
+  sec5View.setUint32(0, 49);
+  sec5[4] = 5;
+  sec5View.setUint32(5, npts);
+  sec5View.setUint16(9, 3);
+  sec5View.setFloat32(11, 0);
+  sec5View.setUint16(17, 1);
+  sec5[19] = 8;
+  sec5[21] = 1;
+  sec5View.setUint32(31, 1);
+  sec5View.setUint32(37, 1);
+  sec5[41] = 1;
+  sec5View.setUint32(42, npts);
+  sec5[47] = 2;
+  sec5[48] = 2;
+  const sec6 = Uint8Array.from([0x00, 0x00, 0x00, 0x06, 0x06, 0xff]);
+  const packed = new Uint8Array(7);
+  const packedView = new DataView(packed.buffer);
+  packedView.setUint16(0, input.tenths);
+  packedView.setUint16(2, input.tenths);
+  const sec7 = new Uint8Array(12);
+  const sec7View = new DataView(sec7.buffer);
+  sec7View.setUint32(0, 12);
+  sec7[4] = 7;
+  sec7.set(packed, 5);
+  const sections = [sec1, sec3, sec4, sec5, sec6, sec7];
+  const sectionBytes = sections.reduce((sum, part) => sum + part.length, 0);
+  const total = 16 + sectionBytes + 4;
+  const out = new Uint8Array(total);
+  out.set([0x47, 0x52, 0x49, 0x42, 0x00, 0x00, 0x00, 0x02], 0);
+  new DataView(out.buffer).setUint32(12, total);
+  let offset = 16;
+  for (const part of sections) {
+    out.set(part, offset);
+    offset += part.length;
+  }
+  out.set([0x37, 0x37, 0x37, 0x37], offset);
+  return out;
+}
+
+function expandSection7(message: Uint8Array, extra: number): Uint8Array {
+  const out = new Uint8Array(message.length + extra);
+  out.set(message.subarray(0, message.length - 4));
+  out.set([0x37, 0x37, 0x37, 0x37], out.length - 4);
+  const view = new DataView(out.buffer);
+  view.setUint32(12, out.length);
+  let cursor = 16;
+  while (cursor + 5 < out.length) {
+    const length = view.getUint32(cursor);
+    if (out[cursor + 4] === 7) {
+      view.setUint32(cursor, length + extra);
+      break;
+    }
+    cursor += length;
+  }
+  return out;
+}
+
+function concatMessages(parts: Uint8Array[]): Uint8Array {
+  const total = parts.reduce((sum, part) => sum + part.length, 0);
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const part of parts) {
+    out.set(part, offset);
+    offset += part.length;
+  }
+  return out;
+}
+
+function aqmCycleFromUrl(url: string): string {
+  const match = /\/aqm\.(\d{4})(\d{2})(\d{2})\/aqm\.t(\d{2})z/.exec(url);
+  if (!match) throw new Error("aqm url has no cycle");
+  return `${match[1]}-${match[2]}-${match[3]}T${match[4]}:00:00.000Z`;
+}
+
+/** Hours 49 and 72 from the recorded ASCII, as template 4.8 messages. A non-GRIB body is returned raw. */
+function aqmFile(aqf: string, cycle: string): Uint8Array {
+  if (!aqf.startsWith("pm25sfc")) return new TextEncoder().encode(aqf);
+  const parts = parseNoaaAqf(aqf)
+    .filter((hour) => hour.hour >= 49 && hour.hour <= 72 && hour.pm25Tenths != null)
+    .map((hour) =>
+      encodeAqmHour({
+        cycle,
+        lead: hour.hour,
+        tenths: hour.pm25Tenths ?? 0,
+      }),
+    );
+  return concatMessages(parts);
+}
+
+function respondRange(bytes: Uint8Array, init?: RequestInit): Response {
+  const header = new Headers(init?.headers).get("range") ?? "";
+  const match = /^bytes=(\d+)-(\d+)$/.exec(header);
+  if (!match) return new Response("range required", { status: 400 });
+  const start = Number(match[1]);
+  const endInclusive = Number(match[2]);
+  if (endInclusive < start || endInclusive >= bytes.length) {
+    return new Response("range", { status: 416 });
+  }
+  const slice = bytes.subarray(start, endInclusive + 1);
+  return new Response(Buffer.from(slice), {
+    status: 206,
+    headers: { "content-range": `bytes ${start}-${endInclusive}/${bytes.length}` },
+  });
+}
+
+function serveAqm(aqf: string, url: string, init?: RequestInit): Response {
+  const bytes = aqf.startsWith("pm25sfc")
+    ? aqmFile(aqf, aqmCycleFromUrl(url))
+    : new TextEncoder().encode(aqf);
+  return respondRange(bytes, init);
+}
+
 function smokeIndex(byteLength: number, cycle: string): string {
   const when = new Date(cycle);
   const stamp = `${when.getUTCFullYear()}${String(when.getUTCMonth() + 1).padStart(2, "0")}${String(when.getUTCDate()).padStart(2, "0")}${String(when.getUTCHours()).padStart(2, "0")}`;
@@ -233,7 +421,7 @@ function fakeFetch(bodies: { smoke: string; aqf: string; airnow?: string }): Fak
         headers: { "content-range": `bytes 0-${message.length - 1}/${message.length}` },
       });
     }
-    if (url.includes("pm25sfc")) return new Response(bodies.aqf, { status: 200 });
+    if (url.includes("/com/aqm/prod/")) return serveAqm(bodies.aqf, url, init);
     if (url.includes("airnowapi.org")) {
       if (bodies.airnow == null) throw new Error("airnow was called");
       return new Response(bodies.airnow, { status: 200 });
@@ -275,12 +463,15 @@ describe("v1 place ingest", { concurrency: 1 }, () => {
       });
       assert.deepEqual(stored.hrrr, cells.hrrr);
       assert.deepEqual(stored.aqm, cells.aqm);
-      assert.equal(stored.forecastsStored, 7);
+      assert.equal(stored.forecastsStored, 5);
       assert.equal(stored.forecastsUnchanged, 0);
       assert.equal(stored.officialStatus, "stored");
       assert.equal(stored.officialAqi, 48);
       assert.equal(stored.aqfError, null);
       assert.equal(stored.airnowError, null);
+      assert.deepEqual(stored.unavailableHours, unavailableForecastHours());
+      assert.equal(stored.unavailableHours[0], AQM_HOUR_END + 1);
+      assert.equal(stored.unavailableHours.at(-1), FORECAST_HORIZON_HOURS);
       const smokeUrls = fake.urls.filter((url) => url.includes("noaa-hrrr-bdp-pds"));
       assert.equal(
         smokeUrls.some((url) => url.includes("/dods/")),
@@ -291,14 +482,16 @@ describe("v1 place ingest", { concurrency: 1 }, () => {
       assert.equal(smokeUrls.filter((url) => url.endsWith("wrfsfcf48.grib2")).length, 1);
       assert.equal(smokeUrls.filter((url) => url.endsWith(".idx")).length, 49);
       assert.equal(
-        fake.urls.find((url) => url.includes("pm25sfc")),
-        aqfAsciiUrl({
-          cycleUtc: CYCLE,
-          latIndex: cells.aqm.latIndex,
-          lonIndex: cells.aqm.lonIndex,
-          hourStart: 49,
-          hourEnd: 168,
-        }),
+        fake.urls.some((url) => url.includes("/dods/aqm/") || url.includes("pm25sfc")),
+        false,
+      );
+      assert.equal(
+        fake.urls.some((url) => url.includes("ave_1hr_pm25.227.grib2")),
+        false,
+      );
+      assert.equal(
+        fake.urls.find((url) => url.includes("ave_1hr_pm25_bc")),
+        aqmGribUrl(CYCLE, true),
       );
       const airnowUrl = new URL(fake.urls.at(-1) ?? "");
       assert.equal(airnowUrl.hostname, "www.airnowapi.org");
@@ -320,8 +513,6 @@ describe("v1 place ingest", { concurrency: 1 }, () => {
           { source: "noaa_smoke", lead: 48, corrected_aqi: 155 },
           { source: "noaa_aqf", lead: 49, corrected_aqi: 56 },
           { source: "noaa_aqf", lead: 72, corrected_aqi: 101 },
-          { source: "regional", lead: 96, corrected_aqi: 80 },
-          { source: "noaa_aqf", lead: 168, corrected_aqi: 50 },
         ],
       );
       const ledger = await sql.query<{ endpoint_kind: string; outcome: string; n: number }>(
@@ -332,9 +523,9 @@ describe("v1 place ingest", { concurrency: 1 }, () => {
       );
       assert.deepEqual(ledger, [
         { endpoint_kind: "airnow_current", outcome: "ok", n: 1 },
-        { endpoint_kind: "aqf_ascii", outcome: "ok", n: 1 },
         { endpoint_kind: "hrrr_smoke_ascii", outcome: "error", n: 46 },
         { endpoint_kind: "hrrr_smoke_ascii", outcome: "ok", n: 6 },
+        { endpoint_kind: "noaa_other", outcome: "ok", n: 4 },
       ]);
       const dumped = JSON.stringify(ledger);
       assert.equal(dumped.includes(KEY), false);
@@ -374,6 +565,7 @@ describe("v1 place ingest", { concurrency: 1 }, () => {
           officialStatus: string;
           officialAqi: number | null;
           airnowError: string | null;
+          unavailableHours: number[];
         }[];
       };
       const stored = body.places[0];
@@ -384,7 +576,15 @@ describe("v1 place ingest", { concurrency: 1 }, () => {
       assert.equal(stored?.officialStatus, "stored");
       assert.equal(stored?.officialAqi, 48);
       assert.equal(stored?.airnowError, null);
-      assert.equal(fake.urls.some((url) => url.includes("pm25sfc")), true);
+      assert.deepEqual(stored?.unavailableHours, unavailableForecastHours());
+      assert.equal(
+        fake.urls.some((url) => url.includes("ave_1hr_pm25_bc")),
+        true,
+      );
+      assert.equal(
+        fake.urls.some((url) => url.includes("ave_1hr_pm25.227.grib2")),
+        false,
+      );
       assert.equal(fake.urls.at(-1)?.includes("airnowapi.org"), true);
       const rows = await sql.query<{
         source: string;
@@ -514,7 +714,7 @@ describe("v1 place ingest", { concurrency: 1 }, () => {
         fetchImpl: second.fetchImpl,
       });
       assert.equal(again.forecastsStored, 0);
-      assert.equal(again.forecastsUnchanged, 7);
+      assert.equal(again.forecastsUnchanged, 5);
       assert.equal(again.officialStatus, "unchanged");
       assert.equal(again.officialAqi, 48);
       const forecasts = await sql.query<{ n: number; aqi: number }>(
@@ -522,7 +722,7 @@ describe("v1 place ingest", { concurrency: 1 }, () => {
                 min(corrected_aqi) filter (where valid_for = issued_at) as aqi
            from forecast_issued`,
       );
-      assert.equal(forecasts[0]?.n, 7);
+      assert.equal(forecasts[0]?.n, 5);
       assert.equal(forecasts[0]?.aqi, 27);
       const official = await sql.query<{ n: number; official_aqi: number; official_raw: string }>(
         "select count(*)::int as n, official_aqi, official_raw from official_reading group by official_aqi, official_raw",
@@ -555,7 +755,7 @@ describe("v1 place ingest", { concurrency: 1 }, () => {
       assert.equal(stored.airnowError, "airnow_api_key_missing");
       assert.equal(stored.officialStatus, "skipped");
       assert.equal(stored.officialAqi, null);
-      assert.equal(stored.forecastsStored, 7);
+      assert.equal(stored.forecastsStored, 5);
       assert.equal(
         fake.urls.some((url) => url.includes("airnowapi.org")),
         false,
@@ -596,7 +796,7 @@ describe("v1 place ingest", { concurrency: 1 }, () => {
       });
       assert.equal(stored.airnowError, "airnow_hourly_limit");
       assert.equal(stored.officialStatus, "skipped");
-      assert.equal(stored.forecastsStored, 7);
+      assert.equal(stored.forecastsStored, 5);
       assert.equal(
         fake.urls.some((url) => url.includes("airnowapi.org")),
         false,
@@ -606,8 +806,8 @@ describe("v1 place ingest", { concurrency: 1 }, () => {
       );
       assert.deepEqual(counts, [
         { source: "airnow", n: AIRNOW_HOURLY_LIMIT },
-        // 46 missing hours, 3 indexes, 3 smoke ranges, and the AQF call.
-        { source: "noaa", n: 53 },
+        // 46 missing hours, 3 indexes, 3 smoke ranges, and 4 AQM ranges.
+        { source: "noaa", n: 56 },
       ]);
       const official = await sql.query<{ n: number }>(
         "select count(*)::int as n from official_reading",
@@ -731,10 +931,13 @@ describe("v1 place ingest", { concurrency: 1 }, () => {
         fake.urls.some((url) => url.includes("/dods/hrrr/")),
         false,
       );
-      const aqfUrls = fake.urls.filter((url) => url.includes("pm25sfc"));
-      assert.equal(aqfUrls.length, 2);
-      assert.match(aqfUrls[0] ?? "", /\[49:168\]\[182:182\]\[115:115\]/);
-      assert.match(aqfUrls[1] ?? "", /\[49:168\]\[192:192\]\[116:116\]/);
+      const aqfUrls = fake.urls.filter((url) => url.includes("ave_1hr_pm25_bc"));
+      assert.equal(aqfUrls.length, 8);
+      assert.equal(aqfUrls[0], aqmGribUrl(CYCLE, true));
+      assert.equal(
+        fake.urls.some((url) => url.includes("/dods/aqm/") || url.includes("pm25sfc")),
+        false,
+      );
     } finally {
       if (previous === undefined) delete process.env.AIRNOW_API_KEY;
       else process.env.AIRNOW_API_KEY = previous;
@@ -763,7 +966,10 @@ describe("v1 place ingest", { concurrency: 1 }, () => {
         places: { forecastsStored: number }[];
       };
       assert.equal(body.cycleUtc === before || body.cycleUtc === after, true);
-      assert.equal(body.places[0]?.forecastsStored, 7);
+      assert.equal(
+        (body.places[0]?.forecastsStored ?? 0) >= 4 && (body.places[0]?.forecastsStored ?? 0) <= 5,
+        true,
+      );
       const issued = await sql.query<{ issued_at: string | Date }>(
         "select distinct issued_at from forecast_issued",
       );
@@ -779,6 +985,7 @@ describe("v1 place ingest", { concurrency: 1 }, () => {
     const grib = readFileSync(join(root, "fixtures/v1/noaa-hrrr-smoke-f00.grib2"));
     const idx = readFileSync(join(root, "fixtures/v1/noaa-hrrr-smoke-f00.idx"), "utf8");
     const point = readLambertPoint(grib, BOISE.latitude, BOISE.longitude);
+    assert.ok(point);
     assert.equal(point.referenceTime, CYCLE);
     assert.equal(point.forecastHour, 0);
     assert.equal(point.category, 20);
@@ -808,8 +1015,7 @@ describe("v1 place ingest", { concurrency: 1 }, () => {
           headers: { "content-range": `bytes 0-${grib.byteLength - 1}/${grib.byteLength}` },
         });
       }
-      if (url.includes("pm25sfc"))
-        return new Response(readFixture("noaa-aqf.ascii"), { status: 200 });
+      if (url.includes("/com/aqm/prod/")) return serveAqm(readFixture("noaa-aqf.ascii"), url, init);
       throw new Error(`unexpected host ${url}`);
     };
     try {
@@ -819,7 +1025,7 @@ describe("v1 place ingest", { concurrency: 1 }, () => {
         fetchImpl,
       });
       assert.deepEqual(stored.hrrr, { latIndex: 755, lonIndex: 440 });
-      assert.equal(stored.forecastsStored, 5);
+      assert.equal(stored.forecastsStored, 3);
       assert.equal(stored.officialStatus, "skipped");
       const rows = await sql.query<{
         source: string;
@@ -837,14 +1043,12 @@ describe("v1 place ingest", { concurrency: 1 }, () => {
       );
       assert.equal(urls[0], `${hrrrSmokeGribUrl(CYCLE, 0)}.idx`);
       assert.equal(
-        urls.find((url) => url.includes("pm25sfc")),
-        aqfAsciiUrl({
-          cycleUtc: CYCLE,
-          latIndex: 182,
-          lonIndex: 115,
-          hourStart: 49,
-          hourEnd: 168,
-        }),
+        urls.find((url) => url.includes("ave_1hr_pm25_bc")),
+        aqmGribUrl(CYCLE, true),
+      );
+      assert.equal(
+        urls.some((url) => url.includes("/dods/")),
+        false,
       );
     } finally {
       if (previous === undefined) delete process.env.AIRNOW_API_KEY;
@@ -916,8 +1120,7 @@ describe("v1 place ingest", { concurrency: 1 }, () => {
           headers: { "content-range": `bytes 0-${grib.byteLength - 1}/${grib.byteLength}` },
         });
       }
-      if (url.includes("pm25sfc"))
-        return new Response(readFixture("noaa-aqf.ascii"), { status: 200 });
+      if (url.includes("/com/aqm/prod/")) return serveAqm(readFixture("noaa-aqf.ascii"), url, init);
       throw new Error(`unexpected host ${url}`);
     };
     try {
@@ -1124,5 +1327,78 @@ describe("v1 place ingest", { concurrency: 1 }, () => {
     );
     assert.ok(pulled < declared);
     assert.ok(pulled <= MAX_HRRR_FIELD_BYTES);
+  });
+
+  it("falls back from the bias-corrected AQM file to the raw file and skips hours after 72", async () => {
+    const kept = encodeAqmHour({
+      cycle: CYCLE,
+      lead: 49,
+      tenths: 120,
+      latitude: BOISE.latitude,
+      longitude: BOISE.longitude,
+      nx: 4,
+      ny: 2,
+    });
+    const later = expandSection7(
+      encodeAqmHour({
+        cycle: CYCLE,
+        lead: 80,
+        tenths: 10,
+        latitude: BOISE.latitude,
+        longitude: BOISE.longitude,
+        nx: 4,
+        ny: 2,
+      }),
+      20_000,
+    );
+    const file = concatMessages([kept, later]);
+    assert.ok(later.length > 512);
+    assert.ok(file.length > later.length);
+    const ranges: { start: number; endInclusive: number }[] = [];
+    const urls: string[] = [];
+    const fetchImpl: typeof fetch = async (input, init) => {
+      const url = String(input);
+      urls.push(url);
+      if (url.includes("ave_1hr_pm25_bc")) return new Response("missing", { status: 404 });
+      if (!url.includes("ave_1hr_pm25.227.grib2")) throw new Error(`unexpected ${url}`);
+      const header = new Headers(init?.headers).get("range") ?? "";
+      const match = /^bytes=(\d+)-(\d+)$/.exec(header);
+      assert.ok(match);
+      const start = Number(match?.[1]);
+      const endInclusive = Number(match?.[2]);
+      ranges.push({ start, endInclusive });
+      if (endInclusive >= file.length) return new Response("range", { status: 416 });
+      const slice = file.subarray(start, endInclusive + 1);
+      return new Response(Buffer.from(slice), {
+        status: 206,
+        headers: { "content-range": `bytes ${start}-${endInclusive}/${file.length}` },
+      });
+    };
+    const got = await fetchAqmPm25Messages(CYCLE, fetchImpl);
+    assert.equal(got.length, 1);
+    assert.equal(got[0]?.lead, 49);
+    const point = readLambertPoint(
+      got[0]?.message ?? new Uint8Array(),
+      BOISE.latitude,
+      BOISE.longitude,
+      "noaa_aqf_parse",
+    );
+    assert.ok(point);
+    assert.equal(point.forecastHour, 49);
+    assert.equal(point.value, 12);
+    assert.equal(urls[0], aqmGribUrl(CYCLE, true));
+    assert.equal(
+      urls.some((url) => url.includes("ave_1hr_pm25.227.grib2")),
+      true,
+    );
+    assert.ok(kept.length <= 512);
+    assert.equal(
+      ranges.some((range) => range.endInclusive - range.start + 1 === later.length),
+      false,
+    );
+    for (const range of ranges) {
+      assert.ok(range.endInclusive - range.start + 1 <= 512);
+      assert.ok(range.endInclusive < file.length);
+    }
   });
 });

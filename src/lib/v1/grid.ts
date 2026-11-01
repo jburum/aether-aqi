@@ -1,7 +1,7 @@
 import { V1RuleError } from "./errors.ts";
 
 /**
- * Nearest cell on the axes `hrrrSmokeAsciiUrl` and `aqfAsciiUrl` already index.
+ * Nearest cell on the axes the retired OpenDAP indexes used.
  *
  * HRRR-Smoke is the `hrrr_sfc` dimensions, 1059 south–north by 1799 west–east.
  * Cell centers run from 21.138123°N, 225.904526°E through 52.615654°N, 299.082809°E.

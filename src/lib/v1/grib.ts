@@ -408,9 +408,107 @@ function spatialValueAt(sec5: Uint8Array, sec7: Uint8Array, index: number, code:
   return value;
 }
 
+/** Indicator section. Bytes 8-15 are the message length. */
+export function gribMessageLength(indicator: Uint8Array, code = "noaa_smoke_parse"): number {
+  if (
+    indicator.length < 16 ||
+    indicator[0] !== 0x47 ||
+    indicator[1] !== 0x52 ||
+    indicator[2] !== 0x49 ||
+    indicator[3] !== 0x42 ||
+    indicator[7] !== 2
+  ) {
+    fail("NOAA response is not a GRIB2 file.", code);
+  }
+  const length = readUint(indicator, 8, 8, code);
+  if (length < 16) fail("GRIB2 message is truncated.", code);
+  return length;
+}
+
+/**
+ * Valid lead from section 1 and section 4.
+ * Template 4.0 uses the forecast-time field. Template 4.8 uses the interval end.
+ */
+export function readGribProductTime(
+  section1: Uint8Array,
+  section4: Uint8Array,
+  code = "noaa_smoke_parse",
+): { referenceTime: string; forecastHour: number } {
+  if (section4.length < 34) fail("HRRR smoke field is not an instantaneous forecast.", code);
+  const reference = referenceTime(section1, code);
+  const template = readUint(section4, 7, 2, code);
+  if (template === 0) {
+    if ((section4[17] ?? 0) !== 1) fail("GRIB2 forecast time is not in hours.", code);
+    return { referenceTime: reference, forecastHour: readUint(section4, 18, 4, code) };
+  }
+  if (template === 8) {
+    return { referenceTime: reference, forecastHour: intervalEndHour(section4, reference, code) };
+  }
+  fail("HRRR smoke field is not an instantaneous forecast.", code);
+}
+
+/**
+ * Hours from the reference time to the template 4.8 interval end.
+ * Octets 19-22 are the start of the interval and are not the valid time.
+ */
+function intervalEndHour(sec4: Uint8Array, referenceIso: string, code: string): number {
+  if (sec4.length < 41) fail("GRIB2 time interval is missing its end.", code);
+  const year = readUint(sec4, 34, 2, code);
+  const month = sec4[36] ?? 0;
+  const day = sec4[37] ?? 0;
+  const hour = sec4[38] ?? 0;
+  const minute = sec4[39] ?? 0;
+  const second = sec4[40] ?? 0;
+  if (month < 1 || month > 12 || day < 1 || day > 31 || hour > 23 || minute > 59 || second > 59) {
+    fail("GRIB2 interval end is not a real UTC hour.", code);
+  }
+  const end = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
+  if (
+    end.getUTCFullYear() !== year ||
+    end.getUTCMonth() + 1 !== month ||
+    end.getUTCDate() !== day
+  ) {
+    fail("GRIB2 interval end is not a real UTC hour.", code);
+  }
+  const delta = end.getTime() - Date.parse(referenceIso);
+  if (!Number.isFinite(delta) || delta < 0 || delta % 3_600_000 !== 0) {
+    fail("GRIB2 interval end is not a whole hour after the reference time.", code);
+  }
+  return delta / 3_600_000;
+}
+
+/**
+ * Packed index for one grid point.
+ * Indicator 255 keeps the grid index. An applied bitmap counts 1-bits before it.
+ * A 0-bit is masked and returns null. It is not the value 0.
+ */
+function bitmapPackedIndex(
+  sec6: Uint8Array,
+  gridIndex: number,
+  gridPoints: number,
+  code: string,
+): number | null {
+  const indicator = sec6[5] ?? 0;
+  if (indicator === 255) return gridIndex;
+  if (indicator !== 0) fail("GRIB2 bitmap is not in this message.", code);
+  const bytesNeeded = Math.ceil(gridPoints / 8);
+  if (gridIndex < 0 || gridIndex >= gridPoints || sec6.length < 6 + bytesNeeded) {
+    fail("GRIB2 bitmap is short.", code);
+  }
+  const bitAt = (index: number): number => {
+    const byte = sec6[6 + (index >> 3)] ?? 0;
+    return (byte >> (7 - (index & 7))) & 1;
+  };
+  if (bitAt(gridIndex) === 0) return null;
+  let packed = 0;
+  for (let index = 0; index < gridIndex; index += 1) packed += bitAt(index);
+  return packed;
+}
+
 /**
  * One Lambert cell from a template 5.3 message.
  * `latitude` and `longitude` are the place. The sample is the nearest Lambert cell.
+ * Template 4.0 with no bitmap is unchanged. A masked bitmap point returns null.
  * Simple-packed stability extracts stay on `readSimpleGribFields`.
  */
 export function readLambertPoint(
@@ -418,7 +516,7 @@ export function readLambertPoint(
   latitude: number,
   longitude: number,
   code = "noaa_smoke_parse",
-): LambertPoint {
+): LambertPoint | null {
   if (bytes.length < 16 || bytes.length > MAX_LAMBERT_BYTES) {
     fail("NOAA response is not a GRIB2 file.", code);
   }
@@ -451,24 +549,22 @@ export function readLambertPoint(
   if (!sec1 || !sec3 || !sec4 || !sec5 || !sec6 || !sec7) {
     fail("GRIB2 message is missing a section.", code);
   }
-  if (sec4.length < 34 || readUint(sec4, 7, 2, code) !== 0) {
-    fail("HRRR smoke field is not an instantaneous forecast.", code);
-  }
-  if ((sec4[17] ?? 0) !== 1) fail("GRIB2 forecast time is not in hours.", code);
-  if ((sec6[5] ?? 0) !== 255) fail("GRIB2 bitmap is not used for this smoke field.", code);
+  const product = readGribProductTime(sec1, sec4, code);
   const grid = lambertAxes(sec3, code);
   const cell = nearestLambertCell(grid, latitude, longitude, code);
+  const packed = bitmapPackedIndex(sec6, cell.j * grid.nx + cell.i, grid.nx * grid.ny, code);
+  if (packed == null) return null;
   const scale = signMag(sec4[23] ?? 0, 8);
   const level = signMag(readUint(sec4, 24, 4, code), 32) / 10 ** scale;
   return {
-    referenceTime: referenceTime(sec1, code),
-    forecastHour: readUint(sec4, 18, 4, code),
+    referenceTime: product.referenceTime,
+    forecastHour: product.forecastHour,
     category: sec4[9] ?? 0,
     parameter: sec4[10] ?? 0,
     surfaceType: sec4[22] ?? 0,
     level,
     i: cell.i,
     j: cell.j,
-    value: spatialValueAt(sec5, sec7, cell.j * grid.nx + cell.i, code),
+    value: spatialValueAt(sec5, sec7, packed, code),
   };
 }

@@ -1,10 +1,21 @@
 import type { StabilitySample } from "./alerts.ts";
 import { V1RuleError } from "./errors.ts";
-import { readSimpleGribFields, type SimpleGribField } from "./grib.ts";
+import {
+  gribMessageLength,
+  readGribProductTime,
+  readSimpleGribFields,
+  type SimpleGribField,
+} from "./grib.ts";
 import { noaaEndpointKind, recordUpstreamCall } from "./monitoring.ts";
 import { parseUtcInstant } from "./phase2.ts";
 import { concentrationTokenToTenths, pm25TenthsToAqi } from "./pm25-aqi.ts";
-import { classifyForecastLead, parseForecastInput, type ValidForecast } from "./rules.ts";
+import {
+  AQM_HORIZON,
+  FORECAST_HORIZON_HOURS,
+  classifyForecastLead,
+  parseForecastInput,
+  type ValidForecast,
+} from "./rules.ts";
 import type { Queryable } from "./types.ts";
 
 /** Keyless public NOMADS OPeNDAP. No API key is added to these URLs. */
@@ -90,8 +101,11 @@ function assertGridIndex(value: number, field: string): void {
 }
 
 function assertQueryHour(value: number, field: string): void {
-  if (!Number.isInteger(value) || value < 0 || value > 168) {
-    throw new V1RuleError("noaa_hour", `${field} must be a lead hour from 0 through 168.`);
+  if (!Number.isInteger(value) || value < 0 || value > FORECAST_HORIZON_HOURS) {
+    throw new V1RuleError(
+      "noaa_hour",
+      `${field} must be a lead hour from 0 through ${FORECAST_HORIZON_HOURS}.`,
+    );
   }
 }
 
@@ -153,13 +167,60 @@ export function hrrrSmokeAsciiUrl(input: NoaaSeriesQuery): string {
   return url;
 }
 
+/** First ingest lead hour read from the AQM prod file. */
+export const AQM_HOUR_START = 49;
+/** Last ingest lead hour the AQM prod file is asked for. */
+export const AQM_HOUR_END = 72;
+
 /**
- * NOAA air quality model surface PM2.5, one grid cell. Days 3-7.
- * The ASCII body is what `parseNoaaAqf` reads.
+ * Lead hours after the AQM file, through `FORECAST_HORIZON_HOURS`.
+ * No model source covers them. Callers return this list and do not fill it.
  */
-export function aqfAsciiUrl(input: NoaaSeriesQuery): string {
-  const { cycle, query } = seriesBounds(input);
-  const url = `${NOAA_ORIGIN}/dods/aqm/aqm${cycle.yyyymmdd}/aqm.t${cycle.hh}z.ascii?pm25sfc${query}`;
+export function unavailableForecastHours(): number[] {
+  const hours: number[] = [];
+  for (let hour = AQM_HOUR_END + 1; hour <= FORECAST_HORIZON_HOURS; hour += 1) {
+    hours.push(hour);
+  }
+  return hours;
+}
+
+/**
+ * NCEP local aerosol table. The hourly file is surface PM2.5 in µg/m³.
+ * Discipline 0, category 13, parameter 193, surface type 1.
+ */
+export const AQM_PM25 = {
+  category: 13,
+  parameter: 193,
+  surfaceType: 1,
+  level: 0,
+} as const;
+
+/**
+ * Latest AQM prod cycle at or before `cycleUtc`. AQM publishes 06Z and 12Z.
+ * 00Z uses the previous day's 12Z. 18Z uses that day's 12Z.
+ */
+export function latestAqmCycle(cycleUtc: string): string {
+  noaaCycleParts(cycleUtc);
+  const when = new Date(cycleUtc);
+  const hour = when.getUTCHours();
+  if (hour >= 12) {
+    when.setUTCHours(12, 0, 0, 0);
+    return when.toISOString();
+  }
+  if (hour === 6) return when.toISOString();
+  when.setUTCDate(when.getUTCDate() - 1);
+  when.setUTCHours(12, 0, 0, 0);
+  return when.toISOString();
+}
+
+/**
+ * NOMADS prod GRIB for one AQM cycle. Bias-corrected is preferred.
+ * `ave_1hr_pm25.227.grib2` is the raw file used when the bc object is missing.
+ */
+export function aqmGribUrl(cycleUtc: string, biasCorrected: boolean): string {
+  const cycle = noaaCycleParts(latestAqmCycle(cycleUtc));
+  const field = biasCorrected ? "ave_1hr_pm25_bc" : "ave_1hr_pm25";
+  const url = `${NOAA_ORIGIN}/pub/data/nccf/com/aqm/prod/aqm.${cycle.yyyymmdd}/aqm.t${cycle.hh}z.${field}.227.grib2`;
   assertNoaaUrl(url);
   return url;
 }
@@ -266,15 +327,40 @@ export async function fetchNoaaAscii(
   return body;
 }
 
+interface RangeFailure {
+  code: string;
+  mismatch: string;
+  tooLarge: string;
+}
+
+const HRRR_RANGE: RangeFailure = {
+  code: "noaa_smoke_parse",
+  mismatch: "HRRR byte range does not match the index.",
+  tooLarge: "HRRR smoke field is larger than one message.",
+};
+
+const AQM_RANGE: RangeFailure = {
+  code: "noaa_aqf_parse",
+  mismatch: "AQM byte range does not match the section length.",
+  tooLarge: "AQM field is larger than one message.",
+};
+
 interface NoaaByteRequest {
   headers: Record<string, string>;
   timeoutMs: number;
   allowMissing: boolean;
   /** Index span. `end` is exclusive. The object must answer 206 for this span. */
   byteRange?: { start: number; end: number | null };
+  failure?: RangeFailure;
 }
 
-const CONTENT_RANGE = /^bytes (\d+)-(\d+)\/(?:\d+|\*)$/;
+interface NoaaBytes {
+  bytes: Uint8Array;
+  /** Total object size from Content-Range, when the server sent one. */
+  total: number | null;
+}
+
+const CONTENT_RANGE = /^bytes (\d+)-(\d+)\/(\d+|\*)$/;
 
 function rangeHeader(range: { start: number; end: number | null }): string {
   if (range.end == null) return `bytes=${range.start}-`;
@@ -289,7 +375,9 @@ async function releaseBody(response: Response): Promise<void> {
   }
 }
 
-function parseContentRange(header: string | null): { start: number; endInclusive: number } | null {
+function parseContentRange(
+  header: string | null,
+): { start: number; endInclusive: number; total: number | null } | null {
   const match = CONTENT_RANGE.exec(header?.trim() ?? "");
   if (!match) return null;
   const start = Number(match[1]);
@@ -297,7 +385,10 @@ function parseContentRange(header: string | null): { start: number; endInclusive
   if (!Number.isSafeInteger(start) || !Number.isSafeInteger(endInclusive) || endInclusive < start) {
     return null;
   }
-  return { start, endInclusive };
+  if (match[3] === "*") return { start, endInclusive, total: null };
+  const total = Number(match[3]);
+  if (!Number.isSafeInteger(total) || total < endInclusive + 1) return null;
+  return { start, endInclusive, total };
 }
 
 /**
@@ -309,6 +400,7 @@ async function readStreamCapped(
   response: Response,
   expected: number,
   cap: number,
+  failure: RangeFailure,
 ): Promise<Uint8Array> {
   const body = response.body;
   if (!body) throw new V1RuleError("noaa_fetch_failed", "NOAA response has no body.");
@@ -325,20 +417,14 @@ async function readStreamCapped(
       if (done) break;
       if (!value || value.byteLength === 0) continue;
       if (received === expected) {
-        return await stop(
-          new V1RuleError("noaa_smoke_parse", "HRRR byte range does not match the index."),
-        );
+        return await stop(new V1RuleError(failure.code, failure.mismatch));
       }
       const next = received + value.byteLength;
       if (next > cap) {
-        return await stop(
-          new V1RuleError("noaa_smoke_parse", "HRRR smoke field is larger than one message."),
-        );
+        return await stop(new V1RuleError(failure.code, failure.tooLarge));
       }
       if (next > expected) {
-        return await stop(
-          new V1RuleError("noaa_smoke_parse", "HRRR byte range does not match the index."),
-        );
+        return await stop(new V1RuleError(failure.code, failure.mismatch));
       }
       chunks.push(value);
       received = next;
@@ -349,7 +435,7 @@ async function readStreamCapped(
   }
   if (received !== expected) {
     await reader.cancel().catch(() => undefined);
-    throw new V1RuleError("noaa_smoke_parse", "HRRR byte range does not match the index.");
+    throw new V1RuleError(failure.code, failure.mismatch);
   }
   await reader.cancel().catch(() => undefined);
   const out = new Uint8Array(received);
@@ -361,24 +447,28 @@ async function readStreamCapped(
   return out;
 }
 
-/** 206 only. Content-Range start/end must match the index span and the body length. */
+/** 206 only. Content-Range start/end must match the requested span and the body length. */
 async function readHrrrRangeBody(
   response: Response,
   range: { start: number; end: number | null },
-): Promise<Uint8Array> {
+  failure: RangeFailure,
+): Promise<NoaaBytes> {
   const parsed = parseContentRange(response.headers.get("content-range"));
   const expected = parsed ? parsed.endInclusive - parsed.start + 1 : 0;
   const endMatches = range.end == null || parsed?.endInclusive === range.end - 1;
   const lengthMatches = range.end == null || expected === range.end - range.start;
   if (!parsed || parsed.start !== range.start || !endMatches || !lengthMatches || expected < 1) {
     await releaseBody(response);
-    throw new V1RuleError("noaa_smoke_parse", "HRRR byte range does not match the index.");
+    throw new V1RuleError(failure.code, failure.mismatch);
   }
   if (expected > MAX_HRRR_FIELD_BYTES) {
     await releaseBody(response);
-    throw new V1RuleError("noaa_smoke_parse", "HRRR smoke field is larger than one message.");
+    throw new V1RuleError(failure.code, failure.tooLarge);
   }
-  return readStreamCapped(response, expected, MAX_HRRR_FIELD_BYTES);
+  return {
+    bytes: await readStreamCapped(response, expected, MAX_HRRR_FIELD_BYTES, failure),
+    total: parsed.total,
+  };
 }
 
 async function fetchNoaaBytes(
@@ -386,10 +476,11 @@ async function fetchNoaaBytes(
   fetchImpl: typeof fetch,
   ledger: Queryable | undefined,
   init: NoaaByteRequest,
-): Promise<Uint8Array | null> {
+): Promise<NoaaBytes | null> {
   const allowed = assertNoaaUrl(url);
   const calledAt = new Date();
   const target = allowed.toString();
+  const failure = init.failure ?? HRRR_RANGE;
   const headers: Record<string, string> = {
     accept: "application/octet-stream",
     "user-agent": NOAA_USER_AGENT,
@@ -412,19 +503,19 @@ async function fetchNoaaBytes(
     await noteNoaaCall(ledger, target, calledAt, "error", "noaa_hour_missing");
     return null;
   }
-  let bytes: Uint8Array;
+  let got: NoaaBytes;
   try {
     if (init.byteRange) {
       if (response.status !== 206) {
         await releaseBody(response);
         throw new V1RuleError("noaa_fetch_failed", `NOAA responded ${response.status}.`);
       }
-      bytes = await readHrrrRangeBody(response, init.byteRange);
+      got = await readHrrrRangeBody(response, init.byteRange, failure);
     } else if (!response.ok) {
       await releaseBody(response);
       throw new V1RuleError("noaa_fetch_failed", `NOAA responded ${response.status}.`);
     } else {
-      bytes = new Uint8Array(await response.arrayBuffer());
+      got = { bytes: new Uint8Array(await response.arrayBuffer()), total: null };
     }
   } catch (err) {
     await releaseBody(response);
@@ -433,7 +524,7 @@ async function fetchNoaaBytes(
     throw err;
   }
   await noteNoaaCall(ledger, target, calledAt, "ok");
-  return bytes;
+  return got;
 }
 
 /**
@@ -455,7 +546,7 @@ export async function fetchHrrrSmokeField(
     allowMissing: true,
   });
   if (!idx) return null;
-  const text = new TextDecoder().decode(idx);
+  const text = new TextDecoder().decode(idx.bytes);
   const range = hrrrSmokeByteRange(text);
   const message = await fetchNoaaBytes(gribUrl, fetchImpl, ledger, {
     headers: {},
@@ -464,10 +555,232 @@ export async function fetchHrrrSmokeField(
     byteRange: range,
   });
   if (!message) return null;
-  if (message.length < 16 || message[0] !== 0x47) {
+  if (message.bytes.length < 16 || message.bytes[0] !== 0x47) {
     throw new V1RuleError("noaa_smoke_parse", "NOAA response is not a GRIB2 file.");
   }
-  return message;
+  return message.bytes;
+}
+
+const AQM_HEADER_PROBE = 512;
+const AQM_HEADER_SECTION_MAX = 4096;
+const HOUR_MS = 3_600_000;
+
+function beUint(bytes: Uint8Array, offset: number, size: number): number {
+  if (offset < 0 || size < 1 || offset + size > bytes.length) {
+    throw new V1RuleError("noaa_aqf_parse", "GRIB2 section length is wrong.");
+  }
+  let value = 0;
+  for (let i = 0; i < size; i += 1) value = value * 256 + (bytes[offset + i] ?? 0);
+  if (!Number.isSafeInteger(value)) {
+    throw new V1RuleError("noaa_aqf_parse", "GRIB2 field is too large to read.");
+  }
+  return value;
+}
+
+async function readAqmRange(
+  url: string,
+  start: number,
+  end: number,
+  fetchImpl: typeof fetch,
+  ledger: Queryable | undefined,
+  fileSize: number,
+): Promise<NoaaBytes> {
+  if (end <= start || end > fileSize) {
+    throw new V1RuleError("noaa_aqf_parse", "AQM byte range does not match the section length.");
+  }
+  if (end - start > MAX_HRRR_FIELD_BYTES) {
+    throw new V1RuleError("noaa_aqf_parse", "AQM field is larger than one message.");
+  }
+  const got = await fetchNoaaBytes(url, fetchImpl, ledger, {
+    headers: {},
+    timeoutMs: end - start > AQM_HEADER_PROBE ? 30_000 : 15_000,
+    allowMissing: false,
+    byteRange: { start, end },
+    failure: AQM_RANGE,
+  });
+  if (!got || got.bytes.length !== end - start) {
+    throw new V1RuleError("noaa_aqf_parse", "AQM byte range does not match the section length.");
+  }
+  if (got.total != null && got.total !== fileSize) {
+    throw new V1RuleError("noaa_aqf_parse", "AQM file length is not in Content-Range.");
+  }
+  return got;
+}
+
+/**
+ * Section 1 and section 4, read by section length. A section we do not need
+ * is skipped after its length field. The data section is not part of this read.
+ */
+async function aqmProduct(
+  url: string,
+  offset: number,
+  msgLen: number,
+  fetchImpl: typeof fetch,
+  ledger: Queryable | undefined,
+  fileSize: number,
+): Promise<{ referenceTime: string; forecastHour: number; whole: Uint8Array | null }> {
+  const probeLen = Math.min(msgLen, AQM_HEADER_PROBE);
+  const probe = await readAqmRange(url, offset, offset + probeLen, fetchImpl, ledger, fileSize);
+  let cursor = 16;
+  let sec1: Uint8Array | null = null;
+  let sec4: Uint8Array | null = null;
+  // The last four bytes are the "7777" terminator, not a section.
+  while (cursor + 5 <= msgLen && (sec1 == null || sec4 == null)) {
+    let secLen: number;
+    let secNum: number;
+    if (cursor + 5 <= probe.bytes.length) {
+      secLen = beUint(probe.bytes, cursor, 4);
+      secNum = probe.bytes[cursor + 4] ?? 0;
+    } else {
+      const head = await readAqmRange(
+        url,
+        offset + cursor,
+        offset + cursor + 5,
+        fetchImpl,
+        ledger,
+        fileSize,
+      );
+      secLen = beUint(head.bytes, 0, 4);
+      secNum = head.bytes[4] ?? 0;
+    }
+    if (secLen < 5 || cursor + secLen > msgLen) {
+      throw new V1RuleError("noaa_aqf_parse", "GRIB2 section length is wrong.");
+    }
+    if (secNum === 1 || secNum === 4) {
+      if (secLen > AQM_HEADER_SECTION_MAX) {
+        throw new V1RuleError("noaa_aqf_parse", "AQM product section is larger than a header.");
+      }
+      const section =
+        cursor + secLen <= probe.bytes.length
+          ? probe.bytes.subarray(cursor, cursor + secLen)
+          : (
+              await readAqmRange(
+                url,
+                offset + cursor,
+                offset + cursor + secLen,
+                fetchImpl,
+                ledger,
+                fileSize,
+              )
+            ).bytes;
+      if (secNum === 1) sec1 = section;
+      else sec4 = section;
+    }
+    cursor += secLen;
+  }
+  if (!sec1 || !sec4) {
+    throw new V1RuleError("noaa_aqf_parse", "GRIB2 message is missing a section.");
+  }
+  const product = readGribProductTime(sec1, sec4, "noaa_aqf_parse");
+  return {
+    referenceTime: product.referenceTime,
+    forecastHour: product.forecastHour,
+    whole: probeLen === msgLen ? probe.bytes : null,
+  };
+}
+
+async function readAqmFile(
+  url: string,
+  ingestCycle: string,
+  aqmCycle: string,
+  fetchImpl: typeof fetch,
+  ledger: Queryable | undefined,
+): Promise<{ lead: number; message: Uint8Array }[] | "missing"> {
+  const opened = await fetchNoaaBytes(url, fetchImpl, ledger, {
+    headers: {},
+    timeoutMs: 15_000,
+    allowMissing: true,
+    byteRange: { start: 0, end: 16 },
+    failure: AQM_RANGE,
+  });
+  if (!opened) return "missing";
+  if (opened.total == null || opened.total < 16) {
+    throw new V1RuleError("noaa_aqf_parse", "AQM file length is not in Content-Range.");
+  }
+  const fileSize = opened.total;
+  const ingestMs = Date.parse(ingestCycle);
+  const windowStart = ingestMs + AQM_HOUR_START * HOUR_MS;
+  const windowEnd = ingestMs + AQM_HOUR_END * HOUR_MS;
+  const found = new Map<number, Uint8Array>();
+  let offset = 0;
+  let indicator = opened.bytes;
+  while (offset + 16 <= fileSize) {
+    if (offset !== 0) {
+      indicator = (await readAqmRange(url, offset, offset + 16, fetchImpl, ledger, fileSize)).bytes;
+    }
+    const msgLen = gribMessageLength(indicator, "noaa_aqf_parse");
+    if (offset + msgLen > fileSize) {
+      throw new V1RuleError("noaa_aqf_parse", "GRIB2 message is truncated.");
+    }
+    const product = await aqmProduct(url, offset, msgLen, fetchImpl, ledger, fileSize);
+    if (product.referenceTime !== aqmCycle) {
+      throw new V1RuleError(
+        "noaa_aqf_parse",
+        "AQM reference time does not match the 06Z or 12Z cycle.",
+      );
+    }
+    const validMs = Date.parse(product.referenceTime) + product.forecastHour * HOUR_MS;
+    // This prod file is written in valid-time order. Later messages are later hours.
+    if (validMs > windowEnd) break;
+    if (validMs >= windowStart) {
+      const lead = (validMs - ingestMs) / HOUR_MS;
+      if (!Number.isInteger(lead)) {
+        throw new V1RuleError(
+          "noaa_aqf_parse",
+          "AQM valid time is not a whole hour of this cycle.",
+        );
+      }
+      if (found.has(lead)) {
+        throw new V1RuleError("noaa_aqf_parse", "AQM file repeats a valid hour.");
+      }
+      if (msgLen > MAX_HRRR_FIELD_BYTES) {
+        throw new V1RuleError("noaa_aqf_parse", "AQM field is larger than one message.");
+      }
+      const message =
+        product.whole ??
+        (await readAqmRange(url, offset, offset + msgLen, fetchImpl, ledger, fileSize)).bytes;
+      if (message.length !== msgLen || message[0] !== 0x47) {
+        throw new V1RuleError("noaa_aqf_parse", "NOAA response is not a GRIB2 file.");
+      }
+      found.set(lead, message);
+    }
+    offset += msgLen;
+  }
+  return [...found.entries()]
+    .sort((left, right) => left[0] - right[0])
+    .map(([lead, message]) => ({ lead, message }));
+}
+
+/**
+ * Hours 49 through 72 from the NOMADS AQM prod file.
+ * The bias-corrected object is preferred. A 404 on that object falls back to the raw file.
+ * Messages outside that window are located by section length and not downloaded whole.
+ */
+export async function fetchAqmPm25Messages(
+  ingestCycle: string,
+  fetchImpl: typeof fetch,
+  ledger?: Queryable,
+): Promise<{ lead: number; message: Uint8Array }[]> {
+  const aqmCycle = latestAqmCycle(ingestCycle);
+  const bc = await readAqmFile(
+    aqmGribUrl(ingestCycle, true),
+    ingestCycle,
+    aqmCycle,
+    fetchImpl,
+    ledger,
+  );
+  if (bc !== "missing") return bc;
+  const raw = await readAqmFile(
+    aqmGribUrl(ingestCycle, false),
+    ingestCycle,
+    aqmCycle,
+    fetchImpl,
+    ledger,
+  );
+  if (raw === "missing") {
+    throw new V1RuleError("noaa_fetch_failed", "NOAA responded 404.");
+  }
+  return raw;
 }
 
 const DATA_LINE = /^\[(\d+)\]\[(\d+)\]\[(\d+)\]\s*,?\s+(\S+)\s*$/;
@@ -612,7 +925,7 @@ function aqfBody(placeId: string, issuedAt: string, hour: ModelHour): ValidForec
       source: "noaa_aqf",
       issuedAt,
       validFor,
-      horizon: "day_3_7_noaa_aqf",
+      horizon: AQM_HORIZON,
       spatialScale: "regional",
       confidence: "model",
       correctedAqi: pm25TenthsToAqi(hour.pm25Tenths),
@@ -635,8 +948,9 @@ function aqfBody(placeId: string, issuedAt: string, hour: ModelHour): ValidForec
 
 /**
  * Days 1-2 come from smoke (lead 0 through 48h, valley).
- * Later hours through day 7 come from AQF when the cell is present (regional model),
- * otherwise from an explicit regional number on an ASCII extract (regional, low).
+ * Later hours come from AQF rows the caller already chose.
+ * Live place ingest passes hours 49 through 72 only.
+ * A recorded ASCII extract can still carry an explicit regional number.
  * A smoke value after 48h is ignored. An AQF value at or before 48h is ignored.
  */
 export function forecastBodiesFromHours(input: {
