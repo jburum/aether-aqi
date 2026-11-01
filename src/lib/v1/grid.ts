@@ -9,8 +9,8 @@ import { V1RuleError } from "./errors.ts";
  * 21.821°N, 226.541°E through 53.501°N, 292.691°E.
  * Spacing is `(end - origin) / (count - 1)` degrees. This is the GrADS linear
  * axis those OpenDAP indexes used (`grads_mapping` linear), not the Lambert
- * i,j of the GRIB file. `hrrrSmokeCellCenter` is the center the smoke read
- * projects onto template 3.30. This module does not call out.
+ * i,j of the GRIB file. The smoke read does not use `hrrrSmokeCellCenter`.
+ * This module does not call out.
  */
 
 export const HRRR_SMOKE_LAT_ORIGIN = 21.138123;

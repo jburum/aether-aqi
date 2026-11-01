@@ -1,7 +1,7 @@
 import { fetchAirNowObservation, officialInputFromAirNow, type AirNowReading } from "./airnow.ts";
 import { V1RuleError } from "./errors.ts";
 import { readLambertPoint } from "./grib.ts";
-import { hrrrSmokeCellCenter, resolveModelCells, type ModelCell, type ModelCells } from "./grid.ts";
+import { resolveModelCells, type ModelCell, type ModelCells } from "./grid.ts";
 import {
   aqfAsciiUrl,
   fetchHrrrSmokeField,
@@ -33,6 +33,8 @@ export interface PlaceIngestResult {
   placeId: string;
   hrrr: ModelCell;
   aqm: ModelCell;
+  /** Nearest Lambert cell on the first smoke message. Null when every lead was missing. */
+  lambert: { i: number; j: number; value: number } | null;
   forecastsStored: number;
   forecastsUnchanged: number;
   officialAqi: number | null;
@@ -186,6 +188,7 @@ async function storeOfficial(
 
 /**
  * One saved place and one cycle. Grid rejection happens before any request.
+ * Smoke is the Lambert cell nearest the saved latitude and longitude.
  * NOAA calls and the AirNow call, when it leaves, are written to the phase-4 ledger.
  * Over the AirNow hour, or a missing key, skips AirNow and does not call it.
  */
@@ -202,12 +205,14 @@ export async function ingestPlaceCycle(
   const place = rows[0];
   if (!place) throw new V1RuleError("place_not_found", "Saved place not found.", 404);
   const cells = cellsForPlace(place.name, place.latitude, place.longitude);
-  const center = hrrrSmokeCellCenter(cells.hrrr);
+  const latitude = Number(place.latitude);
+  const longitude = Number(place.longitude);
   const smoke: ModelHour[] = [];
+  let lambert: PlaceIngestResult["lambert"] = null;
   for (let lead = 0; lead <= SMOKE_HOUR_END; lead += 1) {
     const message = await fetchHrrrSmokeField(cycleUtc, lead, input.fetchImpl, sql);
     if (!message) continue;
-    const point = readLambertPoint(message, center.latitude, center.longitude);
+    const point = readLambertPoint(message, latitude, longitude);
     if (point.referenceTime !== cycleUtc || point.forecastHour !== lead) {
       throw new V1RuleError(
         "noaa_smoke_parse",
@@ -222,6 +227,7 @@ export async function ingestPlaceCycle(
     ) {
       throw new V1RuleError("noaa_smoke_parse", "HRRR smoke field is not 8 m mass density.");
     }
+    if (!lambert) lambert = { i: point.i, j: point.j, value: point.value };
     const tenths = smokeTenths(point.value);
     if (tenths == null) continue;
     smoke.push({ hour: lead, pm25Tenths: tenths, regionalLowAqi: null });
@@ -247,16 +253,13 @@ export async function ingestPlaceCycle(
       aqf: parseNoaaAqf(aqfAscii),
     }),
   );
-  const airnow = await fetchAirNowObservation(
-    { latitude: Number(place.latitude), longitude: Number(place.longitude) },
-    input.fetchImpl,
-    sql,
-  );
+  const airnow = await fetchAirNowObservation({ latitude, longitude }, input.fetchImpl, sql);
   if (!airnow.ok) {
     return {
       placeId: input.placeId,
       hrrr: cells.hrrr,
       aqm: cells.aqm,
+      lambert,
       ...forecasts,
       officialAqi: null,
       officialStatus: "skipped",
@@ -268,6 +271,7 @@ export async function ingestPlaceCycle(
     placeId: input.placeId,
     hrrr: cells.hrrr,
     aqm: cells.aqm,
+    lambert,
     ...forecasts,
     officialAqi: official.officialAqi,
     officialStatus: official.officialStatus,

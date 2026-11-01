@@ -209,7 +209,19 @@ async function route(request: Request, url: URL, rest: string[], deps: V1Deps): 
       cycleUtc,
       fetchImpl: deps.fetchImpl ?? fetch,
     });
-    return json({ cycleUtc, places });
+    return json({
+      cycleUtc,
+      places: places.map((place) => ({
+        placeId: place.placeId,
+        hrrr: place.hrrr,
+        aqm: place.aqm,
+        forecastsStored: place.forecastsStored,
+        forecastsUnchanged: place.forecastsUnchanged,
+        officialAqi: place.officialAqi,
+        officialStatus: place.officialStatus,
+        airnowError: place.airnowError,
+      })),
+    });
   }
 
   if (rest[0] === "push" && rest[1] === "samples" && rest.length === 2) {

@@ -2,13 +2,13 @@
 
 Saved places can be ingested for one NOAA cycle. This is the manual run behind the week-2 note in [WEEK2.md](./WEEK2.md): a latitude and longitude become HRRR-Smoke and AQM cell indexes, then smoke, the air quality forecast, and AirNow go through the week-1 store. There is no scheduler, no launchd job, no new migration, and no new environment variable.
 
-`ios/`, `design/`, `src/routes/`, and `src/components/` are untouched. The route file already forwards every `/api/v1` POST through the session check. PurpleAir stays off. OpenDAP on NOMADS has been off since Service Change Notice 25-81. HRRR smoke for lead 0 through 48 reads the public AWS bucket `noaa-hrrr-bdp-pds`: the `.idx`, then a byte-range GET of `MASSDEN` at 8 m. The stored value is the Lambert point nearest the HRRR cell center from `resolveModelCells`, not that cell's GrADS index. AQM hours 49 through 168 still use `aqfAsciiUrl`. Tests pass a `fetchImpl` and replay `fixtures/v1`. They do not call NOAA or AirNow.
+`ios/`, `design/`, `src/routes/`, and `src/components/` are untouched. The route file already forwards every `/api/v1` POST through the session check. PurpleAir stays off. OpenDAP on NOMADS has been off since Service Change Notice 25-81. HRRR smoke for lead 0 through 48 reads the public AWS bucket `noaa-hrrr-bdp-pds`: the `.idx`, then a byte-range GET of `MASSDEN` at 8 m. The stored value is the Lambert point nearest the saved place, not the GrADS cell center and not that cell's GrADS index. AQM hours 49 through 168 still use `aqfAsciiUrl`. Tests pass a `fetchImpl` and replay `fixtures/v1`. They do not call NOAA or AirNow.
 
 ## Grid
 
 `resolveModelCells` in `src/lib/v1/grid.ts`.
 
-AQF still sends these indexes to `aqfAsciiUrl`. HRRR smoke does not. This is the GrADS linear axis those OpenDAP indexes used (`grads_mapping` linear, `grads_size` as the count, minimum as the origin, maximum as the end), not the Lambert i,j of the GRIB file. `hrrrSmokeCellCenter` is the center of that cell. The live smoke read projects that center onto the file's template 3.30 grid and takes the nearest point. Stability ingest still uses the GRIB filter box and is not part of this run.
+AQF still sends these indexes to `aqfAsciiUrl`. HRRR smoke does not. This is the GrADS linear axis those OpenDAP indexes used (`grads_mapping` linear, `grads_size` as the count, minimum as the origin, maximum as the end), not the Lambert i,j of the GRIB file. `hrrrSmokeCellCenter` is the center of that retired cell. The live smoke read passes the saved place latitude and longitude straight to the Lambert lookup. Stability ingest still uses the GRIB filter box and is not part of this run.
 
 Spacing is `(end - origin) / (count - 1)` degrees. Cell centers:
 

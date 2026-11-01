@@ -650,6 +650,7 @@ describe("v1 place ingest", { concurrency: 1 }, () => {
       );
       assert.deepEqual(body.places[0]?.hrrr, { latIndex: 755, lonIndex: 440 });
       assert.deepEqual(body.places[1]?.hrrr, { latIndex: 799, lonIndex: 442 });
+      assert.equal("lambert" in (body.places[0] ?? {}), false);
       assert.equal(JSON.stringify(body).includes(KEY), false);
       const others = await sql.query<{ n: number }>(
         "select count(*)::int as n from forecast_issued where place_id = $1",
@@ -710,8 +711,7 @@ describe("v1 place ingest", { concurrency: 1 }, () => {
   it("reads the Boise smoke cell from the AWS index fixture", async () => {
     const grib = readFileSync(join(root, "fixtures/v1/noaa-hrrr-smoke-f00.grib2"));
     const idx = readFileSync(join(root, "fixtures/v1/noaa-hrrr-smoke-f00.idx"), "utf8");
-    const center = hrrrSmokeCellCenter(resolveModelCells(BOISE.latitude, BOISE.longitude).hrrr);
-    const point = readLambertPoint(grib, center.latitude, center.longitude);
+    const point = readLambertPoint(grib, BOISE.latitude, BOISE.longitude);
     assert.equal(point.referenceTime, CYCLE);
     assert.equal(point.forecastHour, 0);
     assert.equal(point.category, 20);
@@ -788,7 +788,7 @@ describe("v1 place ingest", { concurrency: 1 }, () => {
   // Public HRRR-Smoke, 2026-10-31 18Z f00, MASSDEN at 8 m.
   // noaa-hrrr-bdp-pds hrrr.20261031/conus/hrrr.t18z.wrfsfcf00.grib2
   // idx offsets 42413962:43135923. Ni is 1799, so the packed index is j * 1799 + i.
-  it("reads named Lambert points from the recorded HRRR MASSDEN message", () => {
+  it("reads named Lambert points from the recorded HRRR MASSDEN message", async () => {
     const grib = readFileSync(join(root, "fixtures/v1/noaa-hrrr-massden-8m.grib2"));
     assert.equal(grib.byteLength, 721_961);
     assert.ok(grib.byteLength < 2 * 1024 * 1024);
@@ -796,47 +796,98 @@ describe("v1 place ingest", { concurrency: 1 }, () => {
       createHash("sha256").update(grib).digest("hex"),
       "e1cdef9d663d79345bd240acea6390216cbcef59b45adc5599343ae9a554ef6f",
     );
+    const cycle = "2026-10-31T18:00:00.000Z";
     const points = [
       {
         name: "Boise",
         latitude: BOISE.latitude,
         longitude: BOISE.longitude,
+        valley: "Treasure Valley",
         i: 399,
         j: 770,
         index: 1_385_629,
         value: 8.000000088467129e-11,
+        correctedAqi: 0,
       },
       {
         name: "McCall",
         latitude: MCCALL.latitude,
         longitude: MCCALL.longitude,
+        valley: MCCALL.valley,
         i: 411,
         j: 817,
         index: 1_470_194,
         value: 6.240000008846712e-10,
+        correctedAqi: 3,
       },
       {
         name: "Tamarack",
         latitude: TAMARACK.latitude,
         longitude: TAMARACK.longitude,
+        valley: TAMARACK.valley,
         i: 409,
         j: 808,
         index: 1_454_001,
         value: 4.160000008846713e-10,
+        correctedAqi: 2,
       },
     ];
-    for (const expected of points) {
-      const point = readLambertPoint(grib, expected.latitude, expected.longitude);
-      assert.equal(point.referenceTime, "2026-10-31T18:00:00.000Z", expected.name);
-      assert.equal(point.forecastHour, 0, expected.name);
-      assert.equal(point.category, 20, expected.name);
-      assert.equal(point.parameter, 0, expected.name);
-      assert.equal(point.surfaceType, 103, expected.name);
-      assert.equal(point.level, 8, expected.name);
-      assert.equal(point.i, expected.i, expected.name);
-      assert.equal(point.j, expected.j, expected.name);
-      assert.equal(point.j * 1799 + point.i, expected.index, expected.name);
-      assert.ok(Math.abs(point.value - expected.value) < 1e-18, expected.name);
+    const previous = process.env.AIRNOW_API_KEY;
+    delete process.env.AIRNOW_API_KEY;
+    const sql = await openDb();
+    const idx = smokeIndex(grib.byteLength, cycle);
+    const fetchImpl: typeof fetch = async (input, init) => {
+      const url = String(input);
+      if (url.includes("noaa-hrrr-bdp-pds")) {
+        const lead = Number(/wrfsfcf(\d{2})/.exec(url)?.[1]);
+        if (lead !== 0) return new Response("missing", { status: 404 });
+        if (url.endsWith(".idx")) return new Response(idx, { status: 200 });
+        assert.equal(new Headers(init?.headers).get("range"), `bytes=0-${grib.byteLength - 1}`);
+        return new Response(grib, {
+          status: 206,
+          headers: { "content-range": `bytes 0-${grib.byteLength - 1}/${grib.byteLength}` },
+        });
+      }
+      if (url.includes("pm25sfc"))
+        return new Response(readFixture("noaa-aqf.ascii"), { status: 200 });
+      throw new Error(`unexpected host ${url}`);
+    };
+    try {
+      for (const expected of points) {
+        const userId = `user-${expected.name}`;
+        const place = await addSavedPlace(sql, userId, {
+          name: expected.name,
+          latitude: expected.latitude,
+          longitude: expected.longitude,
+          valley: expected.valley,
+          alertAt: 100,
+        });
+        const stored = await ingestPlaceCycle(sql, userId, {
+          placeId: place.id,
+          cycleUtc: cycle,
+          fetchImpl,
+        });
+        assert.equal(stored.lambert?.i, expected.i, expected.name);
+        assert.equal(stored.lambert?.j, expected.j, expected.name);
+        assert.equal(
+          (stored.lambert?.j ?? 0) * 1799 + (stored.lambert?.i ?? 0),
+          expected.index,
+          expected.name,
+        );
+        assert.ok(
+          stored.lambert != null && Math.abs(stored.lambert.value - expected.value) < 1e-18,
+          expected.name,
+        );
+        const rows = await sql.query<{ corrected_aqi: number }>(
+          "select corrected_aqi from forecast_issued where place_id = $1 and source = 'noaa_smoke'",
+          [place.id],
+        );
+        assert.equal(rows.length, 1, expected.name);
+        assert.equal(rows[0]?.corrected_aqi, expected.correctedAqi, expected.name);
+      }
+    } finally {
+      if (previous === undefined) delete process.env.AIRNOW_API_KEY;
+      else process.env.AIRNOW_API_KEY = previous;
     }
   });
 
