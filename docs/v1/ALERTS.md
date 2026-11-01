@@ -2,7 +2,7 @@
 
 Project Air phase 2 alert rules, on top of the forecast store in [WEEK1.md](./WEEK1.md) and the NOAA ingest in [WEEK2.md](./WEEK2.md). The best window and outlook stay in [PHASE2.md](./PHASE2.md).
 
-`ios/`, `design/`, `src/routes/`, and `src/components/` are untouched. There is no push send, no subscription check, and no scheduler. Grid indexes are still not resolved here.
+`ios/`, `design/`, `src/routes/`, and `src/components/` are untouched. Episode pushes are in the Push section below. There is still no scheduler. Grid indexes are still not resolved here.
 
 ## Rules
 
@@ -107,6 +107,20 @@ Owner-scoped, same errors as the other place reads. Another user's id is `place_
 | GET    | `/api/v1/places/:id/alerts` | Active and upcoming alerts |
 
 Omitted `asOf` is the request clock. The body is `placeId`, `asOf`, `timeZone`, `through` (`asOf` plus seven days), and `alerts`. Quiet rules are omitted. An empty list means nothing is active or upcoming. Each alert includes `peakAqi`: a number for a forecast rule, null when `source` is `airnow`. The handler is `handleV1` in `src/lib/v1/http.ts`. The existing `/api/v1/$` route already forwards GET there.
+
+## Push
+
+`pushAlertEpisodes` in `src/lib/v1/alert-push.ts` sends the episodes `readAlerts` returns. The caller passes one saved place, an `asOf`, and an IANA `timeZone`. A saved place has one owner. There is still no scheduler, no launchd job, and no HTTP route. Quiet hours are not applied. That is a follow-up.
+
+Free is `not_entitled` with `feature: "alerts"`, including on the first saved place. A later place that is locked after a downgrade is `not_entitled` with `feature: "saved_places"`. That is the same shape as the alerts read. Neither case sends, and neither writes a row.
+
+A Pro owner gets one push per episode, not per hour. The episode key is the kind plus `start`. A second run, including an `asOf` still inside that episode, sends nothing. `readAlerts` still returns at most one episode per kind. A later episode with a new `start` is a new push once that read surfaces it.
+
+The dedup record is `alert_push` (`migrations/0009_v1_alert_push.sql`). `push_delivery` stays the forecast-hour log. It needs a test device and a `forecast_id`, and it has no episode key. Using that id would collapse the episode into one hour and would collide with `POST /api/v1/push/deliver`. A `sent` row blocks a repeat. A `failed` row is kept, and the next run tries that episode again. The migration is additive. This branch does not apply it to production.
+
+The sender has to be the test sender. Anything else is `push_sender_is_test_only`. There is no APNs key, no `push_device` read, and no environment variable.
+
+The payload is `buildPushPayload` for the corrected hour that owns the episode peak. The title and body stay that forecast envelope. The episode kind is stored on `alert_push.kind`. `forecast.correctedAqi` is that stored forecast. `official` is the latest AirNow reading at or before `asOf`, or null. The two numbers stay on those two objects. `assertPayloadSeparated` runs inside `buildPushPayload`. An AirNow-owned episode has `peakAqi` null. The push still quotes the stored corrected hour, not the official number. An inversion push quotes the PM2.5 forecast hour, because the push envelope has no HRRR source.
 
 ## Checks
 
