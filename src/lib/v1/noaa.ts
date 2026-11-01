@@ -35,7 +35,13 @@ function rejectForeignFeed(text: string): void {
   }
 }
 
-/** https://nomads.ncep.noaa.gov only. Open-Meteo and PurpleAir are refused before any request. */
+/** Public HRRR GRIB on AWS. OpenDAP on NOMADS is retired for this field. */
+export const HRRR_AWS_HOST = "noaa-hrrr-bdp-pds.s3.amazonaws.com";
+
+const HRRR_AWS_PATH =
+  /^\/hrrr\.\d{8}\/conus\/hrrr\.t(?:00|06|12|18)z\.wrfsfcf(?:[0-3]\d|4[0-8])\.grib2(?:\.idx)?$/;
+
+/** NOMADS, or one HRRR object on the public AWS bucket. Open-Meteo and PurpleAir are refused before any request. */
 export function assertNoaaUrl(raw: string): URL {
   let url: URL;
   try {
@@ -56,10 +62,11 @@ export function assertNoaaUrl(raw: string): URL {
       "Open-Meteo is not a launch source. Days 1-2 use the NOAA smoke model. Days 3-7 use NOAA's air quality forecast.",
     );
   }
-  if (url.protocol !== "https:" || host !== "nomads.ncep.noaa.gov") {
+  const awsSmoke = host === HRRR_AWS_HOST && HRRR_AWS_PATH.test(url.pathname) && url.search === "";
+  if (url.protocol !== "https:" || (host !== "nomads.ncep.noaa.gov" && !awsSmoke)) {
     throw new V1RuleError(
       "noaa_host_not_allowed",
-      "NOAA ingest uses keyless nomads.ncep.noaa.gov only.",
+      "NOAA ingest uses keyless nomads.ncep.noaa.gov or the public HRRR bucket.",
     );
   }
   if (url.username || url.password) {
@@ -157,6 +164,54 @@ export function aqfAsciiUrl(input: NoaaSeriesQuery): string {
   return url;
 }
 
+/** One MASSDEN message. A larger range is refused before the body is kept. */
+export const MAX_HRRR_FIELD_BYTES = 8 * 1024 * 1024;
+
+/**
+ * One HRRR CONUS surface file on the public bucket. Lead 0 through 48.
+ * The sibling `.idx` is the wgrib2 inventory used to range-read MASSDEN.
+ */
+export function hrrrSmokeGribUrl(cycleUtc: string, lead: number): string {
+  if (!Number.isInteger(lead) || lead < 0 || lead > 48) {
+    throw new V1RuleError("noaa_hour", "HRRR smoke covers lead hours 0 through 48.");
+  }
+  const cycle = noaaCycleParts(cycleUtc);
+  const hh = String(lead).padStart(2, "0");
+  const url = `https://${HRRR_AWS_HOST}/hrrr.${cycle.yyyymmdd}/conus/hrrr.t${cycle.hh}z.wrfsfcf${hh}.grib2`;
+  assertNoaaUrl(url);
+  return url;
+}
+
+/** Byte span of `MASSDEN:8 m above ground` in a wgrib2 `.idx`. `end` is exclusive. */
+export function hrrrSmokeByteRange(idx: string): { start: number; end: number | null } {
+  const lines = idx.split(/\r?\n/).filter((line) => line.length > 0);
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i] ?? "";
+    if (!line.includes("MASSDEN:8 m above ground")) continue;
+    const start = Number(line.split(":")[1]);
+    if (!Number.isInteger(start) || start < 0) {
+      throw new V1RuleError(
+        "noaa_smoke_parse",
+        "HRRR index offset for 8 m smoke is not an integer.",
+      );
+    }
+    const next = lines[i + 1];
+    if (!next) return { start, end: null };
+    const end = Number(next.split(":")[1]);
+    if (!Number.isInteger(end) || end <= start) {
+      throw new V1RuleError(
+        "noaa_smoke_parse",
+        "HRRR index offset for 8 m smoke is not an integer.",
+      );
+    }
+    if (end - start > MAX_HRRR_FIELD_BYTES) {
+      throw new V1RuleError("noaa_smoke_parse", "HRRR smoke field is larger than one message.");
+    }
+    return { start, end };
+  }
+  throw new V1RuleError("noaa_smoke_parse", "HRRR index has no 8 m smoke field.");
+}
+
 async function noteNoaaCall(
   ledger: Queryable | undefined,
   url: string,
@@ -209,6 +264,210 @@ export async function fetchNoaaAscii(
   }
   await noteNoaaCall(ledger, target, calledAt, "ok");
   return body;
+}
+
+interface NoaaByteRequest {
+  headers: Record<string, string>;
+  timeoutMs: number;
+  allowMissing: boolean;
+  /** Index span. `end` is exclusive. The object must answer 206 for this span. */
+  byteRange?: { start: number; end: number | null };
+}
+
+const CONTENT_RANGE = /^bytes (\d+)-(\d+)\/(?:\d+|\*)$/;
+
+function rangeHeader(range: { start: number; end: number | null }): string {
+  if (range.end == null) return `bytes=${range.start}-`;
+  return `bytes=${range.start}-${range.end - 1}`;
+}
+
+async function releaseBody(response: Response): Promise<void> {
+  try {
+    await response.body?.cancel();
+  } catch {
+    // The body may already be closed.
+  }
+}
+
+function parseContentRange(header: string | null): { start: number; endInclusive: number } | null {
+  const match = CONTENT_RANGE.exec(header?.trim() ?? "");
+  if (!match) return null;
+  const start = Number(match[1]);
+  const endInclusive = Number(match[2]);
+  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(endInclusive) || endInclusive < start) {
+    return null;
+  }
+  return { start, endInclusive };
+}
+
+/**
+ * Read a 206 body of exactly `expected` bytes. A chunk past the cap or the
+ * Content-Range length cancels the rest and does not keep that chunk.
+ * Bytes after that length are the same mismatch, including a later chunk.
+ */
+async function readStreamCapped(
+  response: Response,
+  expected: number,
+  cap: number,
+): Promise<Uint8Array> {
+  const body = response.body;
+  if (!body) throw new V1RuleError("noaa_fetch_failed", "NOAA response has no body.");
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let received = 0;
+  const stop = async (error: V1RuleError): Promise<never> => {
+    await reader.cancel().catch(() => undefined);
+    throw error;
+  };
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value || value.byteLength === 0) continue;
+      if (received === expected) {
+        return await stop(
+          new V1RuleError("noaa_smoke_parse", "HRRR byte range does not match the index."),
+        );
+      }
+      const next = received + value.byteLength;
+      if (next > cap) {
+        return await stop(
+          new V1RuleError("noaa_smoke_parse", "HRRR smoke field is larger than one message."),
+        );
+      }
+      if (next > expected) {
+        return await stop(
+          new V1RuleError("noaa_smoke_parse", "HRRR byte range does not match the index."),
+        );
+      }
+      chunks.push(value);
+      received = next;
+    }
+  } catch (err) {
+    await reader.cancel().catch(() => undefined);
+    throw err;
+  }
+  if (received !== expected) {
+    await reader.cancel().catch(() => undefined);
+    throw new V1RuleError("noaa_smoke_parse", "HRRR byte range does not match the index.");
+  }
+  await reader.cancel().catch(() => undefined);
+  const out = new Uint8Array(received);
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return out;
+}
+
+/** 206 only. Content-Range start/end must match the index span and the body length. */
+async function readHrrrRangeBody(
+  response: Response,
+  range: { start: number; end: number | null },
+): Promise<Uint8Array> {
+  const parsed = parseContentRange(response.headers.get("content-range"));
+  const expected = parsed ? parsed.endInclusive - parsed.start + 1 : 0;
+  const endMatches = range.end == null || parsed?.endInclusive === range.end - 1;
+  const lengthMatches = range.end == null || expected === range.end - range.start;
+  if (!parsed || parsed.start !== range.start || !endMatches || !lengthMatches || expected < 1) {
+    await releaseBody(response);
+    throw new V1RuleError("noaa_smoke_parse", "HRRR byte range does not match the index.");
+  }
+  if (expected > MAX_HRRR_FIELD_BYTES) {
+    await releaseBody(response);
+    throw new V1RuleError("noaa_smoke_parse", "HRRR smoke field is larger than one message.");
+  }
+  return readStreamCapped(response, expected, MAX_HRRR_FIELD_BYTES);
+}
+
+async function fetchNoaaBytes(
+  url: string,
+  fetchImpl: typeof fetch,
+  ledger: Queryable | undefined,
+  init: NoaaByteRequest,
+): Promise<Uint8Array | null> {
+  const allowed = assertNoaaUrl(url);
+  const calledAt = new Date();
+  const target = allowed.toString();
+  const headers: Record<string, string> = {
+    accept: "application/octet-stream",
+    "user-agent": NOAA_USER_AGENT,
+    ...init.headers,
+  };
+  if (init.byteRange) headers.range = rangeHeader(init.byteRange);
+  let response: Response;
+  try {
+    response = await fetchImpl(target, {
+      headers,
+      redirect: "error",
+      signal: AbortSignal.timeout(init.timeoutMs),
+    });
+  } catch (err) {
+    await noteNoaaCall(ledger, target, calledAt, "error", "noaa_fetch_failed");
+    throw err;
+  }
+  if (response.status === 404 && init.allowMissing) {
+    await releaseBody(response);
+    await noteNoaaCall(ledger, target, calledAt, "error", "noaa_hour_missing");
+    return null;
+  }
+  let bytes: Uint8Array;
+  try {
+    if (init.byteRange) {
+      if (response.status !== 206) {
+        await releaseBody(response);
+        throw new V1RuleError("noaa_fetch_failed", `NOAA responded ${response.status}.`);
+      }
+      bytes = await readHrrrRangeBody(response, init.byteRange);
+    } else if (!response.ok) {
+      await releaseBody(response);
+      throw new V1RuleError("noaa_fetch_failed", `NOAA responded ${response.status}.`);
+    } else {
+      bytes = new Uint8Array(await response.arrayBuffer());
+    }
+  } catch (err) {
+    await releaseBody(response);
+    const code = err instanceof V1RuleError ? err.code : "noaa_fetch_failed";
+    await noteNoaaCall(ledger, target, calledAt, "error", code);
+    throw err;
+  }
+  await noteNoaaCall(ledger, target, calledAt, "ok");
+  return bytes;
+}
+
+/**
+ * Index, then a byte-range GET of the 8 m MASSDEN message.
+ * The object must answer 206, and Content-Range must match the index span.
+ * A 404 on the index or the object skips that lead hour.
+ * The returned bytes are one GRIB2 message, not the whole surface file.
+ */
+export async function fetchHrrrSmokeField(
+  cycleUtc: string,
+  lead: number,
+  fetchImpl: typeof fetch,
+  ledger?: Queryable,
+): Promise<Uint8Array | null> {
+  const gribUrl = hrrrSmokeGribUrl(cycleUtc, lead);
+  const idx = await fetchNoaaBytes(`${gribUrl}.idx`, fetchImpl, ledger, {
+    headers: {},
+    timeoutMs: 15_000,
+    allowMissing: true,
+  });
+  if (!idx) return null;
+  const text = new TextDecoder().decode(idx);
+  const range = hrrrSmokeByteRange(text);
+  const message = await fetchNoaaBytes(gribUrl, fetchImpl, ledger, {
+    headers: {},
+    timeoutMs: 30_000,
+    allowMissing: true,
+    byteRange: range,
+  });
+  if (!message) return null;
+  if (message.length < 16 || message[0] !== 0x47) {
+    throw new V1RuleError("noaa_smoke_parse", "NOAA response is not a GRIB2 file.");
+  }
+  return message;
 }
 
 const DATA_LINE = /^\[(\d+)\]\[(\d+)\]\[(\d+)\]\s*,?\s+(\S+)\s*$/;
@@ -375,26 +634,26 @@ function aqfBody(placeId: string, issuedAt: string, hour: ModelHour): ValidForec
 }
 
 /**
- * Days 1-2 come from the smoke extract (lead 0 through 48h, valley).
+ * Days 1-2 come from smoke (lead 0 through 48h, valley).
  * Later hours through day 7 come from AQF when the cell is present (regional model),
- * otherwise from an explicit regional number on that extract (regional, low).
+ * otherwise from an explicit regional number on an ASCII extract (regional, low).
  * A smoke value after 48h is ignored. An AQF value at or before 48h is ignored.
  */
-export function forecastBodiesFromExtracts(input: {
+export function forecastBodiesFromHours(input: {
   placeId: string;
   issuedAt: string;
-  smokeAscii: string;
-  aqfAscii: string;
+  smoke: readonly ModelHour[];
+  aqf: readonly ModelHour[];
 }): ValidForecast[] {
   const bodies: ValidForecast[] = [];
   const seen = new Set<string>();
-  for (const hour of parseHrrrSmoke(input.smokeAscii)) {
+  for (const hour of input.smoke) {
     const body = smokeBody(input.placeId, input.issuedAt, hour);
     if (!body) continue;
     seen.add(body.validFor);
     bodies.push(body);
   }
-  for (const hour of parseNoaaAqf(input.aqfAscii)) {
+  for (const hour of input.aqf) {
     const body = aqfBody(input.placeId, input.issuedAt, hour);
     if (!body) continue;
     if (seen.has(body.validFor)) {
@@ -406,6 +665,21 @@ export function forecastBodiesFromExtracts(input: {
     bodies.push(body);
   }
   return bodies;
+}
+
+/** Recorded ASCII fixtures. Live smoke passes hours from the GRIB field instead. */
+export function forecastBodiesFromExtracts(input: {
+  placeId: string;
+  issuedAt: string;
+  smokeAscii: string;
+  aqfAscii: string;
+}): ValidForecast[] {
+  return forecastBodiesFromHours({
+    placeId: input.placeId,
+    issuedAt: input.issuedAt,
+    smoke: parseHrrrSmoke(input.smokeAscii),
+    aqf: parseNoaaAqf(input.aqfAscii),
+  });
 }
 
 const STABILITY_BOX_DEGREES = 0.2;

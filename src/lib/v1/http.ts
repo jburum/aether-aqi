@@ -11,6 +11,7 @@ import {
 import { NotEntitledError, V1RuleError } from "./errors.ts";
 import { readMonitoringStatus } from "./monitoring.ts";
 import { parseAsOf, parseTimeZone, readBestWindow, readOutlook } from "./phase2.ts";
+import { ingestSavedPlaces, readIngestCycle } from "./place-ingest.ts";
 import type { PushSender } from "./push.ts";
 import { parseDeviceToken, requireId } from "./rules.ts";
 import { samplePushPayloads } from "./samples.ts";
@@ -31,6 +32,8 @@ export interface V1Deps {
   sql: Queryable;
   userId: string;
   sender: PushSender;
+  /** Tests pass a fake. The route omits this and the ingest handler uses global fetch. */
+  fetchImpl?: typeof fetch;
 }
 
 function json(body: unknown, status = 200): Response {
@@ -51,7 +54,7 @@ async function readJson(request: Request): Promise<unknown> {
  * v1 HTTP surface. The route resolves the user, then calls this.
  * Paths: status, entitlement, places, places/:id/current, places/:id/timeline,
  * places/:id/best-window, places/:id/outlook, places/:id/alerts,
- * forecasts, observations, push/devices, push/deliver, push/samples.
+ * forecasts, observations, ingest/run, push/devices, push/deliver, push/samples.
  * Pro gates live here: alerts, any saved place after the first, and
  * push delivery of a forecast for a closed place.
  */
@@ -195,6 +198,30 @@ async function route(request: Request, url: URL, rest: string[], deps: V1Deps): 
       return json({ official }, 201);
     }
     return json({ error: "method_not_allowed", message: "Method not allowed" }, 405);
+  }
+
+  if (rest[0] === "ingest" && rest[1] === "run" && rest.length === 2) {
+    if (method !== "POST") {
+      return json({ error: "method_not_allowed", message: "Method not allowed" }, 405);
+    }
+    const cycleUtc = await readIngestCycle(request, now);
+    const places = await ingestSavedPlaces(deps.sql, deps.userId, {
+      cycleUtc,
+      fetchImpl: deps.fetchImpl ?? fetch,
+    });
+    return json({
+      cycleUtc,
+      places: places.map((place) => ({
+        placeId: place.placeId,
+        hrrr: place.hrrr,
+        aqm: place.aqm,
+        forecastsStored: place.forecastsStored,
+        forecastsUnchanged: place.forecastsUnchanged,
+        officialAqi: place.officialAqi,
+        officialStatus: place.officialStatus,
+        airnowError: place.airnowError,
+      })),
+    });
   }
 
   if (rest[0] === "push" && rest[1] === "samples" && rest.length === 2) {
