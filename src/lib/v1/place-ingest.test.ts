@@ -251,7 +251,9 @@ function encodeAqmHour(input: {
   sec4[11] = 2;
   sec4[17] = 1;
   sec4View.setUint32(18, input.lead - 1);
-  sec4[22] = 1;
+  sec4[22] = 104;
+  sec4[23] = 4;
+  sec4View.setUint32(24, 10_000);
   sec4[28] = 255;
   const end = new Date(when.getTime() + input.lead * 3_600_000);
   sec4View.setUint16(34, end.getUTCFullYear());
@@ -330,7 +332,7 @@ function concatMessages(parts: Uint8Array[]): Uint8Array {
 }
 
 function aqmCycleFromUrl(url: string): string {
-  const match = /\/aqm\.(\d{4})(\d{2})(\d{2})\/aqm\.t(\d{2})z/.exec(url);
+  const match = /\/aqm\.(\d{4})(\d{2})(\d{2})\/\d{2}\/aqm\.t(\d{2})z/.exec(url);
   if (!match) throw new Error("aqm url has no cycle");
   return `${match[1]}-${match[2]}-${match[3]}T${match[4]}:00:00.000Z`;
 }

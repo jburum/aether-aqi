@@ -186,13 +186,15 @@ export function unavailableForecastHours(): number[] {
 
 /**
  * NCEP local aerosol table. The hourly file is surface PM2.5 in µg/m³.
- * Discipline 0, category 13, parameter 193, surface type 1.
+ * Discipline 0, category 13, parameter 193.
+ * Surface type 104 is a sigma level. Level 1 is the ground
+ * (scale factor 4, scaled value 10000 on the 2026-10-31 12Z file).
  */
 export const AQM_PM25 = {
   category: 13,
   parameter: 193,
-  surfaceType: 1,
-  level: 0,
+  surfaceType: 104,
+  level: 1,
 } as const;
 
 /**
@@ -215,12 +217,13 @@ export function latestAqmCycle(cycleUtc: string): string {
 
 /**
  * NOMADS prod GRIB for one AQM cycle. Bias-corrected is preferred.
+ * The cycle hour is a directory: `aqm.YYYYMMDD/06/` or `aqm.YYYYMMDD/12/`.
  * `ave_1hr_pm25.227.grib2` is the raw file used when the bc object is missing.
  */
 export function aqmGribUrl(cycleUtc: string, biasCorrected: boolean): string {
   const cycle = noaaCycleParts(latestAqmCycle(cycleUtc));
   const field = biasCorrected ? "ave_1hr_pm25_bc" : "ave_1hr_pm25";
-  const url = `${NOAA_ORIGIN}/pub/data/nccf/com/aqm/prod/aqm.${cycle.yyyymmdd}/aqm.t${cycle.hh}z.${field}.227.grib2`;
+  const url = `${NOAA_ORIGIN}/pub/data/nccf/com/aqm/prod/aqm.${cycle.yyyymmdd}/${cycle.hh}/aqm.t${cycle.hh}z.${field}.227.grib2`;
   assertNoaaUrl(url);
   return url;
 }
