@@ -8,6 +8,7 @@ import { PGlite } from "@electric-sql/pglite";
 
 import {
   INVERSION_HPBL_M,
+  INVERSION_WIND_MS,
   inversionRule,
   ozoneRule,
   readAlerts,
@@ -72,6 +73,31 @@ const replay = JSON.parse(
     on: Met;
     off: Met;
     pattern: ("on" | "off")[];
+  };
+};
+
+interface RecordedCellHour {
+  localDate: string;
+  kind: "inversion" | "control";
+  utc: string;
+  localHour: number;
+  tmp2mK: number;
+  ugrd10m: number;
+  vgrd10m: number;
+  wind10mMs: number;
+  hpblM: number;
+  massdenKgM3: number;
+  pm25Tenths: number;
+  correctedAqi: number;
+}
+
+const recorded = JSON.parse(
+  readFileSync(join(root, "fixtures/v1/inversion-recorded.json"), "utf8"),
+) as {
+  timeZone: string;
+  boise: {
+    cell: { i: number; j: number; nx: number; index: number };
+    hours: RecordedCellHour[];
   };
 };
 
@@ -154,6 +180,35 @@ function patternSeries(
     });
   });
   return { hours, stability };
+}
+
+function metStreak(hours: readonly RecordedCellHour[]): number {
+  let streak = 0;
+  let best = 0;
+  for (const hour of hours) {
+    if (hour.hpblM <= INVERSION_HPBL_M && hour.wind10mMs <= INVERSION_WIND_MS) {
+      streak += 1;
+      if (streak > best) best = streak;
+    } else {
+      streak = 0;
+    }
+  }
+  return best;
+}
+
+function recordedDecision(hours: readonly RecordedCellHour[], asOf: string): AlertDecision {
+  return inversionRule({
+    hours: hours.map((hour) => pmHour(hour.utc, hour.utc, hour.correctedAqi)),
+    stability: hours.map((hour) => ({
+      issuedAt: hour.utc,
+      validFor: hour.utc,
+      tmp2mK: hour.tmp2mK,
+      hpblM: hour.hpblM,
+      wind10mMs: hour.wind10mMs,
+    })),
+    asOf,
+    timeZone: recorded.timeZone,
+  });
 }
 
 function hoursOf(
@@ -714,6 +769,47 @@ describe("v1 alert rules", () => {
         assert.match(decision.reason, /No inversion alert/, day.name);
       }
     }
+  });
+
+  it("stays quiet on the recorded Boise inversion days", () => {
+    const { cell, hours } = recorded.boise;
+    assert.equal(cell.index, cell.j * cell.nx + cell.i);
+    assert.equal(cell.i, 399);
+    assert.equal(cell.j, 770);
+    assert.equal(hours.length, 65);
+    const dates = ["2026-01-13", "2026-01-14", "2026-01-15", "2025-12-17", "2025-12-24"];
+    for (const date of dates) {
+      const day = hours.filter((hour) => hour.localDate === date);
+      assert.equal(day.length, 13, date);
+      for (const hour of day) {
+        assert.ok(
+          Math.abs(hour.wind10mMs - Math.hypot(hour.ugrd10m, hour.vgrd10m)) < 1e-6,
+          hour.utc,
+        );
+        const decision = recordedDecision(day, hour.utc);
+        assert.equal(decision.fired, false, hour.utc);
+        assert.equal(decision.status, "quiet", hour.utc);
+        assert.equal(decision.peakAqi, null, hour.utc);
+        assert.match(decision.reason, /No inversion alert/, hour.utc);
+      }
+    }
+    const onDate = (date: string) => hours.filter((hour) => hour.localDate === date);
+    for (const date of ["2026-01-13", "2026-01-14", "2026-01-15"]) {
+      const day = onDate(date);
+      assert.ok(
+        day.every((hour) => hour.kind === "inversion" && hour.correctedAqi === 0),
+        date,
+      );
+      assert.ok(metStreak(day) >= 6, date);
+    }
+    const december17 = onDate("2025-12-17");
+    assert.equal(Math.max(...december17.map((hour) => hour.correctedAqi)), 2);
+    assert.equal(metStreak(december17), 2);
+    const december24 = onDate("2025-12-24");
+    assert.equal(Math.max(...december24.map((hour) => hour.correctedAqi)), 1);
+    assert.equal(metStreak(december24), 0);
+    assert.ok(december24.every((hour) => hour.hpblM > INVERSION_HPBL_M));
+    assert.ok(december24.every((hour) => hour.wind10mMs > INVERSION_WIND_MS));
   });
 
   it("does not flap an inversion hour to hour", () => {
