@@ -67,6 +67,7 @@ export interface SensorDropoutResult {
  * Outdoor PurpleAir is refused and nothing is written. A dropout writes the
  * lead-0 NOAA smoke forecast and, when AirNow has a reading, the official number
  * on its own table. A missing `AIRNOW_API_KEY` skips AirNow and does not call out.
+ * A live AirNow call is counted on the upstream ledger. A recorded body is not.
  */
 export async function fallbackSensorDropout(
   sql: Queryable,
@@ -103,7 +104,7 @@ export async function fallbackSensorDropout(
   } else if (!input.point || !input.fetchImpl) {
     throw new V1RuleError("airnow_point_required", "AirNow ingest needs a latitude and longitude.");
   } else {
-    const parsed = await fetchAirNowObservation(input.point, input.fetchImpl);
+    const parsed = await fetchAirNowObservation(input.point, input.fetchImpl, sql);
     if (!parsed.ok) airnowError = parsed.code;
     else officialBody = officialInputFromAirNow(input.placeId, parsed.reading);
   }

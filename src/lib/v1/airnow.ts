@@ -1,4 +1,6 @@
+import { recordUpstreamCall } from "./monitoring.ts";
 import { AIRNOW_ATTRIBUTION } from "./rules.ts";
+import type { Queryable } from "./types.ts";
 
 /** Current observation by latitude and longitude. The key is a query parameter, never logged. */
 export const AIRNOW_CURRENT_URL = "https://www.airnowapi.org/aq/observation/latLong/current/";
@@ -192,13 +194,29 @@ export function parseAirNowCurrent(text: string): AirNowClientResult {
   return { ok: true, reading: winner };
 }
 
+async function noteAirNowCall(
+  ledger: Queryable | undefined,
+  calledAt: Date,
+  outcome: "ok" | "error",
+): Promise<void> {
+  await recordUpstreamCall(ledger, {
+    source: "airnow",
+    endpointKind: "airnow_current",
+    calledAt,
+    outcome,
+    errorCode: outcome === "error" ? "airnow_fetch_failed" : null,
+  });
+}
+
 /**
  * Calls AirNow only when `AIRNOW_API_KEY` is set. A missing key returns
- * `airnow_api_key_missing` and does not call `fetchImpl`.
+ * `airnow_api_key_missing` and does not call `fetchImpl` or write a ledger row.
+ * A call that does leave is counted when `ledger` is set. The key is not stored.
  */
 export async function fetchAirNowObservation(
   point: { latitude: number; longitude: number },
   fetchImpl: typeof fetch,
+  ledger?: Queryable,
 ): Promise<AirNowClientResult> {
   const key = airNowKey();
   if (!key) {
@@ -219,6 +237,7 @@ export async function fetchAirNowObservation(
   url.searchParams.set("longitude", String(point.longitude));
   url.searchParams.set("distance", "25");
   url.searchParams.set("API_KEY", key);
+  const calledAt = new Date();
   let response: Response;
   try {
     response = await fetchImpl(url.toString(), {
@@ -227,16 +246,20 @@ export async function fetchAirNowObservation(
       signal: AbortSignal.timeout(15_000),
     });
   } catch {
+    await noteAirNowCall(ledger, calledAt, "error");
     return fail("airnow_fetch_failed", "The AirNow client could not complete the request.");
   }
   if (!response.ok) {
+    await noteAirNowCall(ledger, calledAt, "error");
     return fail("airnow_fetch_failed", `AirNow responded ${response.status}.`);
   }
   let body: string;
   try {
     body = await response.text();
   } catch {
+    await noteAirNowCall(ledger, calledAt, "error");
     return fail("airnow_fetch_failed", "The AirNow client could not complete the request.");
   }
+  await noteAirNowCall(ledger, calledAt, "ok");
   return parseAirNowCurrent(body);
 }

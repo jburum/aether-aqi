@@ -1,9 +1,11 @@
 import type { StabilitySample } from "./alerts.ts";
 import { V1RuleError } from "./errors.ts";
 import { readSimpleGribFields, type SimpleGribField } from "./grib.ts";
+import { noaaEndpointKind, recordUpstreamCall } from "./monitoring.ts";
 import { parseUtcInstant } from "./phase2.ts";
 import { concentrationTokenToTenths, pm25TenthsToAqi } from "./pm25-aqi.ts";
 import { classifyForecastLead, parseForecastInput, type ValidForecast } from "./rules.ts";
+import type { Queryable } from "./types.ts";
 
 /** Keyless public NOMADS OPeNDAP. No API key is added to these URLs. */
 export const NOAA_ORIGIN = "https://nomads.ncep.noaa.gov";
@@ -155,17 +157,58 @@ export function aqfAsciiUrl(input: NoaaSeriesQuery): string {
   return url;
 }
 
-export async function fetchNoaaAscii(url: string, fetchImpl: typeof fetch): Promise<string> {
-  const allowed = assertNoaaUrl(url);
-  const response = await fetchImpl(allowed.toString(), {
-    headers: { accept: "text/plain", "user-agent": NOAA_USER_AGENT },
-    redirect: "error",
-    signal: AbortSignal.timeout(15_000),
+async function noteNoaaCall(
+  ledger: Queryable | undefined,
+  url: string,
+  calledAt: Date,
+  outcome: "ok" | "error",
+  errorCode?: string,
+): Promise<void> {
+  await recordUpstreamCall(ledger, {
+    source: "noaa",
+    endpointKind: noaaEndpointKind(url),
+    calledAt,
+    outcome,
+    errorCode: errorCode ?? null,
   });
+}
+
+/**
+ * Keyless GET. A refused URL throws before the request and writes no ledger row.
+ * When `ledger` is set, the attempt is counted after it leaves this process.
+ */
+export async function fetchNoaaAscii(
+  url: string,
+  fetchImpl: typeof fetch,
+  ledger?: Queryable,
+): Promise<string> {
+  const allowed = assertNoaaUrl(url);
+  const calledAt = new Date();
+  const target = allowed.toString();
+  let response: Response;
+  try {
+    response = await fetchImpl(target, {
+      headers: { accept: "text/plain", "user-agent": NOAA_USER_AGENT },
+      redirect: "error",
+      signal: AbortSignal.timeout(15_000),
+    });
+  } catch (err) {
+    await noteNoaaCall(ledger, target, calledAt, "error", "noaa_fetch_failed");
+    throw err;
+  }
   if (!response.ok) {
+    await noteNoaaCall(ledger, target, calledAt, "error", "noaa_fetch_failed");
     throw new V1RuleError("noaa_fetch_failed", `NOAA responded ${response.status}.`);
   }
-  return response.text();
+  let body: string;
+  try {
+    body = await response.text();
+  } catch (err) {
+    await noteNoaaCall(ledger, target, calledAt, "error", "noaa_fetch_failed");
+    throw err;
+  }
+  await noteNoaaCall(ledger, target, calledAt, "ok");
+  return body;
 }
 
 const DATA_LINE = /^\[(\d+)\]\[(\d+)\]\[(\d+)\]\s*,?\s+(\S+)\s*$/;
@@ -449,20 +492,42 @@ export function hrrrStabilityFilterUrls(input: HrrrStabilityQuery): string[] {
   return urls;
 }
 
-export async function fetchNoaaGrib(url: string, fetchImpl: typeof fetch): Promise<Uint8Array> {
+/** Same ledger rules as `fetchNoaaAscii`. The GRIB magic check is an error row. */
+export async function fetchNoaaGrib(
+  url: string,
+  fetchImpl: typeof fetch,
+  ledger?: Queryable,
+): Promise<Uint8Array> {
   const allowed = assertNoaaUrl(url);
-  const response = await fetchImpl(allowed.toString(), {
-    headers: { accept: "application/octet-stream", "user-agent": NOAA_USER_AGENT },
-    redirect: "error",
-    signal: AbortSignal.timeout(15_000),
-  });
+  const calledAt = new Date();
+  const target = allowed.toString();
+  let response: Response;
+  try {
+    response = await fetchImpl(target, {
+      headers: { accept: "application/octet-stream", "user-agent": NOAA_USER_AGENT },
+      redirect: "error",
+      signal: AbortSignal.timeout(15_000),
+    });
+  } catch (err) {
+    await noteNoaaCall(ledger, target, calledAt, "error", "noaa_fetch_failed");
+    throw err;
+  }
   if (!response.ok) {
+    await noteNoaaCall(ledger, target, calledAt, "error", "noaa_fetch_failed");
     throw new V1RuleError("noaa_fetch_failed", `NOAA responded ${response.status}.`);
   }
-  const bytes = new Uint8Array(await response.arrayBuffer());
+  let bytes: Uint8Array;
+  try {
+    bytes = new Uint8Array(await response.arrayBuffer());
+  } catch (err) {
+    await noteNoaaCall(ledger, target, calledAt, "error", "noaa_fetch_failed");
+    throw err;
+  }
   if (bytes.length < 16 || bytes[0] !== 0x47) {
+    await noteNoaaCall(ledger, target, calledAt, "error", "noaa_stability_parse");
     throw new V1RuleError("noaa_stability_parse", "NOAA stability response is not a GRIB2 file.");
   }
+  await noteNoaaCall(ledger, target, calledAt, "ok");
   return bytes;
 }
 
