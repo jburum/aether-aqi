@@ -3,12 +3,14 @@ import { V1RuleError } from "./errors.ts";
 import { readLambertPoint } from "./grib.ts";
 import { resolveModelCells, type ModelCell, type ModelCells } from "./grid.ts";
 import {
-  aqfAsciiUrl,
+  AQM_HOUR_END,
+  AQM_HOUR_START,
+  AQM_PM25,
+  fetchAqmPm25Messages,
   fetchHrrrSmokeField,
-  fetchNoaaAscii,
   forecastBodiesFromHours,
   noaaCycleParts,
-  parseNoaaAqf,
+  unavailableForecastHours,
   type ModelHour,
 } from "./noaa.ts";
 import type { ValidForecast } from "./rules.ts";
@@ -17,17 +19,15 @@ import type { Queryable } from "./types.ts";
 
 /**
  * Manual ingest for one NOAA cycle. Smoke is lead 0 through 48 hours
- * from the public HRRR bucket. The air quality forecast is lead 49 through 168.
- * AirNow is the official
- * number when `AIRNOW_API_KEY` is set and the hour is under 500.
+ * from the public HRRR bucket. AQM surface PM2.5 is lead 49 through 72.
+ * Hours after that, through the forecast horizon, have no source.
+ * AirNow is the official number when `AIRNOW_API_KEY` is set and the hour is under 500.
  * There is no scheduler. A repeat of the same place, source, issue, and
  * valid hour does not change the stored forecast. An official row is never
  * updated.
  */
 
 const SMOKE_HOUR_END = 48;
-const AQF_HOUR_START = 49;
-const AQF_HOUR_END = 168;
 
 export interface PlaceIngestResult {
   placeId: string;
@@ -39,6 +39,11 @@ export interface PlaceIngestResult {
   forecastsUnchanged: number;
   /** AQF fetch or parse code. Null when that reply was read. */
   aqfError: string | null;
+  /**
+   * Lead hours after the AQM file through the forecast horizon.
+   * No row is written for these. They are not filled from hour 72.
+   */
+  unavailableHours: number[];
   officialAqi: number | null;
   officialStatus: "stored" | "unchanged" | "skipped";
   airnowError: string | null;
@@ -79,6 +84,19 @@ export async function readIngestCycle(request: Request, now: Date): Promise<stri
     throw new V1RuleError("invalid_time", "cycleUtc must be a UTC timestamp.");
   }
   return canonicalCycle(cycleUtc);
+}
+
+/** µg/m³ to truncated tenths. A fill sentinel (about 1e20) is a missing cell, not AQI 0. */
+function aqmTenths(ugPerM3: number): number | null {
+  if (!Number.isFinite(ugPerM3) || ugPerM3 < 0) {
+    throw new V1RuleError("noaa_aqf_parse", "AQM PM2.5 is not a finite number.");
+  }
+  const scaled = ugPerM3 * 10;
+  if (scaled > 1_000_000) return null;
+  const nearest = Math.round(scaled);
+  const tenths = Math.abs(scaled - nearest) < 1e-4 ? nearest : Math.trunc(scaled);
+  if (!Number.isSafeInteger(tenths)) return null;
+  return tenths;
 }
 
 /** kg/m³ to truncated tenths of a µg/m³. A fill sentinel (about 1e20) is a missing cell. */
@@ -193,7 +211,8 @@ async function storeOfficial(
  * Smoke is the Lambert cell nearest the saved latitude and longitude.
  * NOAA calls and the AirNow call, when it leaves, are written to the phase-4 ledger.
  * Over the AirNow hour, or a missing key, skips AirNow and does not call it.
- * A failed AQF reply still stores the smoke hours already decoded, sets `aqfError`, and still calls AirNow.
+ * A failed AQM reply still stores the smoke hours already decoded, sets `aqfError`, and still calls AirNow.
+ * Hours 73 through the forecast horizon are listed on `unavailableHours` and are not stored.
  */
 export async function ingestPlaceCycle(
   sql: Queryable,
@@ -210,12 +229,14 @@ export async function ingestPlaceCycle(
   const cells = cellsForPlace(place.name, place.latitude, place.longitude);
   const latitude = Number(place.latitude);
   const longitude = Number(place.longitude);
+  const unavailableHours = unavailableForecastHours();
   const smoke: ModelHour[] = [];
   let lambert: PlaceIngestResult["lambert"] = null;
   for (let lead = 0; lead <= SMOKE_HOUR_END; lead += 1) {
     const message = await fetchHrrrSmokeField(cycleUtc, lead, input.fetchImpl, sql);
     if (!message) continue;
     const point = readLambertPoint(message, latitude, longitude);
+    if (!point) continue;
     if (point.referenceTime !== cycleUtc || point.forecastHour !== lead) {
       throw new V1RuleError(
         "noaa_smoke_parse",
@@ -238,18 +259,31 @@ export async function ingestPlaceCycle(
   let aqf: ModelHour[] = [];
   let aqfError: string | null = null;
   try {
-    const aqfAscii = await fetchNoaaAscii(
-      aqfAsciiUrl({
-        cycleUtc,
-        latIndex: cells.aqm.latIndex,
-        lonIndex: cells.aqm.lonIndex,
-        hourStart: AQF_HOUR_START,
-        hourEnd: AQF_HOUR_END,
-      }),
-      input.fetchImpl,
-      sql,
-    );
-    aqf = parseNoaaAqf(aqfAscii);
+    const decoded: ModelHour[] = [];
+    const messages = await fetchAqmPm25Messages(cycleUtc, input.fetchImpl, sql);
+    for (const { lead, message } of messages) {
+      if (lead < AQM_HOUR_START || lead > AQM_HOUR_END) {
+        throw new V1RuleError("noaa_aqf_parse", "AQM message is outside hours 49 through 72.");
+      }
+      const point = readLambertPoint(message, latitude, longitude, "noaa_aqf_parse");
+      if (!point) continue;
+      const validMs = Date.parse(point.referenceTime) + point.forecastHour * 3_600_000;
+      if (validMs !== Date.parse(cycleUtc) + lead * 3_600_000) {
+        throw new V1RuleError("noaa_aqf_parse", "AQM valid time does not match the lead hour.");
+      }
+      if (
+        point.category !== AQM_PM25.category ||
+        point.parameter !== AQM_PM25.parameter ||
+        point.surfaceType !== AQM_PM25.surfaceType ||
+        Math.abs(point.level - AQM_PM25.level) > 1e-6
+      ) {
+        throw new V1RuleError("noaa_aqf_parse", "AQM field is not surface PM2.5.");
+      }
+      const tenths = aqmTenths(point.value);
+      if (tenths == null) continue;
+      decoded.push({ hour: lead, pm25Tenths: tenths, regionalLowAqi: null });
+    }
+    aqf = decoded;
   } catch (err) {
     aqfError = err instanceof V1RuleError ? err.code : "noaa_fetch_failed";
   }
@@ -275,6 +309,7 @@ export async function ingestPlaceCycle(
       officialStatus: "skipped",
       aqfError,
       airnowError: airnow.code,
+      unavailableHours,
     };
   }
   const official = await storeOfficial(sql, userId, input.placeId, airnow.reading);
@@ -288,6 +323,7 @@ export async function ingestPlaceCycle(
     officialStatus: official.officialStatus,
     aqfError,
     airnowError: null,
+    unavailableHours,
   };
 }
 

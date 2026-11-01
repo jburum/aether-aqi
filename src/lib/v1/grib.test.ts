@@ -26,6 +26,7 @@ import { readLambertPoint, readSimpleGribFields } from "./grib.ts";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "../../..");
 const FIXTURE = join(root, "fixtures/v1/noaa-hrrr-massden-5.3.grib2");
+const AQM_FIXTURE = join(root, "fixtures/v1/noaa-aqm-pm25-4.8.grib2");
 const STABILITY = join(root, "fixtures/v1/noaa-hrrr-stability-f00.grib2");
 const CYCLE = "2026-10-30T12:00:00.000Z";
 const ANCHOR = { latitude: 38.5, longitude: -97.5 };
@@ -113,6 +114,88 @@ function section3(nx: number, ny: number): Uint8Array {
   putSignMag(view, 65, 38.5 * 1e6);
   putSignMag(view, 69, 38.5 * 1e6);
   return sec;
+}
+
+/** Template 4.8. The forecast-time field is the interval start, one hour before `leadEnd`. */
+function section4Interval(leadEnd: number): Uint8Array {
+  const sec = new Uint8Array(58);
+  const view = new DataView(sec.buffer);
+  view.setUint32(0, 58);
+  sec[4] = 4;
+  view.setUint16(7, 8);
+  sec[9] = 13;
+  sec[10] = 193;
+  sec[11] = 2;
+  sec[17] = 1;
+  view.setUint32(18, leadEnd - 1);
+  sec[22] = 1;
+  sec[28] = 255;
+  const end = new Date(Date.parse(CYCLE) + leadEnd * 3_600_000);
+  view.setUint16(34, end.getUTCFullYear());
+  sec[36] = end.getUTCMonth() + 1;
+  sec[37] = end.getUTCDate();
+  sec[38] = end.getUTCHours();
+  sec[41] = 1;
+  sec[46] = 0;
+  sec[47] = 2;
+  sec[48] = 1;
+  view.setUint32(49, 1);
+  sec[53] = 1;
+  view.setUint32(54, 1);
+  return sec;
+}
+
+function replaceSection4(message: Uint8Array, sec4: Uint8Array): Uint8Array {
+  let start = -1;
+  let oldLength = 0;
+  let cursor = 16;
+  while (cursor + 5 < message.length) {
+    const length = new DataView(message.buffer, message.byteOffset + cursor, 4).getUint32(0);
+    if (message[cursor + 4] === 4) {
+      start = cursor;
+      oldLength = length;
+      break;
+    }
+    cursor += length;
+  }
+  if (start < 0) throw new Error("section 4 missing");
+  const out = new Uint8Array(message.length - oldLength + sec4.length);
+  out.set(message.subarray(0, start), 0);
+  out.set(sec4, start);
+  out.set(message.subarray(start + oldLength), start + sec4.length);
+  new DataView(out.buffer).setUint32(12, out.length);
+  return out;
+}
+
+/**
+ * Template 4.8, applied bitmap, template 5.3. Grid 4 by 2.
+ * Bit 0 is masked. Packed values are 1 through 7, so grid index 1 reads packed 0.
+ */
+export function template48Bitmap(): Uint8Array {
+  const sec5 = new Uint8Array(49);
+  const view = new DataView(sec5.buffer);
+  view.setUint32(0, 49);
+  sec5[4] = 5;
+  view.setUint32(5, 7);
+  view.setUint16(9, 3);
+  sec5[21] = 1;
+  view.setUint32(31, 1);
+  view.setUint32(37, 1);
+  sec5[41] = 1;
+  view.setUint32(42, 7);
+  sec5[47] = 2;
+  sec5[48] = 1;
+  const bits = new BitWriter();
+  bits.write(signMag(1, 8), 8);
+  bits.write(signMag(2, 8), 8);
+  bits.write(signMag(0, 8), 8);
+  const data = bits.toUint8Array();
+  const sec7 = new Uint8Array(5 + data.length);
+  new DataView(sec7.buffer).setUint32(0, sec7.length);
+  sec7[4] = 7;
+  sec7.set(data, 5);
+  const sec6 = Uint8Array.from([0x00, 0x00, 0x00, 0x07, 0x06, 0x00, 0x7f]);
+  return finish([section1(CYCLE), section3(4, 2), section4Interval(49), sec5, sec6, sec7]);
 }
 
 function section4(lead = 0): Uint8Array {
@@ -317,6 +400,12 @@ function padSection7(message: Uint8Array, total: number): Uint8Array {
   return out;
 }
 
+function lambert(bytes: Uint8Array, latitude: number, longitude: number, code?: string) {
+  const point = readLambertPoint(bytes, latitude, longitude, code);
+  assert.ok(point);
+  return point;
+}
+
 function cellCenter(i: number, j: number): { latitude: number; longitude: number } {
   const lat1 = (38.5 * Math.PI) / 180;
   const lon0 = (262.5 * Math.PI) / 180;
@@ -369,7 +458,7 @@ describe("v1 grib", () => {
       for (let i = 0; i < 4; i += 1) {
         const scaled = SCALED[j * 4 + i] ?? 0;
         const place = i === 0 && j === 0 ? ANCHOR : cellCenter(i, j);
-        const point = readLambertPoint(message, place.latitude, place.longitude);
+        const point = lambert(message, place.latitude, place.longitude);
         assert.equal(point.referenceTime, CYCLE);
         assert.equal(point.forecastHour, 0);
         assert.equal(point.category, 20);
@@ -395,7 +484,7 @@ describe("v1 grib", () => {
       for (let i = 0; i < 4; i += 1) {
         const scaled = SCALED[j * 4 + i] ?? 0;
         const place = i === 0 && j === 0 ? ANCHOR : cellCenter(i, j);
-        const point = readLambertPoint(message, place.latitude, place.longitude);
+        const point = lambert(message, place.latitude, place.longitude);
         const expected = (1 + scaled * 2) * 10 ** -2;
         assert.ok(Math.abs(point.value - expected) < 1e-12);
         values.push(point.value);
@@ -430,9 +519,9 @@ describe("v1 grib", () => {
     );
 
     const wide = constantSeventeen();
-    assert.equal(readLambertPoint(wide, ANCHOR.latitude, ANCHOR.longitude).value, 2);
+    assert.equal(lambert(wide, ANCHOR.latitude, ANCHOR.longitude).value, 2);
     const padded = padSection7(readFileSync(FIXTURE), 256 * 1024 + 1);
-    const anchor = readLambertPoint(padded, ANCHOR.latitude, ANCHOR.longitude);
+    const anchor = lambert(padded, ANCHOR.latitude, ANCHOR.longitude);
     assert.ok(Math.abs(anchor.value - 0.21) < 1e-12);
 
     const jpeg = liveShapeFixture();
@@ -448,5 +537,58 @@ describe("v1 grib", () => {
       () => readLambertPoint(readFileSync(FIXTURE), 0, 0),
       (err: unknown) => err instanceof V1RuleError && err.code === "noaa_smoke_parse",
     );
+  });
+
+  it("uses the template 4.8 interval end as the valid hour", () => {
+    const message = replaceSection4(liveShapeFixture(), section4Interval(49));
+    const start = section(message, 4);
+    assert.equal(new DataView(start.buffer, start.byteOffset, start.byteLength).getUint16(7), 8);
+    assert.equal(new DataView(start.buffer, start.byteOffset, start.byteLength).getUint32(18), 48);
+    for (let j = 0; j < 2; j += 1) {
+      for (let i = 0; i < 4; i += 1) {
+        const scaled = SCALED[j * 4 + i] ?? 0;
+        const place = i === 0 && j === 0 ? ANCHOR : cellCenter(i, j);
+        const point = lambert(message, place.latitude, place.longitude, "noaa_aqf_parse");
+        assert.equal(point.forecastHour, 49);
+        assert.equal(point.referenceTime, CYCLE);
+        assert.ok(Math.abs(point.value - (1 + scaled * 2) * 10 ** -2) < 1e-12);
+      }
+    }
+  });
+
+  it("decodes the recorded template 4.8 bitmap and does not turn a mask into 0", () => {
+    const message = readFileSync(AQM_FIXTURE);
+    assert.deepEqual(message, Buffer.from(template48Bitmap()));
+    const sec4 = section(message, 4);
+    assert.equal(new DataView(sec4.buffer, sec4.byteOffset, sec4.byteLength).getUint16(7), 8);
+    const sec6 = section(message, 6);
+    assert.equal(sec6[5], 0);
+    assert.equal(
+      readLambertPoint(message, ANCHOR.latitude, ANCHOR.longitude, "noaa_aqf_parse"),
+      null,
+    );
+    const first = lambert(
+      message,
+      cellCenter(1, 0).latitude,
+      cellCenter(1, 0).longitude,
+      "noaa_aqf_parse",
+    );
+    const second = lambert(
+      message,
+      cellCenter(2, 0).latitude,
+      cellCenter(2, 0).longitude,
+      "noaa_aqf_parse",
+    );
+    assert.equal(first.forecastHour, 49);
+    assert.equal(first.category, 13);
+    assert.equal(first.parameter, 193);
+    assert.equal(first.surfaceType, 1);
+    assert.equal(first.level, 0);
+    assert.equal(first.i, 1);
+    assert.equal(first.j, 0);
+    assert.equal(first.value, 1);
+    assert.notEqual(first.value, 0);
+    assert.equal(second.value, 2);
+    assert.equal(second.i, 2);
   });
 });
