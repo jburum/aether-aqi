@@ -51,34 +51,54 @@ function Privacy() {
         </p>
       </Section>
 
-      <Section title="What our server receives">
+      <Section title="What our server receives today">
+        <p>
+          The current {AIRHAPPY.name} iPhone app uses sample forecasts and keeps your places on your
+          phone. It does not send your places, purchases, or alert choices to our server. Today our
+          server receives:
+        </p>
         <List>
           <li>
-            <strong>Places you forecast.</strong> To build a forecast, the app sends a place’s
-            coordinates to our server. If a feature keeps your places on our server (for example, so
-            alerts can be checked while the app is closed), we store each place’s name, coordinates,
-            alert setting, and the forecasts made for it, linked to your account.
+            <strong>Website forecasts and place search.</strong> When you use the website, it sends
+            a place’s coordinates (or the name you search for) through our server to the data
+            sources listed below. Our server passes these on and does not store them.
           </li>
           <li>
-            <strong>Pro subscription status.</strong> When you subscribe, Apple gives the app a
-            signed record of the purchase. We keep which plan you chose (monthly or yearly), when it
-            renews or ends, and whether it is active, so Pro features work. We don’t receive your
-            name, email, or payment details from Apple.
-          </li>
-          <li>
-            <strong>Notifications.</strong> If you turn on alerts and allow notifications, we keep
-            the push token Apple gives your device so we can deliver the alert, and a record of
-            which alerts were sent so you don’t get the same one twice.
-          </li>
-          <li>
-            <strong>Sign-in, if you use it.</strong> If you sign in, we receive the name, email
-            address, and profile picture your sign-in provider shares, and keep a session so you
-            stay signed in.
+            <strong>Sign-in on the website, if you use it.</strong> Sign-in goes through the Grok
+            sign-in service at auth.grok.me, which acts as the login broker. We receive the name,
+            email address, and profile picture it shares, plus the sign-in tokens it issues, and
+            store them in our database with your account. Each session we create also stores the IP
+            address and browser details (user agent) of the device you signed in from.
           </li>
           <li>
             <strong>Server logs.</strong> Our hosting provider records technical details of each
             request (IP address, time, the page or data requested, browser or app version) to keep
             the service running and secure. These logs are not used to build a profile of you.
+          </li>
+        </List>
+      </Section>
+
+      <Section title="Planned: when the app connects to our server">
+        <p>
+          The features below are built on our server but not yet used by the app. When the app
+          starts using them, we will update this policy and tell you in the app first.
+        </p>
+        <List>
+          <li>
+            <strong>Saved places and forecasts.</strong> To check alerts while the app is closed, we
+            would store each saved place’s name, coordinates, alert setting, and the forecasts made
+            for it, linked to your account.
+          </li>
+          <li>
+            <strong>Pro subscription status.</strong> When you subscribe, Apple gives the app a
+            signed record of the purchase. We would keep which plan you chose (monthly or yearly),
+            when it renews or ends, and whether it is active, so Pro works across devices. We don’t
+            receive your name, email, or payment details from Apple.
+          </li>
+          <li>
+            <strong>Notifications.</strong> If you turn on alerts and allow notifications, we would
+            keep the push token Apple gives your device so we can deliver alerts, and a record of
+            which alerts were sent so you don’t get the same one twice.
           </li>
         </List>
       </Section>
@@ -102,6 +122,10 @@ function Privacy() {
           <li>
             <strong>Apple</strong>: App Store purchases, subscriptions, refunds, and push
             notifications.
+          </li>
+          <li>
+            <strong>Grok sign-in (auth.grok.me)</strong>: the login broker for website sign-in. It
+            handles your login and shares your name, email address, and profile picture with us.
           </li>
           <li>
             <strong>Vercel</strong> (hosting) and <strong>Neon</strong> (database): run our server
@@ -136,13 +160,22 @@ function Privacy() {
 
       <Section title="How long we keep it">
         <List>
-          <li>Places and their forecasts: until you delete the place or your account.</li>
-          <li>Subscription status: while you have an account, so a renewal or restore works.</li>
           <li>
-            Push tokens: until you turn alerts off, the token stops working, or you delete your
-            account.
+            Account details (name, email, profile picture, sign-in tokens): until you ask us to
+            delete your account.
+          </li>
+          <li>
+            Sign-in sessions, including their IP address and user agent: removed when you sign out.
+            A session you don’t sign out of expires after about a week without use; expired session
+            records can stay in our database until we clean them up or you ask us to delete them.
           </li>
           <li>Server logs: kept briefly by our hosting provider, then deleted.</li>
+          <li>
+            Planned features: saved places and their forecasts until you delete the place or your
+            account; subscription status while you have an account; push tokens until you delete
+            your account or ask us to remove them. The app can’t yet remove a token on its own when
+            you turn alerts off, so ask us if you want it gone.
+          </li>
         </List>
       </Section>
 
