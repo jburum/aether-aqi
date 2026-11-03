@@ -1,4 +1,4 @@
-# Air Quality Watchlist
+# AirHappy
 
 PWA for tracking **US AQI** across up to **15** locations. Live readings and forecasts from [Open-Meteo](https://open-meteo.com/) (via same-origin API proxies); your list is stored **on each device**.
 

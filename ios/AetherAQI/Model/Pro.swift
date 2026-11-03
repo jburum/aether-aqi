@@ -198,7 +198,7 @@ enum PaywallReason: Equatable, Sendable {
         case .alerts: "Alerts are part of Pro"
         case .places: "More places are part of Pro"
         case .share: "Sharing alerts is part of Pro"
-        case .browse: "Air Quality Forecast Pro"
+        case .browse: "AirHappy Pro"
         }
     }
 }

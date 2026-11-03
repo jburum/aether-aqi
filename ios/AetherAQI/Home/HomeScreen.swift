@@ -91,13 +91,13 @@ struct HomeScreen: View {
     }
 }
 
-/// Placeholder app name from the mockups; the real name is still open (docs/appstore/ROADMAP.md).
+/// The app name, locked as AirHappy on 2026-11-01 (docs/appstore/ROADMAP.md).
 private struct AppTitle: View {
     let soft: RGB
     @ScaledMetric(relativeTo: .footnote) private var size: CGFloat = 13
 
     var body: some View {
-        Text("Air Quality Forecast")
+        Text("AirHappy")
             .font(AppFont.sans(size, weight: 650))
             .foregroundStyle(soft.color)
             .frame(minHeight: 28, alignment: .leading)

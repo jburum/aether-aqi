@@ -36,7 +36,7 @@ function isStandalone(): boolean {
   );
 }
 
-const SHARE_BLURB = `🌬️ Air Quality Watchlist
+const SHARE_BLURB = `🌬️ AirHappy
 Track US AQI for the places you care about.
 
 Open in Safari → Share → Add to Home Screen

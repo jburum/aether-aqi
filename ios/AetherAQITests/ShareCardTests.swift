@@ -101,9 +101,9 @@ struct ShareCardContentTests {
         }
     }
 
-    @Test("No app name: the mockups' placeholder only")
-    func placeholderName() {
-        #expect(AlertShareCard.appLabel == "Air Quality Forecast")
+    @Test("The card carries the app name, AirHappy")
+    func appName() {
+        #expect(AlertShareCard.appLabel == "AirHappy")
     }
 }
 

@@ -10,8 +10,8 @@ import { AuthProvider } from "@/lib/auth/provider";
 import { CreatedWithGrokBanner } from "@/components/created-with-grok-banner";
 import appCss from "../styles.css?url";
 
-const APP_NAME = "Air Quality Watchlist";
-const APP_SHORT = "Air Quality";
+const APP_NAME = "AirHappy";
+const APP_SHORT = "AirHappy";
 const APP_DESCRIPTION =
   "Track and forecast US Air Quality Index for the places you care about. Hourly & daily AQI — installable PWA.";
 /** Canonical site origin for absolute OG/Twitter image URLs (iMessage requires absolute). */
@@ -104,7 +104,7 @@ export const Route = createRootRoute({
       { property: "og:image:height", content: "630" },
       {
         property: "og:image:alt",
-        content: "Air Quality Watchlist app icon — track US AQI forecasts",
+        content: "AirHappy app icon — track US AQI forecasts",
       },
       // --- Twitter / large card fallbacks ---
       { name: "twitter:card", content: "summary_large_image" },
@@ -113,7 +113,7 @@ export const Route = createRootRoute({
       { name: "twitter:image", content: OG_IMAGE },
       {
         name: "twitter:image:alt",
-        content: "Air Quality Watchlist app icon — track US AQI forecasts",
+        content: "AirHappy app icon — track US AQI forecasts",
       },
     ],
     links: [

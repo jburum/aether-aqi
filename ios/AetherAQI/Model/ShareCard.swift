@@ -5,8 +5,8 @@ import Foundation
 
 /// What the card shows for one alert.
 struct AlertShareCard: Equatable, Sendable {
-    /// The app name is still open (docs/appstore/ROADMAP.md): the mockups' placeholder.
-    static let appLabel = "Air Quality Forecast"
+    /// The app name, locked as AirHappy on 2026-11-01 (docs/appstore/ROADMAP.md).
+    static let appLabel = "AirHappy"
     static let forecastNote = "Our forecast, not an official reading."
 
     let placeName: String
