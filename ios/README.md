@@ -75,6 +75,21 @@ is loaded. The scheme lists `empty` and `error`.
 The app's clock is pinned to 2026-10-31 15:00 UTC (9 AM in Boise), three hours into that cycle, so the
 fixture always reads as current.
 
+## Sheet screenshots
+
+Places, Alert settings and the Pro paywall only open with a tap, so `simctl` can't reach them. The
+`AetherAQIUITests` target opens each one (`SheetScreenshots.swift`) on Free with the `good` sample and
+keeps a screenshot. Its own scheme, `AetherAQIScreenshots`, runs it, so the unit test run stays fast.
+
+```sh
+TEST_RUNNER_SCREENSHOT_DIR=/tmp/airhappy-shots \
+xcodebuild -project ios/AetherAQI.xcodeproj -scheme AetherAQIScreenshots \
+  -destination 'platform=iOS Simulator,name=iPhone 17e' test
+```
+
+It writes `sheet-places.png`, `sheet-alert-settings.png` and `sheet-paywall.png` to that folder (it must
+exist), and attaches the same images to the test result. On a 390x844 iPhone they are 1170x2532.
+
 ## The 48-hour timeline
 
 - **What it plots:** one bar per hour of our corrected NOAA smoke forecast, from the current hour to the 48-hour lead. It is cut the same way as `classifyForecastLead` in `src/lib/v1/rules.ts`: hour 48 is in, anything after it is out.
@@ -243,7 +258,7 @@ The card (`AlertShareCardView`, built from `AlertShareCard`) shows:
 
 When the place has an AirNow reading, it sits in its own panel. That panel uses plain digits, is marked Preliminary, and carries the EPA credit, as on the home screen.
 
-The only name on the card is the mockups' "Air Quality Forecast" placeholder.
+The only name on the card is the app's, AirHappy.
 
 The corrected peak is the alert's `peakAqi` (docs/v1/ALERTS.md, #21). An alert driven by AirNow has `peakAqi` null, so the card shows no corrected number for it and takes its color from the severity. The official number only ever appears in the AirNow panel.
 
@@ -269,6 +284,6 @@ The corrected peak is the alert's `peakAqi` (docs/v1/ALERTS.md, #21). An alert d
 
 ## Placeholders
 
-- **App name and bundle ID.** The name "Air Quality Forecast" and the bundle ID `com.example.aetheraqi` are placeholders. Both are still open in `docs/appstore/ROADMAP.md`.
+- **Bundle ID.** The app is named AirHappy, but the bundle ID `com.example.aetheraqi` is still a placeholder. It is open in `docs/appstore/ROADMAP.md`.
 - **App icon.** There is none yet.
 - **Alert delivery.** Alert settings only save the person's choice on the phone. Notifications, the permission prompt and push wait for a later slice.

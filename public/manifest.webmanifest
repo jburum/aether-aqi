@@ -1,6 +1,6 @@
 {
-  "name": "Air Quality Watchlist",
-  "short_name": "Air Quality",
+  "name": "AirHappy",
+  "short_name": "AirHappy",
   "description": "Track and forecast US Air Quality Index for the places you care about. Hourly & daily AQI — installable PWA.",
   "id": "/",
   "start_url": "/",

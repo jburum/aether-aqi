@@ -342,8 +342,8 @@ export function AirQualityApp() {
         <div className="space-y-1">
           <div className="flex items-center gap-2 text-muted">
             <Wind className="size-4" />
-            <span className="text-xs font-medium uppercase tracking-[0.14em]">
-              Air quality
+            <span className="text-sm font-semibold tracking-tight">
+              AirHappy
             </span>
           </div>
           <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">

@@ -14,11 +14,19 @@
 			remoteGlobalIDString = AE0000000000000000000101;
 			remoteInfo = AetherAQI;
 		};
+		AE0000000000000000000303 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AE0000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AE0000000000000000000101;
+			remoteInfo = AetherAQI;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		AE0000000000000000000011 /* AetherAQI.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AetherAQI.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AE0000000000000000000012 /* AetherAQITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AetherAQITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		AE0000000000000000000013 /* AetherAQIUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AetherAQIUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -30,6 +38,11 @@
 		AE0000000000000000000022 /* AetherAQITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = AetherAQITests;
+			sourceTree = "<group>";
+		};
+		AE0000000000000000000023 /* AetherAQIUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = AetherAQIUITests;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -49,6 +62,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		AE0000000000000000000221 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -57,6 +77,7 @@
 			children = (
 				AE0000000000000000000021 /* AetherAQI */,
 				AE0000000000000000000022 /* AetherAQITests */,
+				AE0000000000000000000023 /* AetherAQIUITests */,
 				AE0000000000000000000003 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -66,6 +87,7 @@
 			children = (
 				AE0000000000000000000011 /* AetherAQI.app */,
 				AE0000000000000000000012 /* AetherAQITests.xctest */,
+				AE0000000000000000000013 /* AetherAQIUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -114,6 +136,27 @@
 			productReference = AE0000000000000000000012 /* AetherAQITests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		AE0000000000000000000103 /* AetherAQIUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AE0000000000000000000504 /* Build configuration list for PBXNativeTarget "AetherAQIUITests" */;
+			buildPhases = (
+				AE0000000000000000000220 /* Sources */,
+				AE0000000000000000000221 /* Frameworks */,
+				AE0000000000000000000222 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				AE0000000000000000000304 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				AE0000000000000000000023 /* AetherAQIUITests */,
+			);
+			name = AetherAQIUITests;
+			productName = AetherAQIUITests;
+			productReference = AE0000000000000000000013 /* AetherAQIUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -128,6 +171,10 @@
 						CreatedOnToolsVersion = 16.0;
 					};
 					AE0000000000000000000102 = {
+						CreatedOnToolsVersion = 16.0;
+						TestTargetID = AE0000000000000000000101;
+					};
+					AE0000000000000000000103 = {
 						CreatedOnToolsVersion = 16.0;
 						TestTargetID = AE0000000000000000000101;
 					};
@@ -149,6 +196,7 @@
 			targets = (
 				AE0000000000000000000101 /* AetherAQI */,
 				AE0000000000000000000102 /* AetherAQITests */,
+				AE0000000000000000000103 /* AetherAQIUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -162,6 +210,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		AE0000000000000000000212 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AE0000000000000000000222 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -185,6 +240,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		AE0000000000000000000220 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -192,6 +254,11 @@
 			isa = PBXTargetDependency;
 			target = AE0000000000000000000101 /* AetherAQI */;
 			targetProxy = AE0000000000000000000301 /* PBXContainerItemProxy */;
+		};
+		AE0000000000000000000304 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AE0000000000000000000101 /* AetherAQI */;
+			targetProxy = AE0000000000000000000303 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -250,7 +317,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "Air Quality Forecast";
+				INFOPLIST_KEY_CFBundleDisplayName = AirHappy;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
@@ -276,7 +343,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "Air Quality Forecast";
+				INFOPLIST_KEY_CFBundleDisplayName = AirHappy;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
@@ -331,6 +398,40 @@
 			};
 			name = Release;
 		};
+		AE0000000000000000000431 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.aetheraqi.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_TARGET_NAME = AetherAQI;
+			};
+			name = Debug;
+		};
+		AE0000000000000000000432 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.aetheraqi.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_TARGET_NAME = AetherAQI;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -357,6 +458,15 @@
 			buildConfigurations = (
 				AE0000000000000000000421 /* Debug */,
 				AE0000000000000000000422 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AE0000000000000000000504 /* Build configuration list for PBXNativeTarget "AetherAQIUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AE0000000000000000000431 /* Debug */,
+				AE0000000000000000000432 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
