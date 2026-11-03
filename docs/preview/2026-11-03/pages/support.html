@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- DRAFT, not deployed. Same copy as the web app's /support route (src/routes/support.tsx, PR #42). -->
+<meta name="robots" content="noindex">
+<title>Support · AirHappy</title>
+<meta name="description" content="Help with AirHappy: where the air forecast comes from, Free and Pro, subscriptions, location, alerts, and how to reach us.">
+<link rel="stylesheet" href="pages.css">
+</head>
+<body>
+<main>
+  <header>
+    <p class="brand">AirHappy</p>
+    <h1>Support</h1>
+  </header>
+
+  <p>AirHappy answers one question: <strong>When is it safe to be outside today?</strong> It forecasts smoke and air quality hour by hour for the places you save, picks the cleanest window to be outside, and tells you when smoke, an inversion, or ozone is on the way.</p>
+
+  <section>
+    <h2>Contact us</h2>
+    <p>Email <a href="mailto:support@airhappy.app?subject=AirHappy%20support">support@airhappy.app</a>. We usually reply within two business days.</p>
+    <p>To help us fix a problem quickly, please include:</p>
+    <ul>
+      <li>Your iPhone model and iOS version (Settings → General → About).</li>
+      <li>The AirHappy version, if you know it.</li>
+      <li>The place you were looking at, and what you expected to see.</li>
+      <li>A screenshot, if you can.</li>
+    </ul>
+    <p class="muted">Please don’t send health information. We can’t give medical advice.</p>
+  </section>
+
+  <section>
+    <h2>Where does the forecast come from?</h2>
+    <p>AirHappy uses public data from U.S. agencies and corrects it for your valley:</p>
+    <ul>
+      <li><strong>Today and tomorrow:</strong> NOAA’s smoke model at valley scale, the most detailed forecast available for wildfire smoke.</li>
+      <li><strong>Days 3 to 7:</strong> NOAA’s air quality forecast, or a regional outlook marked as low confidence when that is all there is.</li>
+      <li><strong>Right now:</strong> the latest official reading from the U.S. EPA AirNow program, shown beside the forecast, credited to AirNow, and marked preliminary.</li>
+    </ul>
+    <p>The forecast and the official reading are always shown as two separate numbers. They can differ: the forecast is for the hour ahead at your place, and the official reading is the last hour measured at the nearest monitor.</p>
+  </section>
+
+  <section>
+    <h2>Is it safe for me to go outside?</h2>
+    <p>AirHappy shows the air forecast and the U.S. Air Quality Index category for each hour. It is <strong>not medical advice</strong>. Forecasts can be wrong, especially when a fire changes quickly. If you have asthma, heart or lung disease, are pregnant, or are caring for children or older adults, follow your doctor’s advice and local health alerts. In an emergency, call 911.</p>
+  </section>
+
+  <section>
+    <h2>Free and Pro</h2>
+    <ul>
+      <li><strong>Free:</strong> one saved place, with current air, the 48-hour timeline, the best window to be outside, and the week’s outlook.</li>
+      <li><strong>Pro:</strong> up to five saved places, plus smoke, inversion, and ozone alerts. $1.99 a month or $12.99 a year (U.S. prices; Apple shows the price in your currency).</li>
+    </ul>
+    <p>If Pro ends, your saved places stay. You keep full access to your first place, and the others open again when you renew.</p>
+  </section>
+
+  <section id="subscriptions">
+    <h2>Manage or cancel your subscription</h2>
+    <p>Pro is an auto-renewing subscription billed by Apple through your Apple Account. It renews unless you turn it off at least 24 hours before the end of the current period.</p>
+    <ul>
+      <li><strong>Cancel or change plans:</strong> on your iPhone, open Settings → your name → Subscriptions → AirHappy.</li>
+      <li><strong>Restore Pro on a new phone:</strong> open AirHappy, go to Pro, and tap Restore purchases. Use the same Apple Account you subscribed with.</li>
+      <li><strong>Refunds:</strong> Apple handles refunds. Request one at <a href="https://reportaproblem.apple.com" rel="noopener noreferrer">reportaproblem.apple.com</a>. We can’t issue refunds ourselves.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Location</h2>
+    <p>You can add a place by searching for it or picking from the list. You don’t have to share your location. If you choose to use your current location, AirHappy asks for permission only while the app is open, and only uses it to find the air for that spot. You can change this any time in Settings → Privacy &amp; Security → Location Services → AirHappy.</p>
+  </section>
+
+  <section>
+    <h2>Alerts</h2>
+    <p>Every alert is off until you turn it on. Alerts are part of Pro. To stop notifications, turn the alert off in the app, or go to Settings → Notifications → AirHappy.</p>
+  </section>
+
+  <section>
+    <h2>Your data</h2>
+    <p>AirHappy has no ads and no tracking. To ask for a copy of your data or have it deleted, email <a href="mailto:support@airhappy.app?subject=AirHappy%20data%20request">support@airhappy.app</a>. The <a href="privacy.html">Privacy Policy</a> explains what is kept and why.</p>
+  </section>
+
+  <footer>
+    <a href="support.html">Support</a>
+    <a href="privacy.html">Privacy Policy</a>
+    <a href="terms.html">Terms of Use</a>
+    <a href="mailto:support@airhappy.app">support@airhappy.app</a>
+    <span>© 2026 BBCVC LLC</span>
+  </footer>
+</main>
+</body>
+</html>

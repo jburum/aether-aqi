@@ -90,6 +90,12 @@ xcodebuild -project ios/AetherAQI.xcodeproj -scheme AetherAQIScreenshots \
 It writes `sheet-places.png`, `sheet-alert-settings.png` and `sheet-paywall.png` to that folder (it must
 exist), and attaches the same images to the test result. On a 390x844 iPhone they are 1170x2532.
 
+`PreviewScreens.swift` in the same target captures every screen the app has (home states, sheets,
+paywalls, Add a place and the share sheet on the Pro stub) as `01-…` to `16-…`. It made the set in
+`docs/preview/2026-11-03/`. Run only it with `-only-testing:AetherAQIUITests/PreviewScreens
+-skip-testing:AetherAQIUITests/PreviewScreens/testMainFlow`. `testMainFlow` takes no screenshots: it
+walks the main flow at a steady pace for a `simctl io <device> recordVideo` screen recording.
+
 ## The 48-hour timeline
 
 - **What it plots:** one bar per hour of our corrected NOAA smoke forecast, from the current hour to the 48-hour lead. It is cut the same way as `classifyForecastLead` in `src/lib/v1/rules.ts`: hour 48 is in, anything after it is out.
