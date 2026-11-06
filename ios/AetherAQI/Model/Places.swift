@@ -247,7 +247,10 @@ final class PlacesModel {
         // By location only: a place renamed to another place's name keeps its own zone and region.
         let match = candidates.first { $0.isSameLocation(as: saved) }
         let zone = match.flatMap { TimeZone(identifier: $0.timeZone) } ?? TimeZone(identifier: "America/Boise")!
-        return Place(id: saved.id, name: saved.name, region: match?.region ?? "Idaho", timeZone: zone)
+        return Place(
+            id: saved.id, name: saved.name, region: match?.region ?? "Idaho", timeZone: zone,
+            latitude: saved.latitude, longitude: saved.longitude
+        )
     }
 
     func load() async {

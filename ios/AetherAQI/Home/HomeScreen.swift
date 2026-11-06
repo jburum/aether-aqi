@@ -225,6 +225,14 @@ private struct CurrentAir: View {
 
             Spacer(minLength: 16)
 
+            if let credit = snapshot.credit {
+                Text(credit)
+                    .font(AppFont.sans(small13, weight: 500))
+                    .foregroundStyle(soft.color)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.bottom, 10)
+            }
+
             OfficialCard(reading: snapshot.official, place: snapshot.place, soft: soft)
         }
     }

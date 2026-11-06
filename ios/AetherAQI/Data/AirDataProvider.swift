@@ -1,6 +1,6 @@
 import Foundation
 
-/// Where the home screen gets its air. Only sample and fixture providers exist so far: no network, no keys.
+/// Where the home screen gets its air: sample and fixture providers, and `OpenMeteoAirProvider` (keyless, live).
 protocol AirDataProvider: Sendable {
     /// The home screen for `place` (the active saved place), or nil when there is no air for it yet.
     func homeSnapshot(for place: Place) async throws -> HomeSnapshot?
@@ -157,7 +157,8 @@ struct SampleAirProvider: AirDataProvider {
     static let now = issuedAt
     static let tamarack = Place(
         id: LocalPlacesProvider.tamarack.id, name: LocalPlacesProvider.tamarack.name, region: "Idaho",
-        timeZone: TimeZone(identifier: "America/Boise")!
+        timeZone: TimeZone(identifier: "America/Boise")!,
+        latitude: LocalPlacesProvider.tamarack.latitude, longitude: LocalPlacesProvider.tamarack.longitude
     )
 
     /// The same sample numbers for every place: the place's name and zone change, the air does not.

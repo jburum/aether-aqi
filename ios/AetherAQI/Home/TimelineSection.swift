@@ -112,6 +112,9 @@ struct TimelineSection: View {
     private func caption(_ timeline: ForecastTimeline) -> String {
         let issued = HourLabel.dayAndHour(timeline.issuedAt, in: place.timeZone)
         var text = "NOAA smoke model, corrected for the valley. Issued \(issued)."
+        if case .loaded(let snapshot) = model.state, snapshot.credit != nil {
+            text = "Open-Meteo air quality model (live). From \(issued)."
+        }
         if model.selectableLeads.map({ range in timeline.missingLeads.contains(where: range.contains) }) == true {
             text += " Gaps are hours with no forecast."
         }

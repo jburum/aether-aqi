@@ -6,6 +6,9 @@ struct Place: Equatable, Sendable {
     let region: String
     /// Times on screen are the place's local time, not the phone's.
     let timeZone: TimeZone
+    /// Where the place is, for a live provider. Sample data doesn't need it.
+    var latitude: Double? = nil
+    var longitude: Double? = nil
 }
 
 /// How far our forecast can see (matches `confidence` in src/lib/v1/types.ts).
@@ -48,4 +51,6 @@ struct HomeSnapshot: Equatable, Sendable {
     let now: CorrectedForecast
     /// Nil when there is no nearby AirNow monitor or it has not reported.
     let official: OfficialReading?
+    /// Where the numbers came from, shown under the outlook when the data isn't ours (Open-Meteo asks for credit).
+    var credit: String? = nil
 }

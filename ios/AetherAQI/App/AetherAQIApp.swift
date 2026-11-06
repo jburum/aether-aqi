@@ -13,6 +13,31 @@ struct AetherAQIApp: App {
         return FixturePurchaseProvider(startingPro: ProStub.isOn(defaults))
     }
 
+    /// Live Open-Meteo air in the internal TestFlight build (Release, `LIVE_OPEN_METEO`), or with
+    /// `-AQIData live` at launch; otherwise the sample provider and its pinned clock.
+    static func usesLiveAir(_ defaults: UserDefaults = .standard) -> Bool {
+        #if LIVE_OPEN_METEO
+        true
+        #else
+        defaults.string(forKey: "AQIData") == "live"
+        #endif
+    }
+
+    @MainActor static func homeModel() -> HomeModel {
+        let sample = SampleAirProvider(
+            scenario: .fromLaunchArguments(),
+            timeline: .fromLaunchArguments(),
+            outlookScenario: .fromLaunchArguments(),
+            alertsScenario: .fromLaunchArguments()
+        )
+        if usesLiveAir() {
+            // Sample alerts would show a fake smoke alert "now" beside live numbers, so live starts with none.
+            let rest = SampleAirProvider(delay: .zero, alertsScenario: .empty)
+            return HomeModel(provider: OpenMeteoAirProvider(sample: rest), now: { Date() })
+        }
+        return HomeModel(provider: sample, now: { SampleAirProvider.now })
+    }
+
     var body: some Scene {
         WindowGroup {
             // Sample data only. Pick a screen with `-AQIScenario good|moderate|usg|unhealthy|very|hazardous|empty|error|loading`
@@ -23,15 +48,7 @@ struct AetherAQIApp: App {
             // Saved places live on this phone (LocalPlacesProvider); pick from the bundled Idaho list.
             // `-AQIProStub YES` turns on the local Pro stub (more than one place). No StoreKit.
             HomeScreen(
-                model: HomeModel(
-                    provider: SampleAirProvider(
-                        scenario: .fromLaunchArguments(),
-                        timeline: .fromLaunchArguments(),
-                        outlookScenario: .fromLaunchArguments(),
-                        alertsScenario: .fromLaunchArguments()
-                    ),
-                    now: { SampleAirProvider.now }
-                ),
+                model: Self.homeModel(),
                 places: PlacesModel(
                     provider: LocalPlacesProvider(),
                     candidates: (try? IdahoPlaces.decode(BundledFixture.data(named: IdahoPlaces.fixtureName))) ?? [],
