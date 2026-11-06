@@ -15,6 +15,8 @@ These in-repo lines are stale. They stay where they are so the citations still m
 
 `IOS-PLAN.md` line 50, verbatim on #4: "Remote push is not required for v1."
 
+**Resolved 2026-11-06.** The App Store docs rewrite replaced both lines. The roadmap records the launch data stack, and the plan puts push in v1 alert delivery. The line numbers above refer to the older files.
+
 The website `GET /api/aqi` and `GET /api/geocode` Open-Meteo proxies are unchanged. The on-device watchlist cap stays 15 (`src/lib/locations-store.ts`). The new server list is capped at 5.
 
 ## Data rules

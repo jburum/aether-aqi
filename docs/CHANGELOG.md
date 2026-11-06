@@ -2,6 +2,15 @@
 
 Newest first.
 
+## 2026-11-06 — App Store docs follow internal TestFlight (docs only)
+
+- `docs/appstore/` now records what was decided: the name AirHappy (App Store Connect record “AirHappy by BBCVC”), bundle ID `dev.bbcvc.airhappy`, the BBCVC team, the icon, exempt encryption, Pro pricing, and the launch data stack from the v1 plan.
+- Internal TestFlight builds 0.1 (1)–(3) are listed. Build 3 has live Open-Meteo air at Tamarack (testing only) and Pro unlocked. The public App Store stays on hold.
+- The 2026-10-29 aspirations stay as future intent: widget, map (v1.1), AQI threshold alerts, location, search, background refresh, iPad, Watch and TV. Remote push is part of v1 alert delivery, as the v1 plan has it.
+- Resolves the drift noted in `v1/WEEK1.md`: the roadmap no longer says the data stack is open, and the plan no longer says push is not v1.
+- New: `appstore/BACKLOG.md`, `appstore/IOS-PLAN.md`, and the 2026-09-29 website audit `appstore/AUDIT.md`. The listing draft stays in `appstore/AIRHAPPY-LISTING.md`.
+- No app, production, DNS, or Vercel changes.
+
 ## 2026-10-30 — v1 week 1 forecast store and test push
 
 ### Product

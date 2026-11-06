@@ -1,8 +1,8 @@
-# Publishing to the Apple App Store (free app)
+# Publishing to the Apple App Store (superseded Capacitor note)
 
 Last updated: 2026-08-05
 
-> Superseded for v1 scope by [appstore/ROADMAP.md](./appstore/ROADMAP.md). That file is not on `main`; it lives on #4 (`keel/appstore-docs-k1`) and the copy on this branch no longer says the website map stays. The website map was removed 2026-10-30. iOS map is **v1.1**. This page is the older Capacitor sketch.
+> **Superseded.** Do not wrap the site in Capacitor or any WebView. The iOS app is **AirHappy**, a native SwiftUI app (`dev.bbcvc.airhappy`) in internal TestFlight. See [appstore/ROADMAP.md](./appstore/ROADMAP.md) and [appstore/IOS-PLAN.md](./appstore/IOS-PLAN.md). The free price, example name and example bundle ID below are the old note, not decisions. The website map was removed 2026-10-30; the iOS map is **v1.1**.
 
 This app is a **PWA** (React / Vite / Vercel). Apple does **not** accept a pure website URL as an App Store app. You ship a thin **native shell** that loads your web app (and optionally offline assets). Recommended path: **Capacitor**.
 

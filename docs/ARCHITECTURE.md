@@ -122,4 +122,4 @@ The website proxies above are unchanged. The v1 launch feed is the week-1 store 
 
 Removed from the website on 2026-10-30. There is no `/map` route, no MapLibre dependency, and no `/api/aqi-grid`. List AQI stays on React Query `["aqi", id, lat, lon]` via `GET /api/aqi`.
 
-iOS map is **v1.1**, not in the first binary. The scope note is [appstore/ROADMAP.md](./appstore/ROADMAP.md), which is on #4 (`keel/appstore-docs-k1`) and updated on this branch. Older Capacitor notes: [IOS-APP-STORE.md](./IOS-APP-STORE.md).
+iOS map is **v1.1**, not in the first binary. The scope note is [appstore/ROADMAP.md](./appstore/ROADMAP.md). Older Capacitor notes: [IOS-APP-STORE.md](./IOS-APP-STORE.md).
