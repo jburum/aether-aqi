@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import AetherAQI
 
-private let boise = SampleAirProvider.boise
+private let sample = SampleAirProvider.tamarack
 
 /// Date formats put a narrow no-break space before AM/PM; compare with plain spaces.
 private func plain(_ text: String) -> String {
@@ -33,7 +33,7 @@ struct BestWindowTests {
         guard case .window(let raw) = response.bestWindow else { Issue.record("expected a window"); return }
         #expect(raw.band == .good)
         #expect(raw.peakCorrectedAqi == 50)
-        let display = BestWindowDisplay(response, place: boise)
+        let display = BestWindowDisplay(response, place: sample)
         // 15:00Z to 03:00Z is 9 AM to 9 PM in Boise (MDT), the same Saturday as asOf.
         guard case .window(let span, let level, let peak, let sources) = display.state else { Issue.record("expected a window"); return }
         #expect(plain(span) == "9 AM to 9 PM")
@@ -46,7 +46,7 @@ struct BestWindowTests {
 
     @Test("A window into the next day names the day it ends on")
     func windowAcrossMidnight() throws {
-        let display = BestWindowDisplay(try loadWindow("boise-best-window-weekday"), place: boise)
+        let display = BestWindowDisplay(try loadWindow("boise-best-window-weekday"), place: sample)
         // 03:00Z Nov 5 is 8 PM Wednesday in Boise (MST); 19:00Z is noon Thursday.
         guard case .window(let span, _, _, _) = display.state else { Issue.record("expected a window"); return }
         #expect(plain(span) == "8 PM to Thu 12 PM")
@@ -56,7 +56,7 @@ struct BestWindowTests {
     func noneWindow() throws {
         let response = try loadWindow("boise-best-window-none")
         #expect(response.bestWindow == .none)
-        let display = BestWindowDisplay(response, place: boise)
+        let display = BestWindowDisplay(response, place: sample)
         #expect(display.state == .none)
         #expect(display.accessibilityLabel.contains("no forecast hours"))
     }
@@ -78,7 +78,7 @@ struct BestWindowTests {
 struct OutlookTests {
     @Test("A day past 48 hours is regional and low-confidence, never valley")
     func lowConfidenceDay() throws {
-        let display = OutlookDisplay(try loadOutlook("boise-outlook-weekday"), fallbackZone: boise.timeZone)
+        let display = OutlookDisplay(try loadOutlook("boise-outlook-weekday"), fallbackZone: sample.timeZone)
         guard case .summary(let worst, let typical, let level, let valley) = display.saturday.state else {
             Issue.record("expected a Saturday summary"); return
         }
@@ -106,7 +106,7 @@ struct OutlookTests {
 
     @Test("A \"no data\" day gets the empty state")
     func noDataDay() throws {
-        let display = OutlookDisplay(try loadOutlook("boise-outlook-weekday"), fallbackZone: boise.timeZone)
+        let display = OutlookDisplay(try loadOutlook("boise-outlook-weekday"), fallbackZone: sample.timeZone)
         #expect(display.sunday.state == .noData)
         #expect(display.sunday.relation == "Sunday")
         #expect(display.sunday.accessibilityLabel.contains("no forecast yet"))
@@ -114,7 +114,7 @@ struct OutlookTests {
 
     @Test("On Saturday, the weekend is today and tomorrow")
     func weekendFromSaturday() throws {
-        let display = OutlookDisplay(try loadOutlook("boise-outlook-weekend"), fallbackZone: boise.timeZone)
+        let display = OutlookDisplay(try loadOutlook("boise-outlook-weekend"), fallbackZone: sample.timeZone)
         #expect(display.saturday.relation == "Today")
         #expect(display.sunday.relation == "Tomorrow")
         #expect(display.tomorrow.relation == "Tomorrow")
@@ -131,7 +131,7 @@ struct OutlookTests {
          "weekend":{"saturday":\(dayJSON("2026-10-31", "saturday", summary: valleySummary)),
                     "sunday":\(dayJSON("2026-11-01", "sunday", summary: valleySummary))}}
         """
-        let display = OutlookDisplay(try StoreJSON.decoder().decode(OutlookResponse.self, from: Data(json.utf8)), fallbackZone: boise.timeZone)
+        let display = OutlookDisplay(try StoreJSON.decoder().decode(OutlookResponse.self, from: Data(json.utf8)), fallbackZone: sample.timeZone)
         #expect(display.saturday.relation == "Yesterday")
         #expect(display.sunday.relation == "Today")
         #expect(display.tomorrow.relation == "Tomorrow")
@@ -183,7 +183,7 @@ struct WindowOutlookModelTests {
 
     @Test("A none window and a weekday outlook")
     func noneAndWeekday() async {
-        #expect(await model(.none).bestWindowState == .loaded(BestWindowDisplay(try! loadWindow("boise-best-window-none"), place: boise)))
+        #expect(await model(.none).bestWindowState == .loaded(BestWindowDisplay(try! loadWindow("boise-best-window-none"), place: sample)))
         guard case .loaded(let outlook) = await model(.weekday).outlookState else { Issue.record("no outlook"); return }
         #expect(outlook.sunday.state == .noData)
     }

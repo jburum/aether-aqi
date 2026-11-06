@@ -72,11 +72,17 @@ protocol SavedPlacesProvider: Sendable {
     func delete(id: String) async throws
 }
 
-/// Saved places in UserDefaults on this phone, as JSON in the API's shape. First run starts with Boise.
-/// The 5-place cap is enforced here too, as the server's trigger does.
+/// Saved places in UserDefaults on this phone, as JSON in the API's shape. First run starts with Tamarack
+/// Resort (Donnelly). The 5-place cap is enforced here too, as the server's trigger does.
 final class LocalPlacesProvider: SavedPlacesProvider, @unchecked Sendable {
     static let storageKey = "places.saved.v1"
-    static let boise = SavedPlace(
+    /// At the resort, the same spot as the "Tamarack Resort" entry in idaho-places.json.
+    static let tamarack = SavedPlace(
+        id: "place_tamarack_resort", name: "Tamarack Resort", latitude: 44.671, longitude: -116.117,
+        valley: "Long Valley", alertAt: nil, position: 0, createdAt: Date(timeIntervalSince1970: 1_793_448_000)
+    )
+    /// The first-run place of TestFlight build 1. A list that is still exactly this becomes Tamarack Resort.
+    static let legacyBoise = SavedPlace(
         id: "place_boise", name: "Boise", latitude: 43.615, longitude: -116.202, valley: "Treasure Valley",
         alertAt: nil, position: 0, createdAt: Date(timeIntervalSince1970: 1_793_448_000)
     )
@@ -132,8 +138,9 @@ final class LocalPlacesProvider: SavedPlacesProvider, @unchecked Sendable {
     }
 
     private func load() -> [SavedPlace] {
-        guard let data = defaults.data(forKey: Self.storageKey) else { return [Self.boise] }
-        let places = (try? StoreJSON.decoder().decode([SavedPlace].self, from: data)) ?? [Self.boise]
+        guard let data = defaults.data(forKey: Self.storageKey) else { return [Self.tamarack] }
+        let places = (try? StoreJSON.decoder().decode([SavedPlace].self, from: data)) ?? [Self.tamarack]
+        if places == [Self.legacyBoise] { return [Self.tamarack] }
         return places.sorted { $0.position < $1.position }
     }
 
@@ -154,11 +161,17 @@ enum IdahoPlaces {
 }
 
 /// Pro, as a local stub only: no StoreKit, no paywall. `-AQIProStub YES` at launch turns it on.
+/// The internal TestFlight build (Release, `INTERNAL_PRO_UNLOCK`) starts with it on, so Jason can try Pro
+/// without buying; the fixture store behind it never charges.
 enum ProStub {
     static let launchKey = "AQIProStub"
 
     static func isOn(_ defaults: UserDefaults = .standard) -> Bool {
+        #if INTERNAL_PRO_UNLOCK
+        true
+        #else
         defaults.bool(forKey: launchKey)
+        #endif
     }
 }
 

@@ -53,7 +53,7 @@ final class HomeModel {
     /// The active saved place the screen shows. Nil (no saved place) is the empty state.
     private(set) var place: Place?
 
-    init(provider: any AirDataProvider, now: @escaping @Sendable () -> Date = { Date() }, place: Place? = SampleAirProvider.boise) {
+    init(provider: any AirDataProvider, now: @escaping @Sendable () -> Date = { Date() }, place: Place? = SampleAirProvider.tamarack) {
         self.provider = provider
         self.now = now
         self.place = place

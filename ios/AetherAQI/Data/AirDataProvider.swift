@@ -137,7 +137,8 @@ enum SampleAlerts: String, CaseIterable, Sendable {
     }
 }
 
-/// Fixed sample data for Boise, Idaho. Our corrected number and the AirNow reading differ on purpose,
+/// Fixed sample data, shown for Tamarack Resort (Donnelly, Idaho) on first run. The numbers were recorded
+/// for Boise (the fixture files keep that name). Our corrected number and the AirNow reading differ on purpose,
 /// so a screen that mixes them up is easy to spot.
 struct SampleAirProvider: AirDataProvider {
     var scenario: SampleScenario = .good
@@ -154,9 +155,12 @@ struct SampleAirProvider: AirDataProvider {
     /// The sample clock: 15:00Z, three hours into the fixture's 12Z NOAA cycle.
     static let issuedAt = Date(timeIntervalSince1970: 1_793_458_800) // 2026-10-31T15:00:00Z
     static let now = issuedAt
-    static let boise = Place(id: "place_boise", name: "Boise", region: "Idaho", timeZone: TimeZone(identifier: "America/Boise")!)
+    static let tamarack = Place(
+        id: LocalPlacesProvider.tamarack.id, name: LocalPlacesProvider.tamarack.name, region: "Idaho",
+        timeZone: TimeZone(identifier: "America/Boise")!
+    )
 
-    /// Sample numbers are Boise's for every place: the place's name and zone change, the air does not.
+    /// The same sample numbers for every place: the place's name and zone change, the air does not.
     func homeSnapshot(for place: Place) async throws -> HomeSnapshot? {
         if scenario == .loading {
             try await Task.sleep(for: .seconds(60 * 60 * 24))
@@ -242,7 +246,7 @@ struct SampleAirProvider: AirDataProvider {
         }
     }
 
-    static func snapshot(ours: Int, official: Int?, pollutant: String, place: Place = boise) -> HomeSnapshot {
+    static func snapshot(ours: Int, official: Int?, pollutant: String, place: Place = tamarack) -> HomeSnapshot {
         HomeSnapshot(
             place: place,
             now: CorrectedForecast(aqi: ours, pollutant: pollutant, validFor: issuedAt, issuedAt: issuedAt, confidence: .valley),

@@ -2,10 +2,10 @@ import Foundation
 import Testing
 @testable import AetherAQI
 
-private let boise = SampleAirProvider.boise
+private let sample = SampleAirProvider.tamarack
 
 private func loadAlerts(_ name: String) throws -> AlertsDisplay {
-    AlertsDisplay(try StoreJSON.decoder().decode(AlertsResponse.self, from: Fixture.data(named: name)), fallbackZone: boise.timeZone)
+    AlertsDisplay(try StoreJSON.decoder().decode(AlertsResponse.self, from: Fixture.data(named: name)), fallbackZone: sample.timeZone)
 }
 
 /// Date formats put a narrow no-break space before AM/PM; compare with plain spaces.
@@ -77,7 +77,7 @@ struct AlertsFixtureTests {
          {"kind":"ozone","fired":true,"status":"upcoming","start":"2026-11-03T20:00:00.000Z","end":"2026-11-03T23:00:00.000Z","severity":"elevated","source":"noaa_aqf","confidence":"low","reason":"odd"}
         ]}
         """
-        let alerts = AlertsDisplay(try StoreJSON.decoder().decode(AlertsResponse.self, from: Data(json.utf8)), fallbackZone: boise.timeZone)
+        let alerts = AlertsDisplay(try StoreJSON.decoder().decode(AlertsResponse.self, from: Data(json.utf8)), fallbackZone: sample.timeZone)
         #expect(alerts.rows.map(\.reason) == ["odd"])
         #expect(alerts.rows.first?.lowConfidence == true)
     }

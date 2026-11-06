@@ -9,7 +9,7 @@ final class SheetScreenshots: XCTestCase {
     override func setUp() {
         continueAfterFailure = false
         app = XCUIApplication()
-        // Sample Boise data on Free, so a switch in Alert settings opens the paywall.
+        // Sample data (Tamarack Resort) on Free, in a Debug build, so a switch in Alert settings opens the paywall.
         app.launchArguments = ["-AQIScenario", "good"]
         app.launch()
     }
@@ -37,7 +37,7 @@ final class SheetScreenshots: XCTestCase {
     }
 
     private func openPlaces() {
-        let placeLine = app.buttons["Boise, Idaho"]
+        let placeLine = app.buttons["Tamarack Resort, Idaho"]
         XCTAssertTrue(placeLine.waitForExistence(timeout: 10))
         placeLine.tap()
         XCTAssertTrue(app.navigationBars["Places"].waitForExistence(timeout: 10))

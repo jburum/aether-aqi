@@ -3,7 +3,7 @@ import ImageIO
 import Testing
 @testable import AetherAQI
 
-private let boise = SampleAirProvider.boise
+private let sample = SampleAirProvider.tamarack
 private let official = OfficialReading(
     aqi: 48, observedAt: Date(timeIntervalSince1970: 1_793_456_400), attribution: OfficialReading.airNowAttribution
 )
@@ -15,7 +15,7 @@ private func plain(_ text: String) -> String {
 
 private func rows(_ fixture: String) throws -> [AlertRowDisplay] {
     let response = try StoreJSON.decoder().decode(AlertsResponse.self, from: Fixture.data(named: fixture))
-    return AlertsDisplay(response, fallbackZone: boise.timeZone).rows
+    return AlertsDisplay(response, fallbackZone: sample.timeZone).rows
 }
 
 @Suite("Alert share card content")
@@ -23,8 +23,8 @@ struct ShareCardContentTests {
     @Test("Smoke, active: place, kind, status, our corrected peak and its band, the window")
     func smoke() throws {
         let row = try #require(try rows("boise-alerts-smoke-active").first)
-        let card = AlertShareCard(row: row, place: boise, official: nil)
-        #expect(card.placeName == "Boise")
+        let card = AlertShareCard(row: row, place: sample, official: nil)
+        #expect(card.placeName == "Tamarack Resort")
         #expect(card.title == "Smoke")
         #expect(card.severityText == "High")
         #expect(card.statusText == "Now")
@@ -39,7 +39,7 @@ struct ShareCardContentTests {
     @Test("Inversion, upcoming: the peak from the mixing-height reason")
     func inversion() throws {
         let row = try #require(try rows("boise-alerts-inversion-upcoming").first { $0.kind == "inversion" })
-        let card = AlertShareCard(row: row, place: boise, official: nil)
+        let card = AlertShareCard(row: row, place: sample, official: nil)
         #expect(card.title == "Winter inversion")
         #expect(card.statusText == "Upcoming")
         #expect(card.severityText == "Elevated")
@@ -51,7 +51,7 @@ struct ShareCardContentTests {
     @Test("Ozone heads up: low confidence on the card, in words")
     func ozone() throws {
         let row = try #require(try rows("boise-alerts-ozone-heads-up").first)
-        let card = AlertShareCard(row: row, place: boise, official: nil)
+        let card = AlertShareCard(row: row, place: sample, official: nil)
         #expect(card.title == "Summer ozone")
         #expect(card.severityText == "Heads up")
         #expect(card.correctedAqi == 118)
@@ -62,7 +62,7 @@ struct ShareCardContentTests {
     @Test("With an AirNow reading: shown apart, with its credit, never as our number")
     func officialApart() throws {
         let row = try #require(try rows("boise-alerts-smoke-active").first)
-        let card = AlertShareCard(row: row, place: boise, official: official)
+        let card = AlertShareCard(row: row, place: sample, official: official)
         let line = try #require(card.official)
         #expect(line.aqi == 48)
         #expect(line.attribution.contains("AirNow"))
@@ -81,9 +81,9 @@ struct ShareCardContentTests {
          {"kind":"ozone","fired":true,"status":"upcoming","start":"2026-11-02T20:00:00.000Z","end":"2026-11-02T23:00:00.000Z","severity":"elevated","source":"noaa_aqf","confidence":"model","reason":"Ozone alert from NOAA's air quality forecast: corrected AQI peaks at 120. AirNow ozone reads 131.","peakAqi":120}
         ]}
         """
-        let rows = AlertsDisplay(try StoreJSON.decoder().decode(AlertsResponse.self, from: Data(json.utf8)), fallbackZone: boise.timeZone).rows
+        let rows = AlertsDisplay(try StoreJSON.decoder().decode(AlertsResponse.self, from: Data(json.utf8)), fallbackZone: sample.timeZone).rows
         let airnow = try #require(rows.first { $0.kind == "smoke" })
-        let card = AlertShareCard(row: airnow, place: boise, official: official)
+        let card = AlertShareCard(row: airnow, place: sample, official: official)
         #expect(card.correctedAqi == nil, "the official 160 is not shown as ours")
         #expect(card.level == .unhealthy, "colored by its high severity instead")
         #expect(card.official?.aqi == 48)
@@ -123,7 +123,7 @@ struct ShareCardGateTests {
     @Test("The card renders to a 1080 × 1350 PNG")
     func png() throws {
         let row = try #require(try rows("boise-alerts-smoke-active").first)
-        let data = try AlertShareImage(card: AlertShareCard(row: row, place: boise, official: official)).png()
+        let data = try AlertShareImage(card: AlertShareCard(row: row, place: sample, official: official)).png()
         #expect(data.starts(with: [0x89, 0x50, 0x4E, 0x47]))
         let source = try #require(CGImageSourceCreateWithData(data as CFData, nil))
         let props = try #require(CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any])

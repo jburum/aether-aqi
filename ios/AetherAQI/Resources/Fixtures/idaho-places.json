@@ -6,7 +6,7 @@
   { "name": "Eagle", "region": "Idaho", "latitude": 43.696, "longitude": -116.354, "valley": "Treasure Valley", "timeZone": "America/Boise" },
   { "name": "McCall", "region": "Idaho", "latitude": 44.911, "longitude": -116.099, "valley": "Long Valley", "timeZone": "America/Boise" },
   { "name": "Donnelly", "region": "Idaho", "latitude": 44.733, "longitude": -116.078, "valley": "Long Valley", "timeZone": "America/Boise" },
-  { "name": "Tamarack", "region": "Idaho", "latitude": 44.671, "longitude": -116.117, "valley": "Long Valley", "timeZone": "America/Boise" },
+  { "name": "Tamarack Resort", "region": "Idaho", "latitude": 44.671, "longitude": -116.117, "valley": "Long Valley", "timeZone": "America/Boise" },
   { "name": "Cascade", "region": "Idaho", "latitude": 44.516, "longitude": -116.042, "valley": "Long Valley", "timeZone": "America/Boise" },
   { "name": "Idaho City", "region": "Idaho", "latitude": 43.829, "longitude": -115.834, "valley": null, "timeZone": "America/Boise" },
   { "name": "Ketchum", "region": "Idaho", "latitude": 43.681, "longitude": -114.364, "valley": "Wood River Valley", "timeZone": "America/Boise" },

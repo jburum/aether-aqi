@@ -431,7 +431,7 @@ private struct EmptyState: View {
     }
 }
 
-/// "Boise  Idaho". With a places list, it is the button that opens it.
+/// "Tamarack Resort  Idaho". With a places list, it is the button that opens it.
 private struct PlaceLine: View {
     let place: Place
     let soft: RGB

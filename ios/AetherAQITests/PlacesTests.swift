@@ -39,7 +39,7 @@ struct IdahoPlacesFixtureTests {
         let all = try candidates()
         #expect(all.count == 21)
         #expect(Set(all.map(\.name)).count == all.count)
-        for name in ["Boise", "McCall", "Donnelly", "Tamarack"] { #expect(all.contains { $0.name == name }, "\(name)") }
+        for name in ["Boise", "McCall", "Donnelly", "Tamarack Resort"] { #expect(all.contains { $0.name == name }, "\(name)") }
         for place in all {
             #expect(TimeZone(identifier: place.timeZone) != nil, "\(place.name)")
             #expect((41.9...49.1).contains(place.latitude), "\(place.name)")
@@ -53,20 +53,38 @@ struct IdahoPlacesFixtureTests {
 @MainActor
 @Suite("Saved places")
 struct PlacesModelTests {
-    @Test("First run has Boise, active, and nothing else")
+    @Test("First run has Tamarack Resort, active, and nothing else")
     func firstRun() async throws {
         let model = try await places(try freshDefaults("firstRun"), pro: false)
-        #expect(model.places.map(\.name) == ["Boise"])
-        #expect(model.active?.id == "place_boise")
+        #expect(model.places.map(\.name) == ["Tamarack Resort"])
+        #expect(model.active?.id == "place_tamarack_resort")
         #expect(model.activePlace?.timeZone.identifier == "America/Boise")
-        #expect(model.addable.contains { $0.name == "Boise" } == false)
+        #expect(model.activePlace?.region == "Idaho")
+        // The pin is the bundled list's Tamarack Resort, so that one isn't offered again.
+        #expect(model.addable.contains { $0.name == "Tamarack Resort" } == false)
+        #expect(model.addable.contains { $0.name == "Boise" })
+    }
+
+    @Test("Build 1's untouched Boise default becomes Tamarack Resort; a list the person changed is kept")
+    func legacyBoise() async throws {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let untouched = try freshDefaults("legacyUntouched")
+        untouched.set(try encoder.encode([LocalPlacesProvider.legacyBoise]), forKey: LocalPlacesProvider.storageKey)
+        #expect(try await places(untouched, pro: false).places.map(\.name) == ["Tamarack Resort"])
+
+        var renamed = LocalPlacesProvider.legacyBoise
+        renamed.name = "Home"
+        let changed = try freshDefaults("legacyRenamed")
+        changed.set(try encoder.encode([renamed]), forKey: LocalPlacesProvider.storageKey)
+        #expect(try await places(changed, pro: false).places.map(\.name) == ["Home"])
     }
 
     @Test("Pro keeps up to 5: the sixth is refused at the cap, in the model and the store")
     func cap() async throws {
         let defaults = try freshDefaults("cap")
         let model = try await places(defaults, pro: true)
-        for name in ["McCall", "Donnelly", "Tamarack", "Ketchum"] {
+        for name in ["McCall", "Donnelly", "Cascade", "Ketchum"] {
             #expect(await model.add(try candidate(name)), "\(name)")
         }
         #expect(model.places.count == PlaceLimits.maxSaved)
@@ -96,7 +114,7 @@ struct PlacesModelTests {
     @Test("A place already saved is refused")
     func duplicate() async throws {
         let model = try await places(try freshDefaults("duplicate"), pro: true)
-        #expect(!(await model.add(try candidate("Boise"))))
+        #expect(!(await model.add(try candidate("Tamarack Resort"))))
         #expect(model.problem == .alreadySaved)
     }
 
@@ -121,7 +139,7 @@ struct PlacesModelTests {
         let mccall = try #require(pro.places.first { $0.name == "McCall" })
         pro.activate(mccall.id)
         let free = try await places(defaults, pro: false)
-        #expect(free.active?.name == "Boise")
+        #expect(free.active?.name == "Tamarack Resort")
         #expect(!free.activate(mccall.id))
         #expect(free.problem == .needsPro)
     }
@@ -135,14 +153,14 @@ struct PlacesModelTests {
         let ketchum = try #require(model.places.first { $0.name == "Ketchum" })
         model.activate(ketchum.id)
         #expect(await model.delete(ketchum.id))
-        #expect(model.active?.name == "Boise")
+        #expect(model.active?.name == "Tamarack Resort")
         #expect(model.places.map(\.position) == [0, 1])
         for place in model.places { await model.delete(place.id) }
         #expect(model.places.isEmpty)
         #expect(model.active == nil)
         #expect(model.activePlace == nil)
         #expect(model.canAdd)
-        // Kept: an empty list does not come back as Boise.
+        // Kept: an empty list does not come back as Tamarack Resort.
         #expect(try await places(defaults, pro: true).places.isEmpty)
     }
 
@@ -150,11 +168,11 @@ struct PlacesModelTests {
     func rename() async throws {
         let defaults = try freshDefaults("rename")
         let model = try await places(defaults, pro: false)
-        #expect(await model.rename("place_boise", to: "  Home  "))
+        #expect(await model.rename("place_tamarack_resort", to: "  Home  "))
         #expect(model.places.first?.name == "Home")
-        #expect(!(await model.rename("place_boise", to: "   ")))
+        #expect(!(await model.rename("place_tamarack_resort", to: "   ")))
         #expect(model.problem == .emptyName)
-        #expect(!(await model.rename("place_boise", to: String(repeating: "x", count: 61))))
+        #expect(!(await model.rename("place_tamarack_resort", to: String(repeating: "x", count: 61))))
         #expect(model.problem == .nameTooLong)
         #expect(try await places(defaults, pro: false).places.first?.name == "Home")
         // The renamed place keeps its zone.
@@ -265,11 +283,11 @@ struct HomeFollowsPlaceTests {
     @Test("Showing the place the model started with still loads it the first time, and not again after")
     func firstShowLoads() async {
         let model = HomeModel(provider: SlowPlaceProvider(slowId: ""), now: { SampleAirProvider.now })
-        #expect(model.place == SampleAirProvider.boise)
-        await model.show(SampleAirProvider.boise)
+        #expect(model.place == SampleAirProvider.tamarack)
+        await model.show(SampleAirProvider.tamarack)
         guard case .loaded = model.state else { Issue.record("first show did not load"); return }
         model.select(lead: 20)
-        await model.show(SampleAirProvider.boise)
+        await model.show(SampleAirProvider.tamarack)
         #expect(model.selectedLead == 20, "a repeat show of the same place keeps the screen as it is")
     }
 
