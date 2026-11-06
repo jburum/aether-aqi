@@ -1,6 +1,8 @@
 # Product
 
-Last updated: 2026-10-30 · **Active · closed for development** ([STATUS.md](./STATUS.md))
+Last updated: 2026-11-06 · Website stable · **AirHappy for iOS in internal TestFlight** ([STATUS.md](./STATUS.md))
+
+This page describes the website. The iOS app, **AirHappy**, is a separate native product: [appstore/ROADMAP.md](./appstore/ROADMAP.md).
 
 ## One-liner
 
@@ -61,20 +63,18 @@ Personal **air quality watchlist** PWA: up to **15** places, live US AQI, hour/d
 - [x] Branded **OG share card** + in-app **Add to Home Screen** guide
 - Website **map removed** 2026-10-30 (Jason, 2026-10-29: cut from iOS v1 and from the website). iOS map is **v1.1**. See [CHANGELOG.md](./CHANGELOG.md).
 
-### Phase 2 (parked — not backlog)
+### Phase 2
 
-Ideas only if reopened:
-
-- Denser / commercial heatmap tiles
-- AQI threshold alerts (`alertAt` already stored)
-- Account-backed sync; stronger offline cache
-- **iOS App Store** via Capacitor — [IOS-APP-STORE.md](./IOS-APP-STORE.md)
+- **iOS App Store:** AirHappy, native SwiftUI, not Capacitor. Internal TestFlight builds 1–3; public App Store on hold. Widget and map are v1.1. See [appstore/ROADMAP.md](./appstore/ROADMAP.md).
+- AQI threshold alerts on the website: not built. `alertAt` is stored and not edited.
+- Denser / commercial heatmap tiles: parked.
+- Account-backed sync; stronger offline cache: parked.
 
 ### Out of scope (for now)
 
 - Multiplayer / social
 - Regulatory AirNow equivalence claims
-- Native App Store builds (PWA only until reopened)
+- Capacitor or a WebView App Store build ([IOS-APP-STORE.md](./IOS-APP-STORE.md) is superseded)
 - Cloning IQAir’s proprietary 3D globe / station network wholesale
 
 ---
