@@ -30,7 +30,9 @@ No new route, no change to those handlers, and no new upstream.
 | Decision | Status |
 | --- | --- |
 | App name | **LOCKED: AirHappy** (Jason, 2026-11-01). The iOS display name, home title, share card, paywall, mockups and web title use it. The old placeholders “Air Quality Forecast” and “Air Quality Watchlist” are retired. |
-| Bundle ID | **OPEN.** No App ID, widget id, App Group, or SKU in this repo. |
+| Bundle ID | **LOCKED: `dev.bbcvc.airhappy`** (Jason, 2026-11-05), BBCVC team, for internal TestFlight. No widget id, App Group, or SKU yet. Pro product IDs are still placeholders. |
+| App icon | **LOCKED: combined valley-and-breath mark, v2** (Jason, 2026-11-05). |
+| Encryption | **LOCKED: exempt** (`ITSAppUsesNonExemptEncryption` = `NO`; standard HTTPS only). |
 | Data stack | **OPEN.** The client calls the two routes above. Which vendor feeds them is not chosen. Do not add a paid key or switch providers in this work. |
 | Pricing | **OPEN.** Do not mark the app free or paid from this page. |
 

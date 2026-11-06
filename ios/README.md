@@ -30,7 +30,7 @@ xcodebuild -project ios/AetherAQI.xcodeproj -scheme AetherAQI \
 xcrun simctl boot 'iPhone 16'
 open -a Simulator
 xcrun simctl install booted ios/build/Build/Products/Debug-iphonesimulator/AetherAQI.app
-xcrun simctl launch booted com.example.aetheraqi
+xcrun simctl launch booted dev.bbcvc.airhappy
 ```
 
 Use any iPhone simulator you have installed (`xcrun simctl list devices available`). The iPhone 16
@@ -55,8 +55,8 @@ The app reads the screen to show from the `-AQIScenario` launch argument. Withou
 | `loading` | Stays on the loading state |
 
 ```sh
-xcrun simctl terminate booted com.example.aetheraqi
-xcrun simctl launch booted com.example.aetheraqi -AQIScenario error
+xcrun simctl terminate booted dev.bbcvc.airhappy
+xcrun simctl launch booted dev.bbcvc.airhappy -AQIScenario error
 xcrun simctl io booted screenshot home-error.png
 ```
 
@@ -230,7 +230,7 @@ Pro is $1.99 a month or $12.99 a year (v1-plan.md). It adds:
 
 **Placeholders and limits:**
 
-- **Product IDs.** `com.example.aetheraqi.pro.monthly` and `com.example.aetheraqi.pro.yearly` are placeholders, like the bundle ID. `ProductIDs.planKey(for:)` and `productId(for:)` are the one mapping to the server's plan keys, `monthly` and `yearly`, which are the only products #19's verifier accepts. Real App Store IDs will change only the StoreKit side of that mapping.
+- **Product IDs.** `com.example.aetheraqi.pro.monthly` and `com.example.aetheraqi.pro.yearly` are placeholders. `ProductIDs.planKey(for:)` and `productId(for:)` are the one mapping to the server's plan keys, `monthly` and `yearly`, which are the only products #19's verifier accepts. Real App Store IDs will change only the StoreKit side of that mapping.
 - **Not changed.** There is no App Store Connect setup, no entitlements or capabilities file, and no In-App Purchase capability change.
 
 To try StoreKit purchases in the simulator:
@@ -284,6 +284,8 @@ The corrected peak is the alert's `peakAqi` (docs/v1/ALERTS.md, #21). An alert d
 
 ## Placeholders
 
-- **Bundle ID.** The app is named AirHappy, but the bundle ID `com.example.aetheraqi` is still a placeholder. It is open in `docs/appstore/ROADMAP.md`.
-- **App icon.** There is none yet.
+- **Bundle ID.** `dev.bbcvc.airhappy`, signed with the BBCVC team. The tests use `.tests` and `.uitests` after it. The Pro product IDs are still placeholders (above), so purchases don't work in TestFlight yet.
+- **App icon.** `AetherAQI/Assets.xcassets/AppIcon.appiconset`, one 1024 × 1024 image: the combined valley-and-breath mark (v2).
+- **Export compliance.** `ITSAppUsesNonExemptEncryption` is `NO`: the app uses only standard HTTPS.
+- **Privacy manifest.** `AetherAQI/PrivacyInfo.xcprivacy`: no tracking and no collected data. It declares UserDefaults with reason `CA92.1` (the app's own settings and places).
 - **Alert delivery.** Alert settings only save the person's choice on the phone. Notifications, the permission prompt and push wait for a later slice.
